@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solfege Melody Builder</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f5f4f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 2rem 1.75rem 2.5rem;
+      max-width: 720px;
+      width: 100%;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    }
+
+    .app-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #6b6b80;
+      margin-bottom: 1.75rem;
+    }
+
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #9999aa;
+      margin-bottom: 8px;
+    }
+
+    /* Palette */
+    .syllable-palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 1rem 1.25rem;
+      background: #f5f4f0;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+    }
+    .syllable-chip {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      cursor: grab;
+      user-select: none;
+      font-weight: 600;
+      font-size: 15px;
+      border: 1.5px solid transparent;
+      transition: transform 0.12s, box-shadow 0.12s;
+      flex-shrink: 0;
+    }
+    .syllable-chip:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .syllable-chip:active { cursor: grabbing; transform: scale(1.12); }
+    .chip-num { font-size: 10px; font-weight: 400; margin-top: 2px; opacity: 0.8; }
+
+    .chip-do    { background: #EEEDFE; color: #3C3489; border-color: #AFA9EC; }
+    .chip-re    { background: #E6F1FB; color: #0C447C; border-color: #85B7EB; }
+    .chip-mi    { background: #EAF3DE; color: #27500A; border-color: #97C459; }
+    .chip-fa    { background: #FAEEDA; color: #633806; border-color: #EF9F27; }
+    .chip-sol   { background: #FAECE7; color: #712B13; border-color: #F0997B; }
+    .chip-la    { background: #FBEAF0; color: #72243E; border-color: #ED93B1; }
+    .chip-ti    { background: #E1F5EE; color: #085041; border-color: #5DCAA5; }
+    .chip-do2   { background: #EEEDFE; color: #26215C; border-color: #7F77DD; }
+
+    /* Timeline */
+    .timeline-track {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 88px;
+      padding: 14px;
+      background: #ffffff;
+      border-radius: 12px;
+      border: 2px dashed #d0cfe8;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 1.25rem;
+    }
+    .timeline-track.drag-over {
+      border-color: #7F77DD;
+      background: #f0effd;
+    }
+    .timeline-empty {
+      color: #b0b0c0;
+      font-size: 14px;
+      pointer-events: none;
+      flex-shrink: 0;
+    }
+    .timeline-note {
+      width: 62px; height: 62px;
+      border-radius: 50%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-weight: 600; font-size: 14px;
+      flex-shrink: 0;
+      position: relative;
+      cursor: default;
+      border: 2px solid transparent;
+      transition: transform 0.12s;
+    }
+    .timeline-note.playing {
+      transform: scale(1.18);
+      box-shadow: 0 0 0 4px rgba(127,119,221,0.3);
+    }
+    .remove-btn {
+      position: absolute; top: -4px; right: -4px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #fff;
+      border: 1px solid #d0cfe8;
+      display: none; align-items: center; justify-content: center;
+      font-size: 12px; cursor: pointer; color: #888;
+      line-height: 1;
+    }
+    .timeline-note:hover .remove-btn { display: flex; }
+
+    /* Controls */
+    .controls-row {
+      display: flex; gap: 10px; align-items: center;
+      flex-wrap: wrap; margin-bottom: 1.75rem;
+    }
+    .btn-play {
+      display: flex; align-items: center; gap: 7px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      background: #534AB7; color: #f0effd;
+      border: none; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.12s, transform 0.1s;
+    }
+    .btn-play:hover { background: #3C3489; }
+    .btn-play:active { transform: scale(0.97); }
+    .btn-play:disabled { background: #e0e0e8; color: #aaa; cursor: not-allowed; }
+    .btn-clear {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 16px; border-radius: 8px;
+      background: transparent; color: #6b6b80;
+      border: 1px solid #d0d0dc; font-size: 14px;
+      cursor: pointer; transition: background 0.12s;
+    }
+    .btn-clear:hover { background: #f5f4f0; }
+    .tempo-wrap {
+      display: flex; align-items: center; gap: 10px;
+      margin-left: auto;
+    }
+    .tempo-wrap label { font-size: 13px; color: #6b6b80; }
+    .tempo-wrap input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 100px; height: 4px;
+      border-radius: 2px; background: #d0cfe8; outline: none; cursor: pointer;
+    }
+    .tempo-wrap input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #534AB7; cursor: pointer;
+    }
+    .tempo-val { font-size: 13px; font-weight: 600; color: #3C3489; min-width: 52px; }
+
+    /* Singer */
+    .figure-area {
+      display: flex; justify-content: center; align-items: flex-end;
+      height: 140px; position: relative;
+    }
+    .singer-svg { width: 110px; height: 130px; }
+    .speech-bubble {
+      position: absolute;
+      left: 50%; top: 0;
+      transform: translateX(10px);
+      background: #ffffff;
+      border: 1.5px solid #d0cfe8;
+      border-radius: 14px 14px 14px 4px;
+      padding: 6px 18px;
+      font-size: 24px; font-weight: 700; color: #534AB7;
+      opacity: 0; transition: opacity 0.15s;
+      pointer-events: none; white-space: nowrap;
+      text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .speech-bubble.visible { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="app-title">🎵 Solfege Melody Builder</div>
+    <div class="subtitle">Drag syllables onto the timeline, then press "Sing it!" to hear your melody.</div>
+
+    <div class="section-label">Syllables — drag to add</div>
+    <div class="syllable-palette" id="palette">
+      <div class="syllable-chip chip-do"  draggable="true" data-note="Do"  data-freq="261.63"><span>Do</span><span class="chip-num">1</span></div>
+      <div class="syllable-chip chip-re"  draggable="true" data-note="Re"  data-freq="293.66"><span>Re</span><span class="chip-num">2</span></div>
+      <div class="syllable-chip chip-mi"  draggable="true" data-note="Mi"  data-freq="329.63"><span>Mi</span><span class="chip-num">3</span></div>
+      <div class="syllable-chip chip-fa"  draggable="true" data-note="Fa"  data-freq="349.23"><span>Fa</span><span class="chip-num">4</span></div>
+      <div class="syllable-chip chip-sol" draggable="true" data-note="Sol" data-freq="392.00"><span>Sol</span><span class="chip-num">5</span></div>
+      <div class="syllable-chip chip-la"  draggable="true" data-note="La"  data-freq="440.00"><span>La</span><span class="chip-num">6</span></div>
+      <div class="syllable-chip chip-ti"  draggable="true" data-note="Ti"  data-freq="493.88"><span>Ti</span><span class="chip-num">7</span></div>
+      <div class="syllable-chip chip-do2" draggable="true" data-note="Do'" data-freq="523.25"><span>Do'</span><span class="chip-num">8</span></div>
+    </div>
+
+    <div class="section-label">Your melody</div>
+    <div class="timeline-track" id="timeline">
+      <span class="timeline-empty" id="empty-msg">Drag syllables here to build your melody</span>
+    </div>
+
+    <div class="controls-row">
+      <button class="btn-play" id="playBtn" disabled>
+        <i class="ti ti-player-play"></i> Sing it!
+      </button>
+      <button class="btn-clear" id="clearBtn">
+        <i class="ti ti-trash"></i> Clear
+      </button>
+      <div class="tempo-wrap">
+        <label for="tempoSlider">Speed</label>
+        <input type="range" id="tempoSlider" min="40" max="120" value="72" step="1" />
+        <span class="tempo-val" id="tempoVal">72 bpm</span>
+      </div>
+    </div>
+
+    <div class="figure-area">
+      <div class="speech-bubble" id="bubble"></div>
+      <svg class="singer-svg" id="singerSvg" viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="22" r="16" fill="#F4C0D1" stroke="#D4537E" stroke-width="1"/>
+        <ellipse cx="50" cy="24" rx="8" ry="6" fill="#F0997B" opacity="0.5"/>
+        <circle cx="44" cy="20" r="2.5" fill="#3C3489"/>
+        <circle cx="56" cy="20" r="2.5" fill="#3C3489"/>
+        <path id="mouth" d="M 44 28 Q 50 32 56 28" stroke="#712B13" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <rect x="32" y="40" width="36" height="46" rx="8" fill="#534AB7"/>
+        <rect x="38" y="40" width="24" height="10" rx="4" fill="#7F77DD"/>
+        <line id="leftArm"  x1="32" y1="50" x2="14" y2="65" stroke="#F4C0D1" stroke-width="7" stroke-linecap="round"/>
+        <line id="rightArm" x1="68" y1="50" x2="86" y2="65" stroke="#F4C0D1" stroke-width="7" stroke-linecap="round"/>
+        <rect x="36" y="84" width="12" height="28" rx="6" fill="#3C3489"/>
+        <rect x="52" y="84" width="12" height="28" rx="6" fill="#3C3489"/>
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    const noteColors = {
+      'Do':  { bg: '#EEEDFE', color: '#3C3489', border: '#AFA9EC' },
+      'Re':  { bg: '#E6F1FB', color: '#0C447C', border: '#85B7EB' },
+      'Mi':  { bg: '#EAF3DE', color: '#27500A', border: '#97C459' },
+      'Fa':  { bg: '#FAEEDA', color: '#633806', border: '#EF9F27' },
+      'Sol': { bg: '#FAECE7', color: '#712B13', border: '#F0997B' },
+      'La':  { bg: '#FBEAF0', color: '#72243E', border: '#ED93B1' },
+      'Ti':  { bg: '#E1F5EE', color: '#085041', border: '#5DCAA5' },
+      "Do'": { bg: '#EEEDFE', color: '#26215C', border: '#7F77DD' },
+    };
+
+    const timeline  = document.getElementById('timeline');
+    const playBtn   = document.getElementById('playBtn');
+    const clearBtn  = document.getElementById('clearBtn');
+    const tempoSlider = document.getElementById('tempoSlider');
+    const tempoVal  = document.getElementById('tempoVal');
+    const bubble    = document.getElementById('bubble');
+    const mouth     = document.getElementById('mouth');
+    const leftArm   = document.getElementById('leftArm');
+    const rightArm  = document.getElementById('rightArm');
+
+    let melody = [];
+    let isPlaying = false;
+    let stopRequested = false;
+    let audioCtx = null;
+
+    tempoSlider.addEventListener('input', () => {
+      tempoVal.textContent = tempoSlider.value + ' bpm';
+    });
+
+    document.querySelectorAll('.syllable-chip').forEach(chip => {
+      chip.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('note', chip.dataset.note);
+        e.dataTransfer.setData('freq', chip.dataset.freq);
+      });
+    });
+
+    timeline.addEventListener('dragover', e => {
+      e.preventDefault();
+      timeline.classList.add('drag-over');
+    });
+    timeline.addEventListener('dragleave', () => timeline.classList.remove('drag-over'));
+    timeline.addEventListener('drop', e => {
+      e.preventDefault();
+      timeline.classList.remove('drag-over');
+      const note = e.dataTransfer.getData('note');
+      const freq = parseFloat(e.dataTransfer.getData('freq'));
+      if (note) { melody.push({ note, freq }); renderTimeline(); }
+    });
+
+    function renderTimeline() {
+      timeline.innerHTML = '';
+      if (melody.length === 0) {
+        const span = document.createElement('span');
+        span.className = 'timeline-empty';
+        span.textContent = 'Drag syllables here to build your melody';
+        timeline.appendChild(span);
+        playBtn.disabled = true;
+        return;
+      }
+      playBtn.disabled = false;
+      melody.forEach((item, i) => {
+        const c = noteColors[item.note] || noteColors['Do'];
+        const el = document.createElement('div');
+        el.className = 'timeline-note';
+        el.style.cssText = `background:${c.bg};color:${c.color};border-color:${c.border};`;
+        el.innerHTML = `<span>${item.note}</span><span class="chip-num">${i + 1}</span><span class="remove-btn" title="Remove">×</span>`;
+        el.querySelector('.remove-btn').addEventListener('click', () => {
+          melody.splice(i, 1); renderTimeline();
+        });
+        timeline.appendChild(el);
+      });
+    }
+
+    function singSyllable(freq, durationMs) {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      const t0 = audioCtx.currentTime;
+      osc.frequency.setValueAtTime(freq, t0);
+      const dur = durationMs / 1000;
+      for (let t = 0.1; t < dur - 0.05; t += 0.02) {
+        osc.frequency.setValueAtTime(freq + Math.sin(t * 5.5 * Math.PI * 2) * 3, t0 + t);
+      }
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.28, t0 + 0.04);
+      gain.gain.setValueAtTime(0.24, t0 + dur - 0.07);
+      gain.gain.linearRampToValueAtTime(0, t0 + dur);
+      osc.start(t0); osc.stop(t0 + dur);
+    }
+
+    function animateSinger(note, active) {
+      if (active) {
+        mouth.setAttribute('d', 'M 43 27 Q 50 35 57 27');
+        leftArm.setAttribute('x2', '12'); leftArm.setAttribute('y2', '58');
+        rightArm.setAttribute('x2', '88'); rightArm.setAttribute('y2', '58');
+        bubble.textContent = note; bubble.classList.add('visible');
+      } else {
+        mouth.setAttribute('d', 'M 44 28 Q 50 32 56 28');
+        leftArm.setAttribute('x2', '14'); leftArm.setAttribute('y2', '65');
+        rightArm.setAttribute('x2', '86'); rightArm.setAttribute('y2', '65');
+        bubble.classList.remove('visible');
+      }
+    }
+
+    async function playSong() {
+      if (isPlaying) { stopRequested = true; return; }
+      isPlaying = true; stopRequested = false;
+      playBtn.innerHTML = '<i class="ti ti-player-stop"></i> Stop';
+      const bpm = parseInt(tempoSlider.value);
+      const noteDur = (60 / bpm) * 1000;
+      const noteEls = timeline.querySelectorAll('.timeline-note');
+      for (let i = 0; i < melody.length; i++) {
+        if (stopRequested) break;
+        const item = melody[i];
+        noteEls[i] && noteEls[i].classList.add('playing');
+        singSyllable(item.freq, noteDur * 0.88);
+        animateSinger(item.note, true);
+        await new Promise(r => setTimeout(r, noteDur));
+        noteEls[i] && noteEls[i].classList.remove('playing');
+        animateSinger(item.note, false);
+        if (i < melody.length - 1) await new Promise(r => setTimeout(r, noteDur * 0.08));
+      }
+      animateSinger('', false);
+      isPlaying = false;
+      playBtn.innerHTML = '<i class="ti ti-player-play"></i> Sing it!';
+    }
+
+    playBtn.addEventListener('click', playSong);
+    clearBtn.addEventListener('click', () => {
+      if (isPlaying) stopRequested = true;
+      melody = []; renderTimeline();
+    });
+
+    renderTimeline();
+  </script>
+</body>
+</html>
