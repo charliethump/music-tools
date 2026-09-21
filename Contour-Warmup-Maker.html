@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contour Warmup Maker</title>
+<style>
+  :root {
+    --page: #eceff3;
+    --panel: #ffffff;
+    --ink: #1c2530;
+    --muted: #66717d;
+    --rule: #e3e7ec;
+    --rule-strong: #cfd6de;
+    --accent: #e8781f;
+    --accent-dark: #cf6612;
+    --accent-soft: #fdf1e6;
+    --canvas-bg: #f3f3f3;
+    --focus: #2b6cb0;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(20, 30, 40, 0.06), 0 6px 18px rgba(20, 30, 40, 0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: "Avenir Next Rounded", "Nunito", "Segoe UI", system-ui, sans-serif;
+    background: var(--page); color: var(--ink); font-size: 15px; line-height: 1.4;
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 24px; background: var(--panel); border-bottom: 1px solid var(--rule);
+  }
+  header h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; }
+  header h1 svg { width: 26px; height: 26px; }
+  header .spacer { flex: 1; }
+
+  main {
+    display: grid; grid-template-columns: 352px minmax(0, 1fr); gap: 20px;
+    padding: 20px 24px 40px; max-width: 1720px; margin: 0 auto; align-items: start;
+  }
+
+  /* ---- sidebar ---- */
+  aside {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 4px 20px 8px;
+  }
+  section { padding: 18px 0; border-bottom: 1px solid var(--rule); }
+  section:last-child { border-bottom: 0; }
+  section h2 {
+    font-size: 12px; margin: 0 0 12px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .hint { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0 0 12px; }
+  .hint.tight { margin: 8px 0 0; }
+
+  .row {
+    display: grid; grid-template-columns: 84px minmax(0, 1fr) 70px;
+    align-items: center; column-gap: 10px; margin: 10px 0;
+  }
+  .row > label { color: var(--muted); font-size: 14px; white-space: nowrap; }
+  .row input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+  .row .wide { grid-column: 2 / 4; min-width: 0; }
+  .num {
+    display: flex; align-items: center; border: 1px solid var(--rule-strong); border-radius: 8px;
+    background: #fff; overflow: hidden; height: 32px;
+  }
+  .num input {
+    width: 100%; min-width: 0; border: 0; font: inherit; font-size: 14px; padding: 0 0 0 8px;
+    text-align: right; -moz-appearance: textfield; background: transparent; color: var(--ink);
+  }
+  .num input::-webkit-outer-spin-button, .num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .num span { padding: 0 8px 0 4px; color: var(--muted); font-size: 13px; }
+  select, input[type=text] {
+    width: 100%; font: inherit; font-size: 14px; height: 34px; padding: 0 10px;
+    border: 1px solid var(--rule-strong); border-radius: 8px; background: #fff; color: var(--ink);
+  }
+  input[type=color] {
+    width: 44px; height: 32px; padding: 2px; border: 1px solid var(--rule-strong); border-radius: 8px; background: #fff; cursor: pointer;
+  }
+  .seg { display: flex; border: 1px solid var(--rule-strong); border-radius: 8px; overflow: hidden; height: 34px; }
+  .seg button {
+    flex: 1; font: inherit; font-size: 14px; border: 0; background: #fff; color: var(--muted); cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--rule-strong); }
+  .seg button[aria-pressed=true] { background: var(--ink); color: #fff; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font: inherit; font-size: 14px; font-weight: 600; height: 36px; padding: 0 14px;
+    border-radius: 9px; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--rule-strong); background: #fff; color: var(--ink);
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .btn:hover { background: #f5f7f9; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .btn.sm { height: 32px; padding: 0 12px; font-weight: 600; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: #f5f7f9; color: var(--ink); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.block { width: 100%; }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .btnrow { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .btnrow .count { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+  .file input { display: none; }
+  .filename { color: var(--muted); font-size: 13px; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anchor-wrap { margin-top: 12px; display: none; }
+  .anchor-wrap.show { display: block; }
+  #anchorPad {
+    width: 100%; aspect-ratio: 1; border: 1px solid var(--rule-strong); border-radius: 10px; cursor: crosshair;
+    background:
+      linear-gradient(45deg, #eaecef 25%, transparent 25%, transparent 75%, #eaecef 75%),
+      linear-gradient(45deg, #eaecef 25%, transparent 25%, transparent 75%, #eaecef 75%);
+    background-size: 16px 16px; background-position: 0 0, 8px 8px; background-color: #fff;
+    touch-action: none; display: block;
+  }
+
+  /* ---- stage ---- */
+  .stage { position: sticky; top: 80px; }
+  .board {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 14px 16px 16px;
+  }
+  .statusbar {
+    display: flex; align-items: center; gap: 12px; min-height: 28px; margin-bottom: 12px;
+  }
+  .status { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .status::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none;
+  }
+  .progress { flex: 1; max-width: 260px; height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; display: none; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s; }
+  .progress.show { display: block; }
+  .canvas-wrap { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--rule); }
+  #stage {
+    width: 100%; aspect-ratio: 16 / 9; display: block;
+    background: var(--canvas-bg); cursor: crosshair; touch-action: none;
+  }
+  #stage.playing { cursor: default; }
+  .transport { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+  .transport input[type=range] { flex: 1; accent-color: var(--accent); margin: 0; }
+  .transport .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; min-width: 96px; text-align: right; }
+  #playBtn { min-width: 92px; }
+
+  .switch { display: flex; align-items: center; gap: 10px; margin: 10px 0; cursor: pointer; font-size: 14px; user-select: none; }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px;
+    background: var(--rule-strong); transition: background 0.15s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.15s;
+  }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(16px); }
+  .switch input:focus-visible + .track { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .switch .sub { color: var(--muted); font-size: 13px; }
+  .suboptions { margin-left: 46px; }
+  .suboptions.off { opacity: 0.4; pointer-events: none; }
+  .suboptions .row { grid-template-columns: 62px minmax(0, 1fr) 70px; }
+  .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin: 2px 0 6px 46px; }
+  .legend i { flex: 1; max-width: 140px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #2f7de1, #9b59d0, #e8481f); }
+
+  @media (max-width: 960px) {
+    main { grid-template-columns: 1fr; }
+    .stage { position: static; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>
+    <svg viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <path d="M3 17c4-9 9-9 13 0s7 9 7 1" stroke="#1c2530" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="16" cy="17" r="4" fill="#e8781f"/>
+    </svg>
+    Contour Warmup Maker
+  </h1>
+  <div class="spacer"></div>
+  <button class="btn" id="exportPng" disabled>Download line PNG</button>
+  <button class="btn primary" id="exportGif" disabled>Download GIF</button>
+</header>
+
+<main>
+  <aside>
+    <section>
+      <h2>Line</h2>
+      <p class="hint">Draw on the canvas. Start a stroke near the end of the last line to continue it, or anywhere else to begin a new line. The character visits lines in the order you drew them, left to right.</p>
+      <div class="row">
+        <label for="brushMarker">Brush</label>
+        <div class="seg wide" role="group" aria-label="Brush style">
+          <button id="brushMarker" aria-pressed="true">Marker</button>
+          <button id="brushPlain" aria-pressed="false">Plain</button>
+        </div>
+      </div>
+      <div class="row">
+        <label for="lineWidth">Thickness</label>
+        <input type="range" id="lineWidth" min="4" max="60" value="18">
+        <div class="num"><input type="number" id="lineWidthNum" min="1" max="120" step="1" value="18" aria-label="Thickness in pixels"><span>px</span></div>
+      </div>
+      <div class="row">
+        <label for="smoothing">Smoothing</label>
+        <input type="range" id="smoothing" min="0" max="10" value="4">
+        <div class="num"><input type="number" id="smoothingNum" min="0" max="20" step="1" value="4" aria-label="Smoothing amount"><span>&nbsp;</span></div>
+      </div>
+      <div class="row">
+        <label for="lineColor">Color</label>
+        <div class="wide"><input type="color" id="lineColor" value="#111111"></div>
+      </div>
+      <div class="btnrow">
+        <button class="btn sm" id="undoStroke">Undo stroke</button>
+        <button class="btn sm" id="clearLine">Clear all</button>
+        <span class="count" id="lineCount"></span>
+      </div>
+      <div class="btnrow" style="margin-top:8px">
+        <button class="btn sm ghost" id="lineDefaults">Restore line defaults</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Character</h2>
+      <label class="file">
+        <span class="btn block" role="button" tabindex="0" id="charBtn">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 11V3m0 0L5 6m3-3 3 3M3 13h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Choose character PNG
+        </span>
+        <input type="file" id="charFile" accept="image/png,image/webp,image/gif,image/jpeg">
+      </label>
+      <div class="filename" id="charName">No character loaded. You can also drag a PNG onto the canvas or paste one.</div>
+      <div class="row" style="margin-top:14px">
+        <label for="charSize">Size</label>
+        <input type="range" id="charSize" min="5" max="60" value="22">
+        <div class="num"><input type="number" id="charSizeNum" min="2" max="100" step="1" value="22" aria-label="Character size as percent of canvas height"><span>%</span></div>
+      </div>
+      <div class="anchor-wrap" id="anchorWrap">
+        <p class="hint" style="margin:4px 0 8px">Click the spot on the character that should sit on the line.</p>
+        <canvas id="anchorPad" width="300" height="300"></canvas>
+        <div class="btnrow" style="margin-top:8px">
+          <button class="btn sm ghost" id="anchorCenter">Reset anchor to center</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Timing</h2>
+      <div class="row">
+        <label for="holdStart">Start hold</label>
+        <input type="range" id="holdStart" min="0" max="10" step="0.1" value="2">
+        <div class="num"><input type="number" id="holdStartNum" min="0" max="60" step="0.1" value="2" aria-label="Hold at start in seconds"><span>s</span></div>
+      </div>
+      <div class="row">
+        <label for="travel">Travel</label>
+        <input type="range" id="travel" min="0.5" max="20" step="0.1" value="5">
+        <div class="num"><input type="number" id="travelNum" min="0.5" max="60" step="0.1" value="5" aria-label="Travel time in seconds"><span>s</span></div>
+      </div>
+      <div class="row">
+        <label for="gap">Vanish</label>
+        <input type="range" id="gap" min="0" max="5" step="0.1" value="0.5">
+        <div class="num"><input type="number" id="gapNum" min="0" max="60" step="0.1" value="0.5" aria-label="Vanish time between lines in seconds"><span>s</span></div>
+      </div>
+      <div class="row">
+        <label for="holdEnd">End hold</label>
+        <input type="range" id="holdEnd" min="0" max="10" step="0.1" value="4">
+        <div class="num"><input type="number" id="holdEndNum" min="0" max="60" step="0.1" value="4" aria-label="Hold at end in seconds"><span>s</span></div>
+      </div>
+      <p class="hint tight">Travel is the total moving time, shared between lines by length. Vanish is how long the character disappears between lines.</p>
+
+      <label class="switch" style="margin-top:16px">
+        <input type="checkbox" id="slopeOn">
+        <span class="track"></span>
+        <span>Slope speed <span class="sub">- faster on steep parts</span></span>
+      </label>
+      <div class="suboptions off" id="slopeOpts">
+        <div class="row">
+          <label for="boost">Vertical</label>
+          <input type="range" id="boost" min="1" max="16" step="0.5" value="3">
+          <div class="num"><input type="number" id="boostNum" min="1" max="16" step="0.5" value="3" aria-label="Vertical speed multiplier"><span>x</span></div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="gravityOn">
+          <span class="track"></span>
+          <span>Gravity <span class="sub">- slower going up</span></span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="tintOn">
+          <span class="track"></span>
+          <span>Speed tint <span class="sub">- preview only</span></span>
+        </label>
+      </div>
+      <div class="legend" id="tintLegend" style="display:none">slow <i></i> fast</div>
+      <div class="btnrow" style="margin-top:8px">
+        <button class="btn sm ghost" id="timingDefaults">Restore timing defaults</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Export</h2>
+      <div class="row">
+        <label for="fileName">File name</label>
+        <div class="wide"><input type="text" id="fileName" value="voice-warmup" spellcheck="false"></div>
+      </div>
+      <div class="row">
+        <label for="bgMode">Background</label>
+        <div class="wide">
+          <select id="bgMode">
+            <option value="solid">Light gray (#f3f3f3)</option>
+            <option value="transparent">Transparent</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint tight">GIF: 1280 x 720, 20 fps, loops forever. Line PNG: 1920 x 1080, transparent.</p>
+      <div class="btnrow" style="margin-top:12px">
+        <button class="btn" id="exportPng2" disabled style="flex:1">Line PNG</button>
+        <button class="btn primary" id="exportGif2" disabled style="flex:1">Download GIF</button>
+      </div>
+    </section>
+  </aside>
+
+  <div class="stage">
+    <div class="board">
+      <div class="statusbar">
+        <div class="status" id="status">Draw a contour line to get started.</div>
+        <div class="progress" id="progress"><i></i></div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="stage" width="1920" height="1080"></canvas>
+      </div>
+      <div class="transport">
+        <button class="btn" id="playBtn" disabled>Play</button>
+        <input type="range" id="scrub" min="0" max="1000" value="0" disabled>
+        <span class="time" id="timeOut">0.0 / 11.0 s</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+var gifenc=(()=>{var st=Object.create;var O=Object.defineProperty;var at=Object.getOwnPropertyDescriptor;var ft=Object.getOwnPropertyNames;var ut=Object.getPrototypeOf,gt=Object.prototype.hasOwnProperty;var wt=(t,e)=>()=>{try{return e||t((e={exports:{}}).exports,e),e.exports}catch(o){throw e=0,o}};var q=(t,e,o,n)=>{if(e&&typeof e=="object"||typeof e=="function")for(let r of ft(e))!gt.call(t,r)&&r!==o&&O(t,r,{get:()=>e[r],enumerable:!(n=at(e,r))||n.enumerable});return t},j=(t,e,o)=>(q(t,e,"default"),o&&q(o,e,"default")),dt=(t,e,o)=>(o=t!=null?st(ut(t)):{},q(e||!t||!t.__esModule?O(o,"default",{value:t,enumerable:!0}):o,t)),ht=t=>q(O({},"__esModule",{value:!0}),t);var lt=wt(Z=>{var Q=Object.defineProperty,yt=t=>Q(t,"__esModule",{value:!0}),bt=(t,e)=>{for(var o in e)Q(t,o,{get:e[o],enumerable:!0})};yt(Z);bt(Z,{GIFEncoder:()=>it,applyPalette:()=>It,default:()=>Gt,nearestColor:()=>Et,nearestColorIndex:()=>rt,nearestColorIndexWithDistance:()=>ot,prequantize:()=>Ct,quantize:()=>Mt,snapColorsToPalette:()=>Ut});var pt={signature:"GIF",version:"89a",trailer:59,extensionIntroducer:33,applicationExtensionLabel:255,graphicControlExtensionLabel:249,imageSeparator:44,signatureSize:3,versionSize:3,globalColorTableFlagMask:128,colorResolutionMask:112,sortFlagMask:8,globalColorTableSizeMask:7,applicationIdentifierSize:8,applicationAuthCodeSize:3,disposalMethodMask:28,userInputFlagMask:2,transparentColorFlagMask:1,localColorTableFlagMask:128,interlaceFlagMask:64,idSortFlagMask:32,localColorTableSizeMask:7};function $(t=256){let e=0,o=new Uint8Array(t);return{get buffer(){return o.buffer},reset(){e=0},bytesView(){return o.subarray(0,e)},bytes(){return o.slice(0,e)},writeByte(r){n(e+1),o[e]=r,e++},writeBytes(r,i=0,c=r.length){n(e+c);for(let s=0;s<c;s++)o[e++]=r[s+i]},writeBytesView(r,i=0,c=r.byteLength){n(e+c),o.set(r.subarray(i,i+c),e),e+=c}};function n(r){var i=o.length;if(i>=r)return;var c=1024*1024;r=Math.max(r,i*(i<c?2:1.125)>>>0),i!=0&&(r=Math.max(r,256));let s=o;o=new Uint8Array(r),e>0&&o.set(s.subarray(0,e),0)}}var H=12,X=5003,Bt=[0,1,3,7,15,31,63,127,255,511,1023,2047,4095,8191,16383,32767,65535];function At(t,e,o,n,r=$(512),i=new Uint8Array(256),c=new Int32Array(X),s=new Int32Array(X)){let g=c.length,f=Math.max(2,n);i.fill(0),s.fill(0),c.fill(-1);let a=0,l=0,w=f+1,p=w,d=!1,h=p,x=(1<<h)-1,u=1<<w-1,I=u+1,A=u+2,y=0,v=o[0],U=0;for(let B=g;B<65536;B*=2)++U;U=8-U,r.writeByte(f),_(u);let b=o.length;for(let B=1;B<b;B++)t:{let k=o[B],z=(k<<H)+v,M=k<<U^v;if(c[M]===z){v=s[M];break t}let R=M===0?1:g-M;for(;c[M]>=0;)if(M-=R,M<0&&(M+=g),c[M]===z){v=s[M];break t}_(v),v=k,A<1<<H?(s[M]=A++,c[M]=z):(c.fill(-1),A=u+2,d=!0,_(u))}return _(v),_(I),r.writeByte(0),r.bytesView();function _(B){for(a&=Bt[l],l>0?a|=B<<l:a=B,l+=h;l>=8;)i[y++]=a&255,y>=254&&(r.writeByte(y),r.writeBytesView(i,0,y),y=0),a>>=8,l-=8;if((A>x||d)&&(d?(h=p,x=(1<<h)-1,d=!1):(++h,x=h===H?1<<h:(1<<h)-1)),B==I){for(;l>0;)i[y++]=a&255,y>=254&&(r.writeByte(y),r.writeBytesView(i,0,y),y=0),a>>=8,l-=8;y>0&&(r.writeByte(y),r.writeBytesView(i,0,y),y=0)}}}var xt=At;function tt(t,e,o){return t<<8&63488|e<<2&992|o>>3}function et(t,e,o,n){return t>>4|e&240|(o&240)<<4|(n&240)<<8}function nt(t,e,o){return t>>4<<8|e&240|o>>4}function D(t,e,o){return t<e?e:t>o?o:t}function S(t){return t*t}function Y(t,e,o){var n=0,r=1e100;let i=t[e],c=i.cnt,s=i.ac,g=i.rc,f=i.gc,a=i.bc;for(var l=i.fw;l!=0;l=t[l].fw){let p=t[l],d=p.cnt,h=c*d/(c+d);if(!(h>=r)){var w=0;o&&(w+=h*S(p.ac-s),w>=r)||(w+=h*S(p.rc-g),!(w>=r)&&(w+=h*S(p.gc-f),!(w>=r)&&(w+=h*S(p.bc-a),!(w>=r)&&(r=w,n=l))))}}i.err=r,i.nn=n}function N(){return{ac:0,rc:0,gc:0,bc:0,cnt:0,nn:0,fw:0,bk:0,tm:0,mtm:0,err:0}}function vt(t,e){let o=e==="rgb444"?4096:65536,n=new Array(o),r=t.length;if(e==="rgba4444")for(let i=0;i<r;++i){let c=t[i],s=c>>24&255,g=c>>16&255,f=c>>8&255,a=c&255,l=et(a,f,g,s),w=l in n?n[l]:n[l]=N();w.rc+=a,w.gc+=f,w.bc+=g,w.ac+=s,w.cnt++}else if(e==="rgb444")for(let i=0;i<r;++i){let c=t[i],s=c>>16&255,g=c>>8&255,f=c&255,a=nt(f,g,s),l=a in n?n[a]:n[a]=N();l.rc+=f,l.gc+=g,l.bc+=s,l.cnt++}else for(let i=0;i<r;++i){let c=t[i],s=c>>16&255,g=c>>8&255,f=c&255,a=tt(f,g,s),l=a in n?n[a]:n[a]=N();l.rc+=f,l.gc+=g,l.bc+=s,l.cnt++}return n}function Mt(t,e,o={}){let{format:n="rgb565",clearAlpha:r=!0,clearAlphaColor:i=0,clearAlphaThreshold:c=0,oneBitAlpha:s=!1}=o;if(!t||!t.buffer)throw new Error("quantize() expected RGBA Uint8Array data");if(!(t instanceof Uint8Array)&&!(t instanceof Uint8ClampedArray))throw new Error("quantize() expected RGBA Uint8Array data");let g=new Uint32Array(t.buffer),f=o.useSqrt!==!1,a=n==="rgba4444",l=vt(g,n),w=l.length,p=w-1,d=new Uint32Array(w+1);for(var h=0,u=0;u<w;++u){let C=l[u];if(C!=null){var x=1/C.cnt;a&&(C.ac*=x),C.rc*=x,C.gc*=x,C.bc*=x,l[h++]=C}}S(e)/h<.022&&(f=!1);for(var u=0;u<h-1;++u)l[u].fw=u+1,l[u+1].bk=u,f&&(l[u].cnt=Math.sqrt(l[u].cnt));f&&(l[u].cnt=Math.sqrt(l[u].cnt));var I,A,y;for(u=0;u<h;++u){Y(l,u,!1);var v=l[u].err;for(A=++d[0];A>1&&(y=A>>1,!(l[I=d[y]].err<=v));A=y)d[A]=I;d[A]=u}var U=h-e;for(u=0;u<U;){for(var b;;){var _=d[1];if(b=l[_],b.tm>=b.mtm&&l[b.nn].mtm<=b.tm)break;b.mtm==p?_=d[1]=d[d[0]--]:(Y(l,_,!1),b.tm=u);var v=l[_].err;for(A=1;(y=A+A)<=d[0]&&(y<d[0]&&l[d[y]].err>l[d[y+1]].err&&y++,!(v<=l[I=d[y]].err));A=y)d[A]=I;d[A]=_}var B=l[b.nn],k=b.cnt,z=B.cnt,x=1/(k+z);a&&(b.ac=x*(k*b.ac+z*B.ac)),b.rc=x*(k*b.rc+z*B.rc),b.gc=x*(k*b.gc+z*B.gc),b.bc=x*(k*b.bc+z*B.bc),b.cnt+=B.cnt,b.mtm=++u,l[B.bk].fw=B.fw,l[B.fw].bk=B.bk,B.mtm=p}let M=[];var R=0;for(u=0;;++R){let V=D(Math.round(l[u].rc),0,255),C=D(Math.round(l[u].gc),0,255),L=D(Math.round(l[u].bc),0,255),T=255;a&&(T=D(Math.round(l[u].ac),0,255),s&&(T=T<=(typeof s=="number"?s:127)?0:255),r&&T<=c&&(V=C=L=i,T=0));let K=a?[V,C,L,T]:[V,C,L];if(_t(M,K)||M.push(K),(u=l[u].fw)==0)break}return M}function _t(t,e){for(let o=0;o<t.length;o++){let n=t[o],r=n[0]===e[0]&&n[1]===e[1]&&n[2]===e[2],i=n.length>=4&&e.length>=4?n[3]===e[3]:!0;if(r&&i)return!0}return!1}function P(t,e){var o=0,n;for(n=0;n<t.length;n++){let r=t[n]-e[n];o+=r*r}return o}function G(t,e){return e>1?Math.round(t/e)*e:t}function Ct(t,{roundRGB:e=5,roundAlpha:o=10,oneBitAlpha:n=null}={}){let r=new Uint32Array(t.buffer);for(let i=0;i<r.length;i++){let c=r[i],s=c>>24&255,g=c>>16&255,f=c>>8&255,a=c&255;s=G(s,o),n&&(s=s<=(typeof n=="number"?n:127)?0:255),a=G(a,e),f=G(f,e),g=G(g,e),r[i]=s<<24|g<<16|f<<8|a<<0}}function It(t,e,o="rgb565"){if(!t||!t.buffer)throw new Error("quantize() expected RGBA Uint8Array data");if(!(t instanceof Uint8Array)&&!(t instanceof Uint8ClampedArray))throw new Error("quantize() expected RGBA Uint8Array data");if(e.length>256)throw new Error("applyPalette() only works with 256 colors or less");let n=new Uint32Array(t.buffer),r=n.length,i=o==="rgb444"?4096:65536,c=new Uint8Array(r),s=new Array(i),g=o==="rgba4444";if(o==="rgba4444")for(let f=0;f<r;f++){let a=n[f],l=a>>24&255,w=a>>16&255,p=a>>8&255,d=a&255,h=et(d,p,w,l),x=h in s?s[h]:s[h]=kt(d,p,w,l,e);c[f]=x}else{let f=o==="rgb444"?nt:tt;for(let a=0;a<r;a++){let l=n[a],w=l>>16&255,p=l>>8&255,d=l&255,h=f(d,p,w),x=h in s?s[h]:s[h]=zt(d,p,w,e);c[a]=x}}return c}function kt(t,e,o,n,r){let i=0,c=1e100;for(let s=0;s<r.length;s++){let g=r[s],f=g[3],a=F(f-n);if(a>c)continue;let l=g[0];if(a+=F(l-t),a>c)continue;let w=g[1];if(a+=F(w-e),a>c)continue;let p=g[2];a+=F(p-o),!(a>c)&&(c=a,i=s)}return i}function zt(t,e,o,n){let r=0,i=1e100;for(let c=0;c<n.length;c++){let s=n[c],g=s[0],f=F(g-t);if(f>i)continue;let a=s[1];if(f+=F(a-e),f>i)continue;let l=s[2];f+=F(l-o),!(f>i)&&(i=f,r=c)}return r}function Ut(t,e,o=5){if(!t.length||!e.length)return;let n=t.map(c=>c.slice(0,3)),r=o*o,i=t[0].length;for(let c=0;c<e.length;c++){let s=e[c];s.length<i?s=[s[0],s[1],s[2],255]:s.length>i?s=s.slice(0,3):s=s.slice();let g=ot(n,s.slice(0,3),P),f=g[0],a=g[1];a>0&&a<=r&&(t[f]=s)}}function F(t){return t*t}function rt(t,e,o=P){let n=1/0,r=-1;for(let i=0;i<t.length;i++){let c=t[i],s=o(e,c);s<n&&(n=s,r=i)}return r}function ot(t,e,o=P){let n=1/0,r=-1;for(let i=0;i<t.length;i++){let c=t[i],s=o(e,c);s<n&&(n=s,r=i)}return[r,n]}function Et(t,e,o=P){return t[rt(t,e,o)]}function it(t={}){let{initialCapacity:e=4096,auto:o=!0}=t,n=$(e),r=5003,i=new Uint8Array(256),c=new Int32Array(r),s=new Int32Array(r),g=!1;return{reset(){n.reset(),g=!1},finish(){n.writeByte(pt.trailer)},bytes(){return n.bytes()},bytesView(){return n.bytesView()},get buffer(){return n.buffer},get stream(){return n},writeHeader:f,writeFrame(a,l,w,p={}){let{transparent:d=!1,transparentIndex:h=0,delay:x=0,palette:u=null,repeat:I=0,colorDepth:A=8,dispose:y=-1}=p,v=!1;if(o?g||(v=!0,f(),g=!0):v=!!p.first,l=Math.max(0,Math.floor(l)),w=Math.max(0,Math.floor(w)),v){if(!u)throw new Error("First frame must include a { palette } option");Tt(n,l,w,u,A),J(n,u),I>=0&&St(n,I)}let U=Math.round(x/10);Ft(n,y,U,d,h);let b=!!u&&!v;qt(n,l,w,b?u:null),b&&J(n,u),Dt(n,a,l,w,A,i,c,s)}};function f(){ct(n,"GIF89a")}}function Ft(t,e,o,n,r){t.writeByte(33),t.writeByte(249),t.writeByte(4),r<0&&(r=0,n=!1);var i,c;n?(i=1,c=2):(i=0,c=0),e>=0&&(c=e&7),c<<=2,t.writeByte(0|c|0|i),E(t,o),t.writeByte(r||0),t.writeByte(0)}function Tt(t,e,o,n,r=8){let s=W(n.length)-1,g=128|r-1<<4|0|s,f=0,a=0;E(t,e),E(t,o),t.writeBytes([g,f,a])}function St(t,e){t.writeByte(33),t.writeByte(255),t.writeByte(11),ct(t,"NETSCAPE2.0"),t.writeByte(3),t.writeByte(1),E(t,e),t.writeByte(0)}function J(t,e){let o=1<<W(e.length);for(let n=0;n<o;n++){let r=[0,0,0];n<e.length&&(r=e[n]),t.writeByte(r[0]),t.writeByte(r[1]),t.writeByte(r[2])}}function qt(t,e,o,n){if(t.writeByte(44),E(t,0),E(t,0),E(t,e),E(t,o),n){let c=W(n.length)-1;t.writeByte(128|c)}else t.writeByte(0)}function Dt(t,e,o,n,r=8,i,c,s){xt(o,n,e,r,t,i,c,s)}function E(t,e){t.writeByte(e&255),t.writeByte(e>>8&255)}function ct(t,e){for(var o=0;o<e.length;o++)t.writeByte(e.charCodeAt(o))}function W(t){return Math.max(Math.ceil(Math.log2(t)),1)}var Gt=it});var m={};j(m,dt(lt()));return ht(m);})();
+
+</script>
+<script>
+(() => {
+  const W = 1920, H = 1080;
+  const $ = id => document.getElementById(id);
+
+  const state = {
+    segments: [],     // [{raw:[{x,y}], seed}] in drawing order
+    history: [],      // previous segments arrays, for undo
+    segs: [],         // processed: [{path, lengths, total}]
+    brush: 'marker',
+    width: 18,
+    smoothing: 4,
+    color: '#111111',
+    img: null,
+    charSize: 22,     // % of canvas height
+    anchor: { x: 0.5, y: 0.5 },
+    holdStart: 2, travel: 5, gap: 0.5, holdEnd: 4,
+    slopeOn: false, boost: 3, gravity: false, tint: false,
+    bgMode: 'solid',
+    playing: false,
+    t: 0,
+    drawing: false,
+    raw: [],          // stroke in progress
+  };
+  const JOIN_DIST = 110; // canvas px: a stroke starting this close to a line's end continues it
+
+  const stage = $('stage');
+  const ctx = stage.getContext('2d');
+  const lineCanvas = document.createElement('canvas');
+  lineCanvas.width = W; lineCanvas.height = H;
+  const lctx = lineCanvas.getContext('2d');
+
+  // ---------- helpers ----------
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const nLines = () => state.segs.length;
+  const totalTime = () => {
+    const n = nLines();
+    return state.holdStart + state.travel + Math.max(0, n - 1) * state.gap + state.holdEnd;
+  };
+  // travel time for line i, proportional to its length
+  function segTime(i) {
+    const sum = state.segs.reduce((a, sg) => a + sg.eff, 0) || 1;
+    return state.travel * state.segs[i].eff / sum;
+  }
+  const fmt = n => n.toFixed(1);
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  function setStatus(msg) { $('status').textContent = msg; }
+
+  // ---------- path processing ----------
+  function resample(pts, spacing) {
+    if (pts.length < 2) return pts.slice();
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      let a = out[out.length - 1], b = pts[i];
+      let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      while (d >= spacing) {
+        const nx = a.x + dx / d * spacing, ny = a.y + dy / d * spacing;
+        out.push({ x: nx, y: ny });
+        a = { x: nx, y: ny };
+        dx = b.x - a.x; dy = b.y - a.y; d = Math.hypot(dx, dy);
+      }
+    }
+    const last = pts[pts.length - 1], tail = out[out.length - 1];
+    if (dist(last, tail) > 0.5) out.push(last);
+    return out;
+  }
+  function smooth(pts, passes) {
+    let p = pts;
+    for (let k = 0; k < passes; k++) {
+      p = p.map((pt, i) => {
+        if (i === 0 || i === p.length - 1) return pt;
+        const a = p[Math.max(0, i - 2)], b = p[i - 1], c = p[i + 1], d = p[Math.min(p.length - 1, i + 2)];
+        return { x: (a.x + b.x + 2 * pt.x + c.x + d.x) / 6, y: (a.y + b.y + 2 * pt.y + c.y + d.y) / 6 };
+      });
+    }
+    return p;
+  }
+  function processSegment(raw) {
+    if (raw.length < 2) return null;
+    let p = resample(raw, 3);
+    p = smooth(p, state.smoothing * 2);
+    p = resample(p, 2);
+    if (p.length < 2) return null;
+    if (p[0].x > p[p.length - 1].x) p.reverse();
+    const lengths = [0];
+    for (let i = 1; i < p.length; i++) lengths.push(lengths[i - 1] + dist(p[i], p[i - 1]));
+    const seg = { path: p, lengths, total: lengths[lengths.length - 1] };
+    pace(seg);
+    return seg;
+  }
+  // Speed multiplier at each point (1 = flat speed). Steepness is averaged over ~40 px
+  // so the character eases into and out of steep parts instead of jerking at corners.
+  const GRAVITY_UP = 0.3; // with gravity on, climbing gets this share of the boost
+  function pace(seg) {
+    const p = seg.path, n = p.length, K = 10;
+    const speed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      if (!state.slopeOn || state.boost <= 1) { speed[i] = 1; continue; }
+      const a = p[Math.max(0, i - K)], b = p[Math.min(n - 1, i + K)];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+      let steep = Math.abs(dy) / d;               // 0 flat, 1 vertical
+      if (state.gravity && dy < 0) steep *= GRAVITY_UP; // canvas y grows downward, so dy < 0 is climbing
+      speed[i] = 1 + (state.boost - 1) * steep;
+    }
+    // cumulative time along the line (distance / speed)
+    const times = new Float32Array(n);
+    for (let i = 1; i < n; i++) {
+      const ds = seg.lengths[i] - seg.lengths[i - 1];
+      times[i] = times[i - 1] + ds / ((speed[i] + speed[i - 1]) / 2);
+    }
+    seg.speed = speed; seg.times = times; seg.eff = times[n - 1] || 1;
+  }
+  function repaceAll() { state.segs.forEach(pace); }
+  function processAll() {
+    state.segs = state.segments.map(sg => processSegment(sg.raw)).filter(Boolean);
+  }
+  // Position at a fraction f (0-1) of this line's travel time
+  function pointAtTime(seg, f) {
+    const T = seg.times, target = Math.max(0, Math.min(1, f)) * seg.eff;
+    let lo = 0, hi = T.length - 1;
+    while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (T[mid] <= target) lo = mid; else hi = mid; }
+    const span = T[hi] - T[lo] || 1, g = (target - T[lo]) / span;
+    const p = seg.path;
+    return { x: p[lo].x + (p[hi].x - p[lo].x) * g, y: p[lo].y + (p[hi].y - p[lo].y) * g };
+  }
+  function pointAt(seg, u) {
+    const p = seg.path, L = seg.lengths;
+    const target = Math.max(0, Math.min(1, u)) * seg.total;
+    let lo = 0, hi = L.length - 1;
+    while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (L[mid] <= target) lo = mid; else hi = mid; }
+    const segLen = L[hi] - L[lo] || 1, f = (target - L[lo]) / segLen;
+    return { x: p[lo].x + (p[hi].x - p[lo].x) * f, y: p[lo].y + (p[hi].y - p[lo].y) * f };
+  }
+
+  // ---------- line rendering ----------
+  function strokePolyline(c, pts, width, color, alpha) {
+    if (pts.length < 2) return;
+    c.globalAlpha = alpha; c.strokeStyle = color; c.lineWidth = width;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+    c.stroke();
+    c.globalAlpha = 1;
+  }
+  function renderSegment(p, seed) {
+    const w = state.width, col = state.color;
+    if (state.brush === 'plain') { strokePolyline(lctx, p, w, col, 1); return; }
+
+    // Marker: solid core, wobbling sub-strokes and a fuzzy edge
+    const rnd = mulberry32(seed);
+    strokePolyline(lctx, p, w * 0.78, col, 1);
+    const nrm = p.map((pt, i) => {
+      const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+      return { x: -dy / d, y: dx / d };
+    });
+    for (let pass = 0; pass < 5; pass++) {
+      let off = (rnd() - 0.5) * w * 0.3, vel = 0;
+      const pts = p.map((pt, i) => {
+        vel += (rnd() - 0.5) * w * 0.06; vel *= 0.85;
+        off += vel; off = Math.max(-w * 0.3, Math.min(w * 0.3, off));
+        return { x: pt.x + nrm[i].x * off, y: pt.y + nrm[i].y * off };
+      });
+      strokePolyline(lctx, pts, w * 0.45, col, 0.55);
+    }
+    lctx.fillStyle = col;
+    for (let i = 0; i < p.length; i++) {
+      for (let k = 0; k < 4; k++) {
+        const side = rnd() < 0.5 ? -1 : 1;
+        const r = rnd();
+        const d = w / 2 * (0.82 + r * r * 0.42) * side;
+        const sz = 0.6 + rnd() * (w * 0.06);
+        lctx.globalAlpha = 0.35 + rnd() * 0.5;
+        lctx.beginPath();
+        lctx.arc(p[i].x + nrm[i].x * d, p[i].y + nrm[i].y * d, sz, 0, Math.PI * 2);
+        lctx.fill();
+      }
+    }
+    lctx.globalAlpha = 1;
+  }
+  function renderLine() {
+    lctx.clearRect(0, 0, W, H);
+    state.segments.forEach((sg, i) => {
+      const seg = state.segs[i];
+      if (seg) renderSegment(seg.path, sg.seed);
+    });
+    if (typeof renderTint === 'function') renderTint();
+  }
+
+  // ---------- character ----------
+  function charRect(pt) {
+    const img = state.img;
+    const h = H * state.charSize / 100, s = h / img.height, w = img.width * s;
+    return { x: pt.x - w * state.anchor.x, y: pt.y - h * state.anchor.y, w, h };
+  }
+  // Where the character is at a given time: {seg, u} or null when vanished
+  function charAt(time) {
+    const n = nLines();
+    if (!n) return null;
+    if (time <= state.holdStart) return { seg: state.segs[0], u: 0 };
+    let t = time - state.holdStart;
+    for (let i = 0; i < n; i++) {
+      const T = segTime(i);
+      if (t <= T) return { seg: state.segs[i], u: T > 0 ? t / T : 1 };
+      t -= T;
+      if (i < n - 1) {
+        if (t < state.gap) return null;
+        t -= state.gap;
+      }
+    }
+    return { seg: state.segs[n - 1], u: 1 };
+  }
+
+  // ---------- compose a frame ----------
+  function drawFrame(c, cw, ch, time, transparent) {
+    c.clearRect(0, 0, cw, ch);
+    if (!transparent) { c.fillStyle = '#f3f3f3'; c.fillRect(0, 0, cw, ch); }
+    const k = cw / W;
+    c.drawImage(lineCanvas, 0, 0, cw, ch);
+    if (state.img) {
+      const pos = charAt(time);
+      if (pos) {
+        const r = charRect(pointAtTime(pos.seg, pos.u));
+        c.drawImage(state.img, r.x * k, r.y * k, r.w * k, r.h * k);
+      }
+    }
+  }
+
+  function render() {
+    if (state.drawing) {
+      ctx.fillStyle = '#f3f3f3'; ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(lineCanvas, 0, 0);
+      strokePolyline(ctx, state.raw, state.width, state.color, 1);
+      return;
+    }
+    drawFrame(ctx, W, H, state.t, false);
+    if (state.slopeOn && state.tint && state.segs.length) {
+      ctx.drawImage(tintCanvas, 0, 0);
+      if (state.img) { // redraw the character on top of the tint
+        const pos = charAt(state.t);
+        if (pos) { const r = charRect(pointAtTime(pos.seg, pos.u)); ctx.drawImage(state.img, r.x, r.y, r.w, r.h); }
+      }
+    }
+  }
+  // Recolors the drawn line by speed, keeping the marker texture (preview only, never exported)
+  const tintCanvas = document.createElement('canvas');
+  tintCanvas.width = W; tintCanvas.height = H;
+  const tctx = tintCanvas.getContext('2d');
+  function speedColor(t) {
+    const stops = [[47, 125, 225], [155, 89, 208], [232, 72, 31]];
+    const x = Math.max(0, Math.min(1, t)) * 2, i = Math.min(1, Math.floor(x)), f = x - i;
+    const a = stops[i], b = stops[i + 1];
+    return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(',')})`;
+  }
+  function renderTint() {
+    tctx.globalCompositeOperation = 'source-over';
+    tctx.clearRect(0, 0, W, H);
+    if (!(state.slopeOn && state.tint)) return;
+    tctx.drawImage(lineCanvas, 0, 0);
+    tctx.globalCompositeOperation = 'source-atop';
+    tctx.lineCap = 'round'; tctx.lineWidth = state.width * 2.2;
+    const range = Math.max(0.001, state.boost - 1);
+    for (const seg of state.segs) {
+      const p = seg.path;
+      for (let i = 1; i < p.length; i++) {
+        tctx.strokeStyle = speedColor(((seg.speed[i] + seg.speed[i - 1]) / 2 - 1) / range);
+        tctx.beginPath(); tctx.moveTo(p[i - 1].x, p[i - 1].y); tctx.lineTo(p[i].x, p[i].y); tctx.stroke();
+      }
+    }
+    tctx.globalCompositeOperation = 'source-over';
+  }
+
+  // ---------- drawing input ----------
+  function canvasPoint(e) {
+    const r = stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+  stage.addEventListener('pointerdown', e => {
+    if (state.playing) stopPlay();
+    e.preventDefault();
+    stage.setPointerCapture(e.pointerId);
+    state.drawing = true;
+    state.raw = [canvasPoint(e)];
+    render();
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!state.drawing) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of evs) state.raw.push(canvasPoint(ev));
+    render();
+  });
+  function commitStroke(raw) {
+    state.history.push(state.segments.slice());
+    const last = state.segments[state.segments.length - 1];
+    if (last && last.raw.length) {
+      const head = last.raw[0], tail = last.raw[last.raw.length - 1], start = raw[0];
+      const dTail = dist(start, tail), dHead = dist(start, head);
+      if (dTail <= JOIN_DIST || dHead <= JOIN_DIST) {
+        // continue the previous line from whichever end is closer
+        const joined = dTail <= dHead ? last.raw.concat(raw) : last.raw.slice().reverse().concat(raw);
+        state.segments[state.segments.length - 1] = { raw: joined, seed: last.seed };
+        return 'joined';
+      }
+    }
+    state.segments.push({ raw, seed: (Math.random() * 1e9) | 0 });
+    return 'new';
+  }
+  function endStroke() {
+    if (!state.drawing) return;
+    state.drawing = false;
+    const raw = state.raw; state.raw = [];
+    if (raw.length >= 2 && (raw.length > 4 || dist(raw[0], raw[raw.length - 1]) > 4)) {
+      const how = commitStroke(raw);
+      processAll(); renderLine();
+      state.t = 0; updateUI(); render();
+      setStatus(how === 'joined' ? `Continued line ${nLines()}.` : `Added line ${nLines()}.`);
+      return;
+    }
+    render();
+  }
+  stage.addEventListener('pointerup', endStroke);
+  stage.addEventListener('pointercancel', endStroke);
+  $('undoStroke').addEventListener('click', () => {
+    if (!state.history.length) return;
+    stopPlay();
+    state.segments = state.history.pop();
+    processAll(); renderLine(); state.t = 0; updateUI(); render();
+  });
+
+  // ---------- playback ----------
+  let lastTs = 0, raf = 0;
+  function tick(ts) {
+    if (!state.playing) return;
+    const dt = (ts - lastTs) / 1000; lastTs = ts;
+    state.t = (state.t + dt) % totalTime();
+    syncScrub(); render();
+    raf = requestAnimationFrame(tick);
+  }
+  function startPlay() {
+    if (!nLines()) return;
+    state.playing = true; stage.classList.add('playing');
+    $('playBtn').textContent = 'Pause';
+    lastTs = performance.now(); raf = requestAnimationFrame(tick);
+  }
+  function stopPlay() {
+    state.playing = false; stage.classList.remove('playing');
+    $('playBtn').textContent = 'Play';
+    cancelAnimationFrame(raf);
+  }
+  function syncScrub() {
+    $('scrub').value = Math.round(state.t / totalTime() * 1000);
+    $('timeOut').textContent = `${fmt(state.t)} / ${fmt(totalTime())} s`;
+  }
+  $('playBtn').addEventListener('click', () => state.playing ? stopPlay() : startPlay());
+  $('scrub').addEventListener('input', e => {
+    stopPlay();
+    state.t = e.target.value / 1000 * totalTime();
+    syncScrub(); render();
+  });
+
+  // ---------- UI wiring ----------
+  function updateUI() {
+    const hasLine = nLines() > 0, hasChar = !!state.img;
+    $('exportPng').disabled = !hasLine;
+    $('exportGif').disabled = !(hasLine && hasChar);
+    $('playBtn').disabled = !hasLine;
+    $('scrub').disabled = !hasLine;
+    for (const [id, key] of [['lineWidth', 'width'], ['smoothing', 'smoothing'], ['charSize', 'charSize']]) {
+      if (document.activeElement !== $(id + 'Num')) $(id + 'Num').value = state[key];
+      $(id).value = Math.min(state[key], parseFloat($(id).max));
+    }
+    for (const k of ['holdStart', 'travel', 'gap', 'holdEnd']) {
+      if (document.activeElement !== $(k + 'Num')) $(k + 'Num').value = state[k];
+      $(k).value = Math.min(state[k], parseFloat($(k).max));
+    }
+    $('exportPng2').disabled = !hasLine;
+    $('exportGif2').disabled = !(hasLine && hasChar);
+    $('undoStroke').disabled = !state.history.length;
+    const n = nLines();
+    $('lineCount').textContent = n ? `${n} line${n === 1 ? '' : 's'}` : '';
+    if (state.t > totalTime()) state.t = 0;
+    syncScrub();
+    if (!hasLine) setStatus('Draw a contour line to get started.');
+    else if (!hasChar) setStatus('Line ready. Choose a character PNG to animate it.');
+  }
+  function bindRange(id, key, after) {
+    $(id).addEventListener('input', e => {
+      state[key] = parseFloat(e.target.value);
+      if (after) after();
+      updateUI(); render();
+    });
+  }
+  bindRange('lineWidth', 'width', renderLine);
+  bindRange('smoothing', 'smoothing', () => { processAll(); renderLine(); });
+  bindRange('charSize', 'charSize');
+  bindRange('holdStart', 'holdStart');
+  bindRange('travel', 'travel');
+  bindRange('gap', 'gap');
+  bindRange('holdEnd', 'holdEnd');
+  for (const k of ['holdStart', 'travel', 'gap', 'holdEnd']) {
+    $(k + 'Num').addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      if (isNaN(v)) return;
+      const min = k === 'travel' ? 0.5 : 0;
+      state[k] = Math.max(min, Math.min(60, v));
+      updateUI(); render();
+    });
+    $(k + 'Num').addEventListener('change', () => { $(k + 'Num').value = state[k]; });
+  }
+  const DEFAULTS = { brush: 'marker', width: 18, smoothing: 4, color: '#111111', holdStart: 2, travel: 5, gap: 0.5, holdEnd: 4 };
+  // Typed values: clamp to the box's min/max, then behave like the slider
+  function bindNumber(id, key, after, integer) {
+    const el = $(id + 'Num');
+    el.addEventListener('input', () => {
+      let v = parseFloat(el.value);
+      if (isNaN(v)) return;
+      v = Math.max(parseFloat(el.min), Math.min(parseFloat(el.max), v));
+      if (integer) v = Math.round(v);
+      state[key] = v;
+      if (after) after();
+      updateUI(); render();
+    });
+    el.addEventListener('change', () => { el.value = state[key]; });
+  }
+  bindNumber('lineWidth', 'width', renderLine, true);
+  bindNumber('smoothing', 'smoothing', () => { processAll(); renderLine(); }, true);
+  bindNumber('charSize', 'charSize', null, false);
+  bindNumber('boost', 'boost', () => { repaceAll(); renderTint(); syncSlopeUI(); }, false);
+
+  $('lineDefaults').addEventListener('click', () => {
+    state.width = DEFAULTS.width; state.smoothing = DEFAULTS.smoothing; state.color = DEFAULTS.color;
+    $('lineWidth').value = state.width; $('smoothing').value = state.smoothing; $('lineColor').value = state.color;
+    setBrush(DEFAULTS.brush);
+    processAll(); renderLine(); updateUI(); render();
+  });
+  function syncSlopeUI() {
+    $('slopeOn').checked = state.slopeOn; $('gravityOn').checked = state.gravity; $('tintOn').checked = state.tint;
+    $('boost').value = state.boost; if (document.activeElement !== $('boostNum')) $('boostNum').value = state.boost;
+    $('slopeOpts').classList.toggle('off', !state.slopeOn);
+    $('tintLegend').style.display = state.slopeOn && state.tint ? 'flex' : 'none';
+  }
+  function slopeChanged() { repaceAll(); renderTint(); syncSlopeUI(); updateUI(); render(); }
+  $('slopeOn').addEventListener('change', e => { state.slopeOn = e.target.checked; slopeChanged(); });
+  $('gravityOn').addEventListener('change', e => { state.gravity = e.target.checked; slopeChanged(); });
+  $('tintOn').addEventListener('change', e => { state.tint = e.target.checked; slopeChanged(); });
+  $('boost').addEventListener('input', e => { state.boost = parseFloat(e.target.value); slopeChanged(); });
+
+  $('timingDefaults').addEventListener('click', () => {
+    state.holdStart = DEFAULTS.holdStart; state.travel = DEFAULTS.travel; state.gap = DEFAULTS.gap; state.holdEnd = DEFAULTS.holdEnd;
+    state.slopeOn = false; state.boost = 3; state.gravity = false; state.tint = false;
+    state.t = 0; slopeChanged();
+  });
+  $('lineColor').addEventListener('input', e => { state.color = e.target.value; renderLine(); render(); });
+  $('bgMode').addEventListener('change', e => { state.bgMode = e.target.value; });
+  function setBrush(b) {
+    state.brush = b;
+    $('brushMarker').setAttribute('aria-pressed', b === 'marker');
+    $('brushPlain').setAttribute('aria-pressed', b === 'plain');
+    renderLine(); render();
+  }
+  $('brushMarker').addEventListener('click', () => setBrush('marker'));
+  $('brushPlain').addEventListener('click', () => setBrush('plain'));
+  $('clearLine').addEventListener('click', () => {
+    stopPlay();
+    if (state.segments.length) state.history.push(state.segments.slice());
+    state.segments = []; processAll(); renderLine(); state.t = 0; updateUI(); render();
+  });
+
+  // character upload + anchor
+  function loadCharacter(f) {
+    if (!f || !f.type.startsWith('image/')) { setStatus('That file is not an image.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        state.img = img; state.anchor = { x: 0.5, y: 0.5 };
+        $('charName').textContent = 'Loaded: ' + (f.name || 'pasted image');
+        $('anchorWrap').classList.add('show');
+        drawAnchorPad(); updateUI(); render();
+      };
+      img.onerror = () => setStatus('Could not read that image file.');
+      img.src = reader.result;
+    };
+    reader.onerror = () => setStatus('Could not read that image file.');
+    reader.readAsDataURL(f);
+  }
+  $('charBtn').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('charFile').click(); } });
+  $('charFile').addEventListener('change', e => { loadCharacter(e.target.files[0]); e.target.value = ''; });
+  // Drag a PNG onto the canvas, or paste one from the clipboard
+  stage.addEventListener('dragover', e => { e.preventDefault(); });
+  stage.addEventListener('drop', e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadCharacter(f);
+  });
+  document.addEventListener('paste', e => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) if (it.type.startsWith('image/')) { loadCharacter(it.getAsFile()); break; }
+  });
+  const pad = $('anchorPad'), pctx = pad.getContext('2d');
+  function padFit() {
+    const img = state.img, S = pad.width, m = 12;
+    const s = Math.min((S - 2 * m) / img.width, (S - 2 * m) / img.height);
+    const w = img.width * s, h = img.height * s;
+    return { x: (S - w) / 2, y: (S - h) / 2, w, h };
+  }
+  function drawAnchorPad() {
+    if (!state.img) return;
+    const S = pad.width; pctx.clearRect(0, 0, S, S);
+    const r = padFit();
+    pctx.drawImage(state.img, r.x, r.y, r.w, r.h);
+    const ax = r.x + r.w * state.anchor.x, ay = r.y + r.h * state.anchor.y;
+    pctx.strokeStyle = '#e8781f'; pctx.lineWidth = 2;
+    pctx.beginPath(); pctx.moveTo(ax - 14, ay); pctx.lineTo(ax + 14, ay); pctx.moveTo(ax, ay - 14); pctx.lineTo(ax, ay + 14); pctx.stroke();
+    pctx.beginPath(); pctx.arc(ax, ay, 6, 0, Math.PI * 2); pctx.stroke();
+  }
+  function setAnchorFromEvent(e) {
+    if (!state.img) return;
+    const b = pad.getBoundingClientRect();
+    const px = (e.clientX - b.left) / b.width * pad.width, py = (e.clientY - b.top) / b.height * pad.height;
+    const r = padFit();
+    state.anchor = { x: Math.max(0, Math.min(1, (px - r.x) / r.w)), y: Math.max(0, Math.min(1, (py - r.y) / r.h)) };
+    drawAnchorPad(); render();
+  }
+  let padDown = false;
+  pad.addEventListener('pointerdown', e => { padDown = true; pad.setPointerCapture(e.pointerId); setAnchorFromEvent(e); });
+  pad.addEventListener('pointermove', e => { if (padDown) setAnchorFromEvent(e); });
+  pad.addEventListener('pointerup', () => padDown = false);
+  $('anchorCenter').addEventListener('click', () => { state.anchor = { x: 0.5, y: 0.5 }; drawAnchorPad(); render(); });
+
+  // ---------- exports ----------
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  function baseName() {
+    const n = $('fileName').value.trim().replace(/[\\/:*?"<>|]/g, '-');
+    return n || 'voice-warmup';
+  }
+  function exportPng() { lineCanvas.toBlob(b => download(b, baseName() + '-line.png'), 'image/png'); }
+  $('exportPng').addEventListener('click', exportPng);
+  $('exportPng2').addEventListener('click', exportPng);
+  $('exportGif2').addEventListener('click', () => $('exportGif').click());
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  $('exportGif').addEventListener('click', async () => {
+    stopPlay();
+    const btn = $('exportGif'), btn2 = $('exportGif2'); btn.disabled = true; btn2.disabled = true;
+    const prog = $('progress'), bar = prog.querySelector('i');
+    prog.classList.add('show'); bar.style.width = '0%';
+    try {
+      const GW = 1280, GH = 720, FPS = 20;
+      const transparent = state.bgMode === 'transparent';
+      const off = document.createElement('canvas'); off.width = GW; off.height = GH;
+      const oc = off.getContext('2d', { willReadFrequently: true });
+      const { GIFEncoder, quantize, applyPalette } = gifenc;
+      const gif = GIFEncoder();
+      const format = transparent ? 'rgba4444' : 'rgb565';
+
+      // Build one palette from a frame that contains every element
+      drawFrame(oc, GW, GH, state.holdStart + state.travel / 2, transparent);
+      let pix = oc.getImageData(0, 0, GW, GH).data;
+      const palette = quantize(pix, 256, transparent ? { format, oneBitAlpha: true } : { format });
+      let transparentIndex = 0;
+      if (transparent) {
+        transparentIndex = palette.findIndex(c => c.length > 3 && c[3] === 0);
+        if (transparentIndex < 0) { palette.unshift([0, 0, 0, 0]); if (palette.length > 256) palette.pop(); transparentIndex = 0; }
+      }
+
+      const n = nLines();
+      const frames = [];
+      if (state.holdStart > 0) frames.push({ t: state.holdStart, delay: Math.max(20, Math.round(state.holdStart * 1000)) });
+      let base = state.holdStart;
+      for (let s = 0; s < n; s++) {
+        const T = segTime(s);
+        const per = Math.max(1, Math.round(T * FPS));
+        for (let i = 1; i <= per; i++) {
+          const lastOfAll = s === n - 1 && i === per;
+          frames.push({ t: base + i / per * T, delay: lastOfAll ? Math.max(20, Math.round(state.holdEnd * 1000)) : 1000 / FPS });
+        }
+        base += T;
+        if (s < n - 1 && state.gap > 0) {
+          frames.push({ t: base + state.gap / 2, delay: Math.max(20, Math.round(state.gap * 1000)) });
+          base += state.gap;
+        }
+      }
+      for (let i = 0; i < frames.length; i++) {
+        drawFrame(oc, GW, GH, frames[i].t, transparent);
+        pix = oc.getImageData(0, 0, GW, GH).data;
+        const index = applyPalette(pix, palette, format);
+        gif.writeFrame(index, GW, GH, {
+          palette: i === 0 ? palette : undefined,
+          delay: frames[i].delay,
+          repeat: 0,
+          transparent,
+          transparentIndex,
+          dispose: transparent ? 2 : 1,
+        });
+        bar.style.width = `${Math.round((i + 1) / frames.length * 100)}%`;
+        setStatus(`Encoding frame ${i + 1} of ${frames.length}`);
+        if (i % 4 === 0) await sleep(0);
+      }
+      gif.finish();
+      const bytes = gif.bytes();
+      download(new Blob([bytes], { type: 'image/gif' }), baseName() + '.gif');
+      setStatus(`GIF ready: ${frames.length} frames, ${(bytes.length / 1048576).toFixed(1)} MB.`);
+    } catch (err) {
+      console.error(err);
+      setStatus('GIF export failed: ' + err.message);
+    } finally {
+      prog.classList.remove('show');
+      btn.disabled = false; btn2.disabled = false;
+    }
+  });
+
+  // keyboard: space toggles play
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !['INPUT', 'SELECT', 'BUTTON'].includes(document.activeElement.tagName)) {
+      e.preventDefault(); state.playing ? stopPlay() : startPlay();
+    }
+  });
+
+  updateUI(); render();
+})();
+</script>
+</body>
+</html>
