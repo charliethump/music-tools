@@ -318,7 +318,7 @@ function zoomTo(to, ms, done) {
     if (k < 1) anim = requestAnimationFrame(frame); else if (done) done();
   })(t0);
 }
-// a tighter view that keeps the target inside but never dead center
+// a tighter view that keeps the target near the middle, a little off center
 function viewAround(i, level) {
   const [W, H] = [DATA.w, DATA.h];
   // match the shape of the map area on screen so the off-center placement is what the class actually sees
@@ -327,8 +327,8 @@ function viewAround(i, level) {
   if (h > H) { h = H; w = h * aspect; }
   const [bx0, by0, bx1, by1] = C[i].b;
   if (w < (bx1 - bx0) * 1.4 || h < (by1 - by0) * 1.4) return null;   // country would no longer fit
-  const side = Math.random() < 0.5 ? 0.18 + Math.random() * 0.17 : 0.65 + Math.random() * 0.17;
-  const rx = side, ry = 0.25 + Math.random() * 0.5;
+  // target lands 0-15% of the view away from center, in a random direction
+  const rx = 0.5 + (Math.random() * 2 - 1) * 0.15, ry = 0.5 + (Math.random() * 2 - 1) * 0.15;
   const px = 0.07 * w, py = 0.1 * h;
   let x = (bx0 + bx1) / 2 - rx * w, y = (by0 + by1) / 2 - ry * h;
   x = Math.min(Math.max(x, bx1 + px - w), bx0 - px);
