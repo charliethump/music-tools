@@ -364,6 +364,7 @@
     text.style.animation = "none"; void text.offsetWidth; text.style.animation = "";
     stage.classList.add("winning");
     var snd = $("win-sound");
+    snd.volume = 0.3;
     try { snd.currentTime = 0; } catch (e) {}
     var play = snd.play();
     if (play && play.catch) play.catch(function () { /* browser blocked audio; ignore */ });
