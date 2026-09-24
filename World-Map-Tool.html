@@ -43,7 +43,7 @@ body {
 body.setup { grid-template-rows: 10vh minmax(0, 1fr) auto; }
 
 /* ---------- header ---------- */
-header { display: flex; align-items: center; justify-content: center; padding: 0 3vw; }
+header { grid-row: 1; position: relative; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 0 3vw; }
 h1 {
   margin: 0;
   font-weight: 800;
@@ -71,7 +71,7 @@ body.play h1, #msg.found #l1 {
 body.setup h1 { color: var(--ink); text-shadow: none; font-family: var(--display); font-weight: 900; font-style: italic; letter-spacing: 0.02em; -webkit-text-stroke: 0.025em currentColor; paint-order: stroke fill; font-size: clamp(22px, min(3.4vw, 6vh), 64px); }
 
 /* ---------- map ---------- */
-main { min-height: 0; min-width: 0; }
+main { position: fixed; inset: 0; z-index: 0; }
 svg { display: block; width: 100%; height: 100%; }
 .sea { fill: var(--ocean); }
 .inert { fill: var(--land); stroke: var(--border); stroke-width: 0.6px; vector-effect: non-scaling-stroke; pointer-events: none; }
@@ -90,11 +90,11 @@ path.c.picked { fill: var(--red); stroke: #7d0905; transition: fill 0.15s ease; 
 #ring { fill: none; stroke: var(--red); stroke-width: 17; stroke-linecap: round; display: none; pointer-events: none; }
 
 /* ---------- footer / messages ---------- */
-footer { position: relative; display: flex; align-items: center; justify-content: center; padding: 0 17vw; }
+footer { grid-row: 3; position: relative; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center; padding: 0 17vw; }
 #msg { width: 100%; min-width: 0; text-align: center; font-family: var(--display); opacity: 0; transition: opacity 0.4s ease; }
 #msg.show { opacity: 1; transition: opacity 0.15s ease; }
-#l1 { white-space: nowrap; font-weight: 900; font-style: italic; letter-spacing: 0.02em; -webkit-text-stroke: 0.025em currentColor; paint-order: stroke fill; font-size: clamp(20px, min(3.5vw, 6vh), 68px); line-height: 1.1; }
-#l2 { font-weight: 400; font-size: clamp(16px, min(2.5vw, 4.2vh), 46px); line-height: 1.2; margin-top: 0.25em; }
+#l1 { text-shadow: 0 0 0.1em var(--ocean), 0 0 0.25em var(--ocean); white-space: nowrap; font-weight: 900; font-style: italic; letter-spacing: 0.02em; -webkit-text-stroke: 0.025em currentColor; paint-order: stroke fill; font-size: clamp(20px, min(3.5vw, 6vh), 68px); line-height: 1.1; }
+#l2 { text-shadow: 0 0 0.12em var(--ocean), 0 0 0.25em var(--ocean), 0 0 0.4em var(--ocean); font-weight: 400; font-size: clamp(16px, min(2.5vw, 4.2vh), 46px); line-height: 1.2; margin-top: 0.25em; }
 #l2:empty { display: none; }
 #l2 b { font-weight: 800; }
 #msg.found #l1 { font-size: clamp(26px, min(5vw, 8.4vh), 100px); }
@@ -102,6 +102,7 @@ footer { position: relative; display: flex; align-items: center; justify-content
 .warm { color: var(--warm); } .rwarm { color: var(--rwarm); } .hot { color: var(--hot); }
 
 #showme {
+  pointer-events: auto;
   position: absolute; right: 2.2vw; bottom: 2.4vh;
   font: 700 clamp(15px, min(2vw, 3.4vh), 36px) var(--font);
   color: var(--red); background: #fff;
@@ -113,6 +114,7 @@ footer { position: relative; display: flex; align-items: center; justify-content
 #showme:hover { background: var(--red); color: #fff; }
 #showme:active { transform: translateY(0.08em); box-shadow: 0 0.04em 0 rgba(125, 9, 5, 0.35); }
 #toSetup {
+  pointer-events: auto;
   position: absolute; left: 1.6vw; bottom: 1.6vh;
   font: 400 clamp(12px, 1.1vw, 18px) var(--font);
   color: var(--ink); opacity: 0.35; text-decoration: none; padding: 0.4em 0.6em;
@@ -125,6 +127,7 @@ body.setup #msg, body.setup #showme, body.setup #toSetup { display: none; }
 #setup { display: none; }
 body.setup footer { padding: 1.4vh 2vw 2.4vh; }
 body.setup #setup {
+  pointer-events: auto;
   display: flex; flex-direction: column; gap: 12px; align-items: center;
   background: #fff; border: 2px solid #e6d3a6; border-radius: 18px;
   padding: 16px 22px; font-size: clamp(15px, 1.25vw, 20px); max-width: 1100px; width: 100%;
@@ -298,7 +301,7 @@ function fit(el) {
   const size = parseFloat(getComputedStyle(el).fontSize);
   if (el.scrollWidth > el.clientWidth) el.style.fontSize = (size * el.clientWidth / el.scrollWidth * 0.98) + "px";
 }
-const fitAll = () => { fit($("title")); fit(l1); };
+const fitAll = () => { fit($("title")); fit(l1); if (typeof setView === "function" && view) setView(view); };
 addEventListener("resize", fitAll);
 // load the backup fonts up front so the first message doesn't flash in a lighter style
 Promise.all(["italic 900 1em 'Comic Neue'", "700 1em 'Comic Neue'", "400 1em 'Comic Neue'"].map(f => document.fonts.load(f))).catch(() => {});
@@ -309,7 +312,21 @@ const FULL = [0, 0, DATA.w, DATA.h];
 const STEP = 0.62;   // each zoom step shows 62% of the previous width
 let view = FULL.slice(), anim = 0;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-function setView(v) { view = v; svg.setAttribute("viewBox", v.map(n => n.toFixed(1)).join(" ")); }
+const headerEl = document.querySelector("header"), footerEl = document.querySelector("footer");
+function band() {   // the open strip of screen between the header and the footer
+  const top = headerEl.getBoundingClientRect().bottom;
+  const h = Math.max(60, footerEl.getBoundingClientRect().top - top);
+  return { top, h, w: svg.clientWidth || innerWidth };
+}
+// fit the view into that strip, but let the map keep going under the header and footer
+function setView(v) {
+  view = v;
+  const b = band(), sw = svg.clientWidth || innerWidth, sh = svg.clientHeight || innerHeight;
+  const [x, y, w, h] = v, s = Math.min(b.w / w, b.h / h);
+  const vx = x + w / 2 - (sw / 2) / s, vy = y + h / 2 - (b.top + b.h / 2) / s;
+  svg.setAttribute("viewBox", [vx, vy, sw / s, sh / s].map(n => n.toFixed(1)).join(" "));
+}
+addEventListener("resize", () => setView(view));
 function zoomTo(to, ms, done) {
   cancelAnimationFrame(anim);
   if (reduceMotion) { setView(to); if (done) done(); return; }
@@ -325,7 +342,7 @@ function zoomTo(to, ms, done) {
 function viewAround(i, level) {
   const [W, H] = [DATA.w, DATA.h];
   // match the shape of the map area on screen so the off-center placement is what the class actually sees
-  const aspect = svg.clientWidth / svg.clientHeight || W / H;
+  const b = band(), aspect = b.w / b.h || W / H;
   let w = W * Math.pow(STEP, level), h = w / aspect;
   if (h > H) { h = H; w = h * aspect; }
   const [bx0, by0, bx1, by1] = C[i].b;
@@ -396,6 +413,8 @@ function rainConfetti(ms) {
   })(t0);
 }
 
+setView(view);
+
 // ---------- settings from the link ----------
 const params = new URLSearchParams(location.search);
 const norm = s => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -408,6 +427,7 @@ const optConfetti = params.get("confetti") !== "0";
 const optZoom = Math.max(0, Math.min(5, parseInt(params.get("zoom"), 10) || 0));
 
 if (target < 0 || params.has("setup")) startSetup(); else startGame();
+setView(view);
 
 // ---------- game ----------
 function startGame() {
