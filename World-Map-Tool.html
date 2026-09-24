@@ -74,14 +74,15 @@ body.setup h1 { color: var(--ink); text-shadow: none; font-family: var(--display
 main { position: fixed; inset: 0; z-index: 0; }
 svg { display: block; width: 100%; height: 100%; }
 .sea { fill: var(--ocean); }
-.inert { fill: var(--land); stroke: var(--border); stroke-width: 0.6px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.inert { fill: var(--land); stroke: var(--bc, var(--border)); stroke-width: var(--bw, 0.6px); transition: stroke 0.9s ease, stroke-width 0.9s ease; vector-effect: non-scaling-stroke; pointer-events: none; }
 path.c {
   fill: var(--land);
   stroke: var(--border);
-  stroke-width: 0.6px;
+  stroke: var(--bc, var(--border));
+  stroke-width: var(--bw, 0.6px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
-  transition: fill 0.7s ease;
+  transition: fill 0.7s ease, stroke 0.9s ease, stroke-width 0.9s ease;
 }
 body.setup path.c, body.play:not(.done) path.c { cursor: pointer; }
 body.setup path.c:not(.picked):hover, body.play:not(.done) path.c:not(.picked):hover { fill: var(--land-hover); transition: fill 0.12s ease; }
@@ -327,6 +328,16 @@ function setView(v) {
   svg.setAttribute("viewBox", [vx, vy, sw / s, sh / s].map(n => n.toFixed(1)).join(" "));
 }
 addEventListener("resize", () => setView(view));
+// borders get thicker and darker as the map zooms in, so they read from the back of the room
+const BORDERS = [
+  ["0.6px", "#b3a58a"], ["0.8px", "#ab9c80"], ["1.1px", "#a08f71"],
+  ["1.6px", "#8d7b5b"], ["2px", "#7d6a4a"], ["2.4px", "#6e5b3c"],
+];
+function setBorders(level) {
+  const [w, c] = BORDERS[Math.max(0, Math.min(5, level))];
+  svg.style.setProperty("--bw", w);
+  svg.style.setProperty("--bc", c);
+}
 function zoomTo(to, ms, done) {
   cancelAnimationFrame(anim);
   if (reduceMotion) { setView(to); if (done) done(); return; }
@@ -452,6 +463,7 @@ function startGame() {
     const v = viewAround(target, zoomLevel + 1);
     if (!v) return false;
     zoomLevel++;
+    setBorders(zoomLevel);
     zoomTo(v, 900);
     return true;
   }
@@ -469,7 +481,7 @@ function startGame() {
     done = true;
     document.body.classList.add("done");
     pick(target, true);
-    if (zoomLevel > 0) { ring.style.display = "none"; zoomTo(FULL, 1100, () => showRing(target, true)); }
+    if (zoomLevel > 0) { ring.style.display = "none"; setBorders(0); zoomTo(FULL, 1100, () => showRing(target, true)); }
     else showRing(target, true);
     say((found ? "You found " : "Here's ") + nameOf(target) + "!", null, "found");
     if (found && optSound) { yay.currentTime = 0; yay.play().catch(() => {}); }
