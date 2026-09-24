@@ -86,6 +86,7 @@ path.c {
 body.setup path.c, body.play:not(.done) path.c { cursor: pointer; }
 body.setup path.c:not(.picked):hover, body.play:not(.done) path.c:not(.picked):hover { fill: var(--land-hover); transition: fill 0.12s ease; }
 path.c.picked { fill: var(--red); stroke: #7d0905; transition: fill 0.15s ease; }
+#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 #ring { fill: none; stroke: var(--red); stroke-width: 17; stroke-linecap: round; display: none; pointer-events: none; }
 
 /* ---------- footer / messages ---------- */
@@ -175,6 +176,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
       </label>
       <label><input type="checkbox" id="optTemp"> Warmer / colder</label>
       <label><input type="checkbox" id="optMiles"> Miles away</label>
+      <label><input type="checkbox" id="optSound"> Yay sound</label>
+      <label><input type="checkbox" id="optConfetti"> Confetti</label>
       <label>Zoom in
         <select id="optZoom">
           <option value="0">Off</option>
@@ -338,6 +341,61 @@ function viewAround(i, level) {
   return [x, y, w, h];
 }
 
+// ---------- confetti ----------
+function rainConfetti(ms) {
+  if (reduceMotion) return;
+  const cv = document.createElement("canvas");
+  cv.id = "confetti";
+  document.body.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  const colors = ["#c20f08", "#f4c20d", "#1f7fe0", "#2eaa4a", "#f07c16", "#8a4fc9", "#ff5fa2"];
+  let W = 0, H = 0, scale = 1;
+  function size() {
+    const dpr = window.devicePixelRatio || 1;
+    W = innerWidth; H = innerHeight; scale = W / 1440;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  size();
+  addEventListener("resize", size);
+  const bits = [];
+  const t0 = performance.now();
+  let last = t0, owed = 0;
+  function add() {
+    const w = (7 + Math.random() * 7) * scale;
+    bits.push({
+      x: Math.random() * W, y: -20 * scale,
+      w, h: w * (0.4 + Math.random() * 0.3),
+      vy: (120 + Math.random() * 140) * scale, vx: (Math.random() - 0.5) * 60 * scale,
+      rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 8,
+      flip: Math.random() * Math.PI, vf: 4 + Math.random() * 6,
+      sway: Math.random() * Math.PI * 2, color: colors[(Math.random() * colors.length) | 0],
+    });
+  }
+  (function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (now - t0 < ms) {                        // keep pouring for the full time
+      owed += dt * 110 * Math.max(0.6, scale);
+      while (owed >= 1 && bits.length < 700) { add(); owed--; }
+    }
+    ctx.clearRect(0, 0, W, H);
+    for (let k = bits.length - 1; k >= 0; k--) {
+      const b = bits[k];
+      b.sway += dt * 2.2; b.rot += b.vr * dt; b.flip += b.vf * dt;
+      b.x += (b.vx + Math.sin(b.sway) * 40 * scale) * dt;
+      b.y += b.vy * dt;
+      if (b.y > H + 30 * scale) { bits.splice(k, 1); continue; }
+      ctx.save();
+      ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.scale(1, Math.cos(b.flip));
+      ctx.fillStyle = b.color;
+      ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+      ctx.restore();
+    }
+    if (now - t0 < ms || bits.length) requestAnimationFrame(frame);
+    else { removeEventListener("resize", size); cv.remove(); }
+  })(t0);
+}
+
 // ---------- settings from the link ----------
 const params = new URLSearchParams(location.search);
 const norm = s => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -345,6 +403,8 @@ const findParam = norm(params.get("find"));
 const target = findParam ? C.findIndex(c => norm(c.s) === findParam || norm(c.n) === findParam) : -1;
 const optTemp = params.get("temp") === "1";
 const optMiles = params.get("miles") === "1";
+const optSound = params.get("sound") !== "0";        // on unless the link turns it off
+const optConfetti = params.get("confetti") !== "0";
 const optZoom = Math.max(0, Math.min(5, parseInt(params.get("zoom"), 10) || 0));
 
 if (target < 0 || params.has("setup")) startSetup(); else startGame();
@@ -392,7 +452,8 @@ function startGame() {
     if (zoomLevel > 0) { ring.style.display = "none"; zoomTo(FULL, 1100, () => showRing(target, true)); }
     else showRing(target, true);
     say((found ? "You found " : "Here's ") + nameOf(target) + "!", null, "found");
-    if (found) { yay.currentTime = 0; yay.play().catch(() => {}); }
+    if (found && optSound) { yay.currentTime = 0; yay.play().catch(() => {}); }
+    if (found && optConfetti) rainConfetti(10000);
   }
 
   function guess(i) {
@@ -436,6 +497,8 @@ function startGame() {
     if (optTemp) q.set("temp", "1");
     if (optMiles) q.set("miles", "1");
     if (optZoom) q.set("zoom", String(optZoom));
+    if (!optSound) q.set("sound", "0");
+    if (!optConfetti) q.set("confetti", "0");
     location.href = baseUrl() + "?" + q.toString();
   });
 }
@@ -448,6 +511,7 @@ function startSetup() {
   $("title").textContent = "Pick the country to find";
   document.title = "World Map Setup";
   const sel = $("pick"), temp = $("optTemp"), miles = $("optMiles"), zoom = $("optZoom");
+  const sound = $("optSound"), conf = $("optConfetti");
   const link = $("link"), copy = $("copy"), open = $("open");
 
   C.forEach((c, i) => sel.add(new Option(c.n, i)));
@@ -455,6 +519,8 @@ function startSetup() {
   temp.checked = params.has("setup") ? optTemp : false;
   miles.checked = params.has("setup") ? optMiles : true;
   zoom.value = String(optZoom);
+  sound.checked = optSound;
+  conf.checked = optConfetti;
 
   function choose(i, animate) {
     if (chosen >= 0) pick(chosen, false);
@@ -472,6 +538,8 @@ function startSetup() {
     if (temp.checked) url += "&temp=1";
     if (miles.checked) url += "&miles=1";
     if (zoom.value !== "0") url += "&zoom=" + zoom.value;
+    if (!sound.checked) url += "&sound=0";
+    if (!conf.checked) url += "&confetti=0";
     link.value = url;
   }
 
@@ -479,6 +547,8 @@ function startSetup() {
   temp.addEventListener("change", update);
   miles.addEventListener("change", update);
   zoom.addEventListener("change", update);
+  sound.addEventListener("change", update);
+  conf.addEventListener("change", update);
   svg.addEventListener("click", e => {
     const p = e.target.closest("path.c");
     if (p && +p.dataset.i !== chosen) choose(+p.dataset.i, true);
