@@ -400,6 +400,8 @@
   const PRESET_COLORS = ['#3369e8', '#d50f25', '#eeb211', '#009925', '#7b3fe4', '#ff7a00', '#00a6b4', '#e0459b', '#6b8e23', '#8b5a2b'];
   const STORAGE_KEY = 'metronome-choice-wheel-v1';
   const BPM_MIN = 30, BPM_MAX = 300;
+  // Used when the metronome is started before any tempo has been picked.
+  const DEFAULT_BPM = 100, DEFAULT_METER = 4, DEFAULT_ACCENT = true;
   const TAU = Math.PI * 2;
 
   const defaults = () => ({
@@ -696,8 +698,9 @@
     winner = null;
     hideResult();
     setMode('play');
-    setMetroHint('Spin the wheel to pick a tempo');
-    metroSvg.classList.add('disabled');
+    setMetronomeTempo(DEFAULT_BPM);
+    setMetroHint('Click the metronome to start');
+    metroSvg.classList.remove('disabled');
     wheelHint.textContent = 'Click the wheel to spin';
     startIdle();
   }
@@ -883,8 +886,9 @@
       // No result yet: leave the wheel waiting for a fresh spin.
       winner = null;
       hideResult();
-      setMetroHint('Spin the wheel to pick a tempo');
-      metroSvg.classList.add('disabled');
+      setMetronomeTempo(DEFAULT_BPM);
+      setMetroHint('Click the metronome to start');
+      metroSvg.classList.remove('disabled');
     }
     safeEl.classList.add('show');
   }
@@ -990,7 +994,9 @@
   function scheduler() {
     const c = ctx;
     while (nextTime < c.currentTime + 0.12) {
-      const accent = state.accent && beatCount % state.meter === 0;
+      const useAccent = winner ? state.accent : DEFAULT_ACCENT;
+      const meter = winner ? state.meter : DEFAULT_METER;
+      const accent = useAccent && beatCount % meter === 0;
       beat(nextTime, accent);
       pendingBeats.push({ time: nextTime, accent });
       beatCount++;
@@ -1000,7 +1006,7 @@
   }
 
   function startMetronome() {
-    if (!winner) return;
+    if (!winner) setMetronomeTempo(DEFAULT_BPM);
     const c = audio();
     // Arm starts at center and swings out to the first click.
     startTime = c.currentTime + 0.5 * beatDur + 0.05;
@@ -1017,11 +1023,11 @@
     running = false;
     clearTimeout(schedTimer);
     pendingBeats = [];
-    if (winner) setMetroHint('Click the metronome to start');
+    setMetroHint('Click the metronome to start');
   }
 
   function toggleMetronome() {
-    if (spinning || !winner) return;
+    if (spinning) return;
     running ? stopMetronome() : startMetronome();
   }
   metroSvg.addEventListener('click', toggleMetronome);
