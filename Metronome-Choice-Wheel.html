@@ -492,6 +492,12 @@
     decode(SAMPLE_SELECTION).then(b => { selectionBuffer = b; }).catch(() => {});
   }
 
+  // B key: a single accent sound, independent of the metronome.
+  function playAccentOnce() {
+    const c = audio();
+    beat(c.currentTime + 0.005, true);
+  }
+
   // Played once when the wheel lands on a choice.
   function playSelection() {
     if (!ctx || !selectionBuffer) return;
@@ -898,11 +904,32 @@
   }
   safeEl.addEventListener('click', hideSafe);
 
-  // Keys in the student view: S toggles "Safe!", number keys 1-9 spin to that spot.
+  document.addEventListener('keyup', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+    if (e.key === ' ' || e.code === 'Space') e.preventDefault();
+  });
+
+  // Keys: Space toggles the metronome, B plays an accent, S toggles "Safe!",
+  // number keys 1-9 spin to that spot.
   document.addEventListener('keydown', e => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // Space: always starts or stops the metronome (outside text fields).
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();   // also stops Space from pressing a focused button
+      if (!e.repeat) {
+        if (safeEl.classList.contains('show') && !running) hideSafe();
+        toggleMetronome();
+      }
+      return;
+    }
+    // B: one-shot accent sound.
+    if (e.key === 'b' || e.key === 'B') {
+      if (!e.repeat) playAccentOnce();
+      return;
+    }
     if (document.body.dataset.mode === 'play') {
       if (e.key === 's' || e.key === 'S') {
         safeEl.classList.contains('show') ? hideSafe() : showSafe();
@@ -1032,7 +1059,7 @@
   }
   metroSvg.addEventListener('click', toggleMetronome);
   metroSvg.addEventListener('keydown', e => {
-    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleMetronome(); }
+    if (e.key === 'Enter') { e.preventDefault(); toggleMetronome(); }
   });
 
   // Arm animation: cosine motion so the arm is at an extreme exactly on each click.
