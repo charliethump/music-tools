@@ -88,7 +88,12 @@ body.setup path.c, body.play:not(.done) path.c { cursor: pointer; }
 body.setup path.c:not(.picked):hover, body.play:not(.done) path.c:not(.picked):hover { fill: var(--land-hover); transition: fill 0.12s ease; }
 path.c.picked { fill: var(--red); stroke: #7d0905; transition: fill 0.15s ease; }
 #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
-#pin, #arc { pointer-events: none; }
+#pin, #arc, #callout { pointer-events: none; }
+.callout-text {
+  font-family: var(--display); font-weight: 900; font-style: italic; letter-spacing: 0.02em;
+  fill: var(--red); stroke: #000; paint-order: stroke fill; stroke-linejoin: round;
+  filter: drop-shadow(0.05em 0.05em 0 rgba(0, 0, 0, 0.85));
+}
 #pin.live { pointer-events: auto; cursor: pointer; }
 #pin.live:hover path { fill: #e0140b; }
 #l2.pop { animation: pop-in 0.4s ease; }
@@ -147,6 +152,7 @@ body.setup #setup {
 }
 #pick { min-width: 16em; }
 #setup input[type=checkbox] { width: 1.15em; height: 1.15em; accent-color: var(--red); cursor: pointer; }
+.hint { font-size: 0.85em; opacity: 0.6; }
 #link { flex: 1 1 26em; min-width: 0; user-select: all; -webkit-user-select: all; }
 #link:disabled { background: #f7f3ea; }
 .btn {
@@ -174,10 +180,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
     </g>
     <circle id="ring"/>
     <g id="arc"></g>
+    <g id="callout"></g>
     <g id="pin" style="display:none">
-      <ellipse cx="0" cy="0" rx="7" ry="2.6" fill="rgba(0,0,0,0.35)"/>
-      <path d="M0 0 C-2 -7 -11 -13 -11 -22 A11 11 0 1 1 11 -22 C11 -13 2 -7 0 0 Z" fill="#c20f08" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/>
-      <circle cx="0" cy="-22" r="4.2" fill="#fff"/>
+      <ellipse id="pinShadow" cx="0" cy="0" rx="7" ry="2.6" fill="rgba(0,0,0,0.35)"/>
+      <g id="pinBody">
+        <path d="M0 0 C-2 -7 -11 -13 -11 -22 A11 11 0 1 1 11 -22 C11 -13 2 -7 0 0 Z" fill="#c20f08" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/>
+        <circle cx="0" cy="-22" r="4.2" fill="#fff"/>
+      </g>
     </g>
   </svg>
 </main>
@@ -192,7 +201,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
       </label>
       <label><input type="checkbox" id="optTemp"> Warmer / colder</label>
       <label><input type="checkbox" id="optMiles"> Miles away</label>
-      <label><input type="checkbox" id="optHome"> "We are here" pin</label>
+      <label><input type="checkbox" id="optHome"> "We are here" pin <span class="hint">(press M in the game to drop the pin)</span></label>
       <label><input type="checkbox" id="optSound"> Yay sound</label>
       <label><input type="checkbox" id="optConfetti"> Confetti</label>
       <label>Zoom in
@@ -340,11 +349,122 @@ function setView(v) {
   const vx = x + w / 2 - (sw / 2) / s, vy = y + h / 2 - (b.top + b.h / 2) / s;
   svg.setAttribute("viewBox", [vx, vy, sw / s, sh / s].map(n => n.toFixed(1)).join(" "));
   // the pin stays the same size on screen at every zoom level
-  const px = Math.max(26, Math.min(64, innerWidth * 0.024));
-  pinEl.setAttribute("transform", "translate(" + DATA.home[0] + " " + DATA.home[1] + ") scale(" + (px / 34 / s).toFixed(4) + ")");
+  pinEl.setAttribute("transform", "translate(" + DATA.home[0] + " " + DATA.home[1] + ") scale(" + pinScale(s).toFixed(4) + ")");
 }
 const pinEl = $("pin");
 const showPin = on => { pinEl.style.display = on ? "" : "none"; };
+// map units per pin unit, so the pin keeps the same size on screen at any zoom
+function pinScale(s) { return Math.max(26, Math.min(64, innerWidth * 0.024)) / 34 / s; }
+
+// ---------- pin drop sound (made in the browser, no file needed) ----------
+let audio = null;
+function pinDropSound() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const ac = audio, t = ac.currentTime + 0.02, land = t + 0.42, out = ac.destination;
+    // falling whistle
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(1500, t);
+    o.frequency.exponentialRampToValueAtTime(330, land);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.05);
+    g.gain.setValueAtTime(0.16, land - 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, land + 0.02);
+    o.connect(g).connect(out); o.start(t); o.stop(land + 0.05);
+    // soft pop as it lands
+    const p = ac.createOscillator(), pg = ac.createGain();
+    p.type = "sine";
+    p.frequency.setValueAtTime(440, land);
+    p.frequency.exponentialRampToValueAtTime(85, land + 0.14);
+    pg.gain.setValueAtTime(0.0001, land);
+    pg.gain.exponentialRampToValueAtTime(0.55, land + 0.006);
+    pg.gain.exponentialRampToValueAtTime(0.0001, land + 0.18);
+    p.connect(pg).connect(out); p.start(land); p.stop(land + 0.2);
+    // a tiny click on top of the pop
+    const len = Math.floor(ac.sampleRate * 0.04), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const n = ac.createBufferSource(), f = ac.createBiquadFilter(), ng = ac.createGain();
+    n.buffer = buf; f.type = "bandpass"; f.frequency.value = 2200; ng.gain.value = 0.3;
+    n.connect(f).connect(ng).connect(out); n.start(land);
+  } catch (e) { /* no sound available */ }
+}
+
+// ---------- "Marshfield is here!" callout ----------
+let calloutTimer = 0;
+function hideCallout(fast) {
+  clearTimeout(calloutTimer);
+  const g = $("callout");
+  if (!g.firstChild) return;
+  if (fast || reduceMotion) { g.replaceChildren(); return; }
+  const kids = [...g.childNodes];
+  g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 900, fill: "forwards" }).onfinish = () => {
+    kids.forEach(k => k.remove()); g.getAnimations().forEach(a => a.cancel());
+  };
+}
+function showCallout() {
+  const g = $("callout");
+  clearTimeout(calloutTimer);
+  g.getAnimations().forEach(a => a.cancel());
+  g.replaceChildren();
+  const NS = "http://www.w3.org/2000/svg", mk = (tag, attrs) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; };
+  const [hx, hy] = DATA.home, S = DATA.w / 360, lat = v => (85 - v) * S, lon = v => (v + 180) * S;
+  // the words sit out in the Atlantic, southeast of Marshfield
+  let fs = 150;
+  const words = mk("g", {});
+  const text = mk("text", { class: "callout-text", x: lon(-57), y: lat(31), "font-size": fs, "stroke-width": fs * 0.035 });
+  const l1 = mk("tspan", { x: lon(-57) }); l1.textContent = "Marshfield";
+  const l2 = mk("tspan", { x: lon(-57), dy: "1.05em" }); l2.textContent = "is here!";
+  text.append(l1, l2); words.appendChild(text); g.appendChild(words);
+  const bb = text.getBBox();
+  if (bb.width > lon(-18) - lon(-57)) {              // keep it clear of Africa
+    fs *= (lon(-18) - lon(-57)) / bb.width;
+    text.setAttribute("font-size", fs.toFixed(1)); text.setAttribute("stroke-width", (fs * 0.035).toFixed(1));
+  }
+  const tb = text.getBBox();
+  // arrow from the words up to the side of the pin head
+  const k = pinScale(svg.getScreenCTM().a);
+  const x0 = tb.x - fs * 0.15, y0 = tb.y + fs * 0.55;
+  const x1 = hx + 17 * k, y1 = hy - 20 * k;
+  const cx = x0 + (x1 - x0) * 0.1 + fs * 0.1, cy = y1 + (y0 - y1) * 0.15;
+  const d = "M" + x0.toFixed(1) + " " + y0.toFixed(1) + " Q" + cx.toFixed(1) + " " + cy.toFixed(1) + " " + x1.toFixed(1) + " " + y1.toFixed(1);
+  const sw = fs * 0.11;
+  const under = mk("path", { d, fill: "none", stroke: "#000", "stroke-width": sw * 1.7, "stroke-linecap": "round" });
+  const line = mk("path", { d, fill: "none", stroke: "var(--red)", "stroke-width": sw, "stroke-linecap": "round" });
+  // arrowhead pointing along the end of the curve
+  const ang = Math.atan2(y1 - cy, x1 - cx), hl = sw * 3.2, hw = sw * 2.4;
+  const tip = [x1 + Math.cos(ang) * sw * 0.8, y1 + Math.sin(ang) * sw * 0.8];
+  const bx = tip[0] - Math.cos(ang) * hl, by = tip[1] - Math.sin(ang) * hl;
+  const pts = [tip, [bx + Math.sin(ang) * hw, by - Math.cos(ang) * hw], [bx - Math.sin(ang) * hw, by + Math.cos(ang) * hw]].map(p => p.map(v => v.toFixed(1)).join(",")).join(" ");
+  const head = mk("polygon", { points: pts, fill: "var(--red)", stroke: "#000", "stroke-width": sw * 0.35, "stroke-linejoin": "round" });
+  const arrow = mk("g", {}); arrow.append(under, line, head);
+  g.insertBefore(arrow, words);
+  if (!reduceMotion) {
+    words.animate([{ transform: "translateX(" + (fs * 3) + "px)", opacity: 0 }, { transform: "none", opacity: 1 }],
+      { duration: 700, easing: "cubic-bezier(.2,.8,.3,1)", fill: "backwards" });
+    const len = line.getTotalLength();
+    [under, line].forEach(p => {
+      p.style.strokeDasharray = len;
+      p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 650, delay: 650, easing: "ease-out", fill: "backwards" });
+    });
+    head.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, delay: 1250, fill: "backwards" });
+  }
+  calloutTimer = setTimeout(() => hideCallout(false), 10000);
+}
+function dropPin() {
+  showPin(true);
+  if (reduceMotion) return;
+  $("pinBody").animate([
+    { transform: "translateY(-160px)", opacity: 0, offset: 0 },
+    { transform: "translateY(-150px)", opacity: 1, offset: 0.05 },
+    { transform: "translateY(0)", offset: 0.6, easing: "ease-out" },
+    { transform: "translateY(-12px)", offset: 0.75, easing: "ease-in" },
+    { transform: "translateY(0)", offset: 0.88, easing: "ease-out" },
+    { transform: "translateY(-3px)", offset: 0.94, easing: "ease-in" },
+    { transform: "translateY(0)", offset: 1 },
+  ], { duration: 700, easing: "ease-in" });
+  $("pinShadow").animate([{ opacity: 0 }, { opacity: 0 , offset: 0.5 }, { opacity: 1 }], { duration: 700 });
+}
 addEventListener("resize", () => setView(view));
 // borders get thicker and darker as the map zooms in, so they read from the back of the room
 const BORDERS = [
@@ -521,6 +641,8 @@ function startGame() {
   let prev = null;      // distance of the last wrong guess
   let done = false;
   let zoomLevel = 0;    // how many zoom steps have happened
+  let arrived = false;  // map is back at the whole world after a find
+  let pinShown = optHome, announced = false;
 
   // after a wrong guess fades, move one step closer (if allowed); returns true if the map moved
   function zoomCloser() {
@@ -528,6 +650,7 @@ function startGame() {
     const v = viewAround(target, zoomLevel + 1);
     if (!v) return false;
     zoomLevel++;
+    hideCallout(true);
     setBorders(zoomLevel);
     zoomTo(v, 900);
     return true;
@@ -546,7 +669,7 @@ function startGame() {
     done = true;
     document.body.classList.add("done");
     pick(target, true);
-    const arrive = () => { showRing(target, true); if (optHome) pinEl.classList.add("live"); };   // the pin can be pressed once the map is zoomed out
+    const arrive = () => { arrived = true; showRing(target, true); if (pinShown) pinEl.classList.add("live"); };   // the pin can be pressed once the map is zoomed out
     if (zoomLevel > 0) { ring.style.display = "none"; setBorders(0); zoomTo(FULL, 1100, arrive); }
     else arrive();
     say((found ? "You found " : "Here's ") + nameOf(target) + "!", null, "found");
@@ -590,6 +713,32 @@ function startGame() {
 
   $("showme").addEventListener("click", () => { if (!done) finish(false); });
 
+  // M: drop the Marshfield pin and point it out; press again to take it away
+  function atWholeWorld(then) {
+    if (view.every((v, i) => Math.abs(v - FULL[i]) < 0.5)) { then(); return; }
+    setBorders(0);
+    zoomTo(FULL, 900, then);
+  }
+  document.addEventListener("keydown", e => {
+    if (e.key !== "m" && e.key !== "M") return;
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (pinShown && announced) {                       // second press: pin goes away
+      hideCallout(true);
+      showPin(false);
+      pinShown = false; announced = false;
+      pinEl.classList.remove("live");
+      $("arc").replaceChildren();
+      return;
+    }
+    const dropping = !pinShown;
+    pinShown = true; announced = true;
+    atWholeWorld(() => {
+      if (dropping) { pinDropSound(); dropPin(); setTimeout(showCallout, reduceMotion ? 0 : 520); }
+      else showCallout();
+      if (done && arrived) pinEl.classList.add("live");
+    });
+  });
+
   // after the country is found, pressing the Marshfield pin shows how far away it is
   pinEl.addEventListener("click", e => {
     if (!pinEl.classList.contains("live")) return;
@@ -625,7 +774,7 @@ function startSetup() {
 
   C.forEach((c, i) => sel.add(new Option(c.n, i)));
   let chosen = -1;
-  temp.checked = params.has("setup") ? optTemp : false;
+  temp.checked = params.has("setup") ? optTemp : true;
   miles.checked = params.has("setup") ? optMiles : true;
   zoom.value = String(optZoom);
   home.checked = params.has("setup") ? optHome : true;
