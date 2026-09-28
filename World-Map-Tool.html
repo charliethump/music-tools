@@ -153,6 +153,15 @@ body.setup #setup {
 #pick { min-width: 16em; }
 #setup input[type=checkbox] { width: 1.15em; height: 1.15em; accent-color: var(--red); cursor: pointer; }
 .hint { font-size: 0.85em; opacity: 0.6; }
+#guide { width: 100%; border-top: 2px solid #efe3c4; padding-top: 10px; }
+#guide summary { cursor: pointer; font-weight: 700; text-align: center; }
+.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; margin-top: 10px; font-size: 0.9em; line-height: 1.3; }
+.keys div { display: flex; gap: 10px; align-items: baseline; }
+.keys kbd {
+  flex: none; font: 700 0.95em var(--display); color: var(--red); background: #fff;
+  border: 2px solid #cdbf9f; border-bottom-width: 3px; border-radius: 8px; padding: 1px 8px; white-space: nowrap;
+}
+@media (max-width: 900px) { .keys { grid-template-columns: 1fr; } }
 #link { flex: 1 1 26em; min-width: 0; user-select: all; -webkit-user-select: all; }
 #link:disabled { background: #f7f3ea; }
 .btn {
@@ -163,9 +172,6 @@ body.setup #setup {
 .btn:disabled { opacity: 0.4; cursor: default; }
 button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--cold); outline-offset: 2px; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; }
-}
 </style>
 </head>
 <body class="play">
@@ -220,6 +226,17 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
       <button class="btn solid" id="copy" type="button" disabled>Copy link</button>
       <button class="btn" id="open" type="button" disabled>Open game</button>
     </div>
+    <details id="guide" open>
+      <summary>Shortcuts and controls during the game</summary>
+      <div class="keys">
+        <div><kbd>M</kbd><span>Drops the pin on Marshfield with a sound and "Marshfield is here!" If the pin is already showing, M points it out. Press M again to remove the pin. Zooms out first if the map is zoomed in.</span></div>
+        <div><kbd>Click a country</kbd><span>Makes a guess.</span></div>
+        <div><kbd>Click the sea</kbd><span>Clears a wrong guess (so does clicking the red country again). With zoom on, this also zooms one step closer.</span></div>
+        <div><kbd>Show me!</kbd><span>Reveals the answer, without the yay or confetti.</span></div>
+        <div><kbd>Click the pin</kbd><span>After the country is found: shows how far it is from Marshfield and draws the dotted flight path. Click again to replay it.</span></div>
+        <div><kbd>Setup</kbd><span>The small link in the bottom left corner comes back here with the game's current settings.</span></div>
+      </div>
+    </details>
   </section>
 </footer>
 
@@ -334,7 +351,8 @@ document.fonts.ready.then(fitAll);
 const FULL = [0, 0, DATA.w, DATA.h];
 const STEP = 0.62;   // each zoom step shows 62% of the previous width
 let view = FULL.slice(), anim = 0;
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// always animate, even when the computer's "reduce motion" / "animation effects" setting is off
+const reduceMotion = false;
 const headerEl = document.querySelector("header"), footerEl = document.querySelector("footer");
 function band() {   // the open strip of screen between the header and the footer
   const top = headerEl.getBoundingClientRect().bottom;
@@ -805,6 +823,7 @@ function startSetup() {
   }
 
   sel.addEventListener("change", () => choose(sel.value === "" ? -1 : +sel.value, true));
+  $("guide").addEventListener("toggle", () => setView(view));   // refit the map when the guide opens or closes
   temp.addEventListener("change", update);
   miles.addEventListener("change", update);
   zoom.addEventListener("change", update);
