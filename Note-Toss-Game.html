@@ -263,6 +263,21 @@
                    recorderMode: false, recorderTarget: 10, leftMetRecorder: false, rightMetRecorder: false };
   var state = load();
 
+  /* Link options (not saved, so the plain link goes back to the saved setting):
+       ?recorder             Meet the Recorder mode on, saved points target
+       ?recorder&points=8    Meet the Recorder mode on, 8 points needed
+       ?recorder=off         Meet the Recorder mode off */
+  var saved = { recorderMode: state.recorderMode, recorderTarget: state.recorderTarget };
+  (function applyLink() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.has("recorder")) {
+      var v = (params.get("recorder") || "").toLowerCase();
+      state.recorderMode = !(v === "off" || v === "0" || v === "false" || v === "no");
+    }
+    var pts = parseInt(params.get("points"), 10);
+    if (pts >= 1) state.recorderTarget = pts;
+  })();
+
   var $ = function (id) { return document.getElementById(id); };
   var els = {
     leftName: $("left-name"), rightName: $("right-name"),
@@ -281,7 +296,9 @@
     return s;
   }
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    /* Store the saved recorder settings, not the ones from the link */
+    var out = Object.assign({}, state, saved);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(out)); } catch (e) { /* ignore */ }
   }
 
   function render() {
@@ -339,6 +356,9 @@
     state.recorderMode = $("rec-mode-in").checked;
     var target = parseInt($("rec-target-in").value, 10);
     state.recorderTarget = target >= 1 ? target : 10;
+    /* Choosing in Set up is deliberate, so it becomes the saved setting */
+    saved.recorderMode = state.recorderMode;
+    saved.recorderTarget = state.recorderTarget;
     save(); render(); closeSetup();
   }
   function updateRecPoints() {
