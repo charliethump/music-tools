@@ -165,8 +165,8 @@ const CONFIG = {
 
 /*
   VIDEOS: paste any YouTube link into "video" (watch link, share link,
-  shorts link or embed link all work). A link with a time in it
-  (like ?t=45 or &t=1m30s) starts at that time.
+  shorts link or embed link all work). Any time in a link (like &t=1s)
+  is ignored, so videos always start at the beginning.
   Optional: add start: 30 and/or end: 75 (in seconds) to play one excerpt.
   Leave video as "" to show "Video coming soon".
 
@@ -178,7 +178,7 @@ const CONFIG = {
 
 const ORCHESTRA = {
   name: "Meet the Orchestra!",
-  video: "",
+  video: "https://www.youtube.com/watch?v=zqs0VBfIkzk",
   facts: [
     "An orchestra can have more than 100 musicians playing together.",
     "Every instrument belongs to one of four families: strings, woodwinds, brass and percussion.",
@@ -252,61 +252,61 @@ const INSTRUMENTS = {
       "The C strings are red and the F strings are dark blue or black so the harpist can find their place.",
       "Seven foot pedals change the pitch of the strings."
     ] },
-  flute: { name: "Flute", family: "woodwinds", video: "",
+  flute: { name: "Flute", family: "woodwinds", video: "https://www.youtube.com/watch?v=FQd22wXaWhE",
     facts: [
       "The flute has no reed. You blow across a hole, like making a sound on a bottle.",
       "Flutes are made of metal, but they are still part of the woodwind family.",
       "The piccolo is a tiny flute that plays the highest notes in the orchestra."
     ] },
-  oboe: { name: "Oboe", family: "woodwinds", video: "",
+  oboe: { name: "Oboe", family: "woodwinds", video: "https://www.youtube.com/watch?v=MuXHXPjFGvU",
     facts: [
       "The oboe uses a double reed: two thin pieces of cane that vibrate together.",
       "Before a concert, the oboe plays an A so the whole orchestra can tune.",
       "Its bright sound is easy to hear through the rest of the orchestra."
     ] },
-  clarinet: { name: "Clarinet", family: "woodwinds", video: "",
+  clarinet: { name: "Clarinet", family: "woodwinds", video: "https://www.youtube.com/watch?v=8TRUEORVY6E",
     facts: [
       "The clarinet uses a single reed that vibrates against the mouthpiece.",
       "It can play from a whisper to very loud and has a huge range of notes.",
       "In Peter and the Wolf, the clarinet plays the cat."
     ] },
-  bassoon: { name: "Bassoon", family: "woodwinds", video: "",
+  bassoon: { name: "Bassoon", family: "woodwinds", video: "https://www.youtube.com/watch?v=Zm6ISl2fgGs",
     facts: [
       "The bassoon is the lowest regular woodwind. Unfolded, its tube would be about 8 feet long.",
       "Like the oboe, the bassoon uses a double reed.",
       "In Peter and the Wolf, the bassoon plays the grumpy grandfather."
     ] },
-  "french-horn": { name: "French Horn", family: "brass", video: "",
+  "french-horn": { name: "French Horn", family: "brass", video: "https://www.youtube.com/watch?v=kb2ccF7BKlE",
     facts: [
       "The French horn has about 12 feet of tubing coiled up into a circle.",
       "Horn players put one hand inside the bell to shape the sound.",
       "In Peter and the Wolf, three horns play the part of the wolf."
     ] },
-  trumpet: { name: "Trumpet", family: "brass", video: "",
+  trumpet: { name: "Trumpet", family: "brass", video: "https://www.youtube.com/watch?v=reHVm6On6Wg",
     facts: [
       "The trumpet is the highest brass instrument.",
       "Players buzz their lips into a cup-shaped mouthpiece to make a sound.",
       "Three valves change the length of the tubing to make different notes."
     ] },
-  trombone: { name: "Trombone", family: "brass", video: "",
+  trombone: { name: "Trombone", family: "brass", video: "https://www.youtube.com/watch?v=KMTJ-WiF8bA",
     facts: [
       "Instead of valves, the trombone has a slide that moves in and out.",
       "There are seven slide positions, and each one makes different notes.",
       "The trombone can slide smoothly from one note to another. This is called a glissando."
     ] },
-  tuba: { name: "Tuba", family: "brass", video: "",
+  tuba: { name: "Tuba", family: "brass", video: "https://www.youtube.com/watch?v=X9sci9qcsjU",
     facts: [
       "The tuba is the biggest and lowest brass instrument.",
       "Some tubas have about 18 feet of tubing wrapped up inside.",
       "The tuba usually plays the bass line along with the double basses."
     ] },
-  "unpitched-percussion": { name: "Unpitched Percussion", family: "percussion", video: "",
+  "unpitched-percussion": { name: "Unpitched Percussion", family: "percussion", video: "https://www.youtube.com/watch?v=qwbRZAZDQYM",
     facts: [
       "Unpitched percussion instruments don't play specific notes. They add rhythm and color.",
       "They include the snare drum, bass drum, cymbals, triangle and tambourine.",
       "One percussionist might switch between many instruments in the same piece."
     ] },
-  "pitched-percussion": { name: "Pitched Percussion", family: "percussion", video: "",
+  "pitched-percussion": { name: "Pitched Percussion", family: "percussion", video: "https://www.youtube.com/watch?v=HYnpn6nm9BU",
     facts: [
       "Pitched percussion instruments play different notes, so they can play melodies.",
       "Timpani are big kettle-shaped drums that the player tunes with a foot pedal.",
@@ -709,7 +709,7 @@ function parseYouTube(input) {
       if (m) id = m[2];
     }
     if (!id) return null;
-    return { id, start: toSeconds(u.searchParams.get("t") || u.searchParams.get("start")) };
+    return { id, start: 0 };   // timestamps in pasted links are ignored on purpose
   } catch (e) {
     return null;
   }
