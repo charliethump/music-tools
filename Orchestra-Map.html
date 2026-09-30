@@ -113,6 +113,17 @@
   .video { position: relative; aspect-ratio: 16 / 9; background: #F1EBE0; overflow: hidden; }
   .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   .video .empty { position: absolute; inset: 0; display: grid; place-items: center; font-size: 19px; color: #7A6F63; }
+  .vid-controls { display: flex; gap: 8px; margin-top: 10px; }
+  .vid-controls[hidden] { display: none; }
+  .vid-controls button {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: inherit; font-size: 16px; font-weight: 600; color: var(--ink);
+    background: #FFFFFF; border: 1px solid var(--ink); padding: 7px 14px; cursor: pointer;
+  }
+  .vid-controls button:hover { background: #F1EBE0; }
+  .vid-controls button:disabled { opacity: .4; cursor: default; }
+  .vid-controls button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+  .vid-controls svg { width: 14px; height: 14px; fill: currentColor; }
   .facts { margin: 18px 0 0; padding-left: 22px; font-size: 18px; line-height: 1.5; }
   .facts li { margin-bottom: 8px; max-width: 62ch; }
   .buttons { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -149,6 +160,11 @@
     </div>
     <div class="card-body">
       <div class="video" id="video"></div>
+      <div class="vid-controls" id="vid-controls" hidden>
+        <button type="button" id="vid-play" disabled></button>
+        <button type="button" id="vid-restart" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2a6 6 0 1 1-5.7 4.1l1.9.6A4 4 0 1 0 8 4v2.5L4.5 3.2 8 0z"/></svg>Start over</button>
+      </div>
       <ul class="facts" id="facts"></ul>
       <div class="buttons" id="buttons"></div>
     </div>
@@ -717,12 +733,90 @@ function parseYouTube(input) {
   }
 }
 
+/*
+  YouTube's own control bar is hidden (controls=0). Our Play/Pause and
+  Start over buttons below the video drive it through YouTube's official
+  player API. YouTube does not allow hiding the title, logo or end
+  suggestions, so those still appear before playing and when paused.
+*/
+const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v13l11-6.5z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5h3.5v13H3zM9.5 1.5H13v13H9.5z"/></svg>';
+let player = null;
+let ytApi = null;
+
+function loadYouTubeApi() {
+  if (ytApi) return ytApi;
+  ytApi = new Promise((resolve, reject) => {
+    if (window.YT && window.YT.Player) { resolve(); return; }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (prev) prev(); resolve(); };
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    tag.onerror = () => { ytApi = null; reject(); };
+    document.head.appendChild(tag);
+  });
+  return ytApi;
+}
+
+function setPlayButton(state) {
+  const btn = document.getElementById("vid-play");
+  const playing = state === 1 || state === 3;   // playing or buffering
+  btn.innerHTML = playing ? `${ICON_PAUSE}Pause` : `${ICON_PLAY}${state === 0 ? "Play again" : "Play"}`;
+  btn.dataset.state = state;
+}
+
+function setupControls(iframe) {
+  const bar = document.getElementById("vid-controls");
+  const play = document.getElementById("vid-play");
+  const restart = document.getElementById("vid-restart");
+  bar.hidden = false;
+  play.disabled = restart.disabled = true;
+  setPlayButton(-1);
+  loadYouTubeApi().then(() => {
+    if (!iframe.isConnected) return;   // card was closed in the meantime
+    player = new YT.Player(iframe, {
+      events: {
+        onReady: () => { play.disabled = restart.disabled = false; },
+        onStateChange: e => setPlayButton(e.data)
+      }
+    });
+  }).catch(() => { bar.hidden = true; });   // no API: students can still click the video itself
+}
+
+document.getElementById("vid-play").addEventListener("click", () => {
+  if (!player || !player.getPlayerState) return;
+  const st = player.getPlayerState();
+  if (st === 1 || st === 3) player.pauseVideo();
+  else { if (st === 0) player.seekTo(0, true); player.playVideo(); }
+});
+document.getElementById("vid-restart").addEventListener("click", () => {
+  if (!player || !player.seekTo) return;
+  player.seekTo(0, true);
+  player.playVideo();
+});
+
+function clearVideo() {
+  if (player && player.destroy) { try { player.destroy(); } catch (e) {} }
+  player = null;
+  document.getElementById("video").innerHTML = "";
+  document.getElementById("vid-controls").hidden = true;
+}
+
 function renderVideo(item) {
   const box = document.getElementById("video");
-  box.innerHTML = "";
+  clearVideo();
   const yt = parseYouTube(item.video);
   if (!yt) { box.innerHTML = `<div class="empty">Video coming soon</div>`; return; }
-  const params = new URLSearchParams({ rel: "0", playsinline: "1" });
+  const params = new URLSearchParams({
+    rel: "0",             // suggestions only from the same channel
+    playsinline: "1",
+    controls: "0",        // hide YouTube's control bar
+    fs: "0",              // no fullscreen button
+    iv_load_policy: "3",  // no annotations
+    disablekb: "1",       // no YouTube keyboard shortcuts
+    enablejsapi: "1"      // lets our buttons control the video
+  });
+  if (location.protocol.startsWith("http")) params.set("origin", location.origin);
   if (CONFIG.autoplay) params.set("autoplay", "1");
   const start = item.start != null ? item.start : yt.start;
   if (start) params.set("start", String(start));
@@ -733,6 +827,7 @@ function renderVideo(item) {
   f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
   f.allowFullscreen = true;
   box.appendChild(f);
+  setupControls(f);
 }
 
 /* ============================================================
@@ -797,7 +892,7 @@ function openRegion(id) {
 
 function closeCard() {
   overlay.hidden = true;
-  document.getElementById("video").innerHTML = "";   // stops the video
+  clearVideo();   // stops the video
   if (openedByKeyboard && lastFocus && lastFocus.focus) lastFocus.focus();
   else { hovering = false; activate(null); }
 }
