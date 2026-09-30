@@ -113,6 +113,9 @@
   .video { position: relative; aspect-ratio: 16 / 9; background: #F1EBE0; overflow: hidden; }
   .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   .video .empty { position: absolute; inset: 0; display: grid; place-items: center; font-size: 19px; color: #7A6F63; }
+  /* Once our buttons work, the video ignores the mouse so a stray hover
+     can't bring up YouTube's title overlay */
+  .video.buttons-only iframe { pointer-events: none; }
   .vid-controls { display: flex; gap: 8px; margin-top: 10px; }
   .vid-controls[hidden] { display: none; }
   .vid-controls button {
@@ -776,7 +779,10 @@ function setupControls(iframe) {
     if (!iframe.isConnected) return;   // card was closed in the meantime
     player = new YT.Player(iframe, {
       events: {
-        onReady: () => { play.disabled = restart.disabled = false; },
+        onReady: () => {
+          play.disabled = restart.disabled = false;
+          document.getElementById("video").classList.add("buttons-only");
+        },
         onStateChange: e => setPlayButton(e.data)
       }
     });
@@ -798,7 +804,9 @@ document.getElementById("vid-restart").addEventListener("click", () => {
 function clearVideo() {
   if (player && player.destroy) { try { player.destroy(); } catch (e) {} }
   player = null;
-  document.getElementById("video").innerHTML = "";
+  const box = document.getElementById("video");
+  box.innerHTML = "";
+  box.classList.remove("buttons-only");
   document.getElementById("vid-controls").hidden = true;
 }
 
