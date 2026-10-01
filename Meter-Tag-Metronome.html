@@ -281,6 +281,15 @@
   @keyframes beat { from { opacity: 0.14; } to { opacity: 0; } }
   @keyframes beatAccent { from { opacity: 0.55; } to { opacity: 0; } }
 
+  /* "Step!" that pops out of the metronome on beat 1 */
+  .step-pop {
+    position: fixed;
+    left: 0; top: 0;
+    pointer-events: none;
+    z-index: 65;
+    will-change: transform, opacity;
+  }
+
   #confetti {
     position: fixed;
     inset: 0;
@@ -413,6 +422,8 @@
       <label>Tempo <input type="number" id="tempo" min="30" max="300" step="1" aria-label="Tempo in beats per minute"> BPM</label>
       <label><input type="checkbox" id="accent" checked> Accent first beat</label>
       <label><input type="checkbox" id="showCount" checked> Show beat numbers</label>
+      <label><input type="checkbox" id="showStep" checked> "Step!" on beat 1</label>
+      <label><input type="checkbox" id="bgPlay" checked> Keep playing in other tabs</label>
     </div>
     <p class="note">The tempo counts the bottom-number note, so 6/8 at 80 clicks eighth notes at 80 BPM. The tempo also shows under the metronome, where you can click it to type a new one or use - and +. Changes save on this device; use Copy link to open the same wheel elsewhere.</p>
   </aside>
@@ -483,6 +494,8 @@
     bpm: DEFAULT_BPM,
     accent: true,
     showCount: true,
+    showStep: true,
+    bgPlay: true,
     fourOnly: false,
   });
 
@@ -512,6 +525,8 @@
       accent: obj.accent === undefined ? true : !!obj.accent,
       showCount: obj.showCount === undefined ? true : !!obj.showCount,
       fourOnly: !!obj.fourOnly,
+      showStep: obj.showStep === undefined ? true : !!obj.showStep,
+      bgPlay: obj.bgPlay === undefined ? true : !!obj.bgPlay,
     };
   }
 
@@ -622,20 +637,21 @@
   }
 
   // Metronome beat: the uploaded samples when decoded, otherwise a synthesized woodblock.
-  function beat(time, accent) {
+  function beat(time, accent, out) {
+    out = out || master;
     const buf = accent ? accentBuffer : clickBuffer;
     if (buf) {
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.connect(master);
+      src.connect(out);
       src.start(time);
       return;
     }
-    woodblock(time, accent);
+    woodblock(time, accent, out);
   }
 
   // Woodblock fallback: two short sine partials with a fast pitch drop plus a click of noise.
-  function woodblock(time, accent) {
+  function woodblock(time, accent, out) {
     const c = ctx;
     const base = accent ? 1250 : 880;
     const vol = accent ? 1.0 : 0.7;
@@ -647,7 +663,7 @@
       const g = c.createGain();
       g.gain.setValueAtTime(vol * amp, time);
       g.gain.exponentialRampToValueAtTime(0.001, time + 0.09);
-      osc.connect(g).connect(master);
+      osc.connect(g).connect(out);
       osc.start(time);
       osc.stop(time + 0.1);
     });
@@ -659,7 +675,7 @@
     const g = c.createGain();
     g.gain.setValueAtTime(vol * 0.5, time);
     g.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
-    src.connect(hp).connect(g).connect(master);
+    src.connect(hp).connect(g).connect(out);
     src.start(time);
     src.stop(time + 0.025);
   }
@@ -973,6 +989,8 @@
   const accentEl = document.getElementById('accent');
   const tempoEl = document.getElementById('tempo');
   const showCountEl = document.getElementById('showCount');
+  const showStepEl = document.getElementById('showStep');
+  const bgPlayEl = document.getElementById('bgPlay');
   const fourOnlyEl = document.getElementById('fourOnly');
   // 4/4 only hides the wheel and locks the metronome to 4/4.
   function applyFourOnly() {
@@ -988,11 +1006,15 @@
     accentEl.checked = state.accent;
     tempoEl.value = state.bpm;
     showCountEl.checked = state.showCount;
+    showStepEl.checked = state.showStep;
+    bgPlayEl.checked = state.bgPlay;
   }
   syncSettings();
   accentEl.addEventListener('change', () => { state.accent = accentEl.checked; persist(); });
   fourOnlyEl.addEventListener('change', () => { state.fourOnly = fourOnlyEl.checked; applyFourOnly(); renderCounter(); persist(); });
   document.getElementById('open').addEventListener('click', () => { enterPlay(); });
+  showStepEl.addEventListener('change', () => { state.showStep = showStepEl.checked; persist(); });
+  bgPlayEl.addEventListener('change', () => { state.bgPlay = bgPlayEl.checked; persist(); });
   showCountEl.addEventListener('change', () => { state.showCount = showCountEl.checked; renderCounter(); persist(); });
   tempoEl.addEventListener('change', () => {
     const v = parseInt(tempoEl.value, 10);
@@ -1143,6 +1165,52 @@
     counterEl.style.setProperty('--hl', color);
     counterEl.style.setProperty('--hl-ink', textColorFor(color));
   }
+  // "Step!" pops out of the side of the metronome, then flies up and fades.
+  const STEP_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAp0AAAEVCAMAAACVAK4kAAADAFBMVEUAAADkWSMAAAAAAAAAAAAAAAAAAAAAAAAAAADWUyGxRRvkWSOQOBZtKhDkWSPkWSPkWSMzEwfjWSPETR7jWSPjWSNIHAtYIg0kDQXYVCHVUyHYVCHYVCHWUyF8MBPWUyGyRRvWVCGwRRuTORahPxkzFAfGTR5uKxCTORavRBvFTR6ROBaKNRW1Rxw0FAiPOBY2FQgyEwdaIw02FQixRRtHGwpFGgqONxaPOBazRhvDTB7ETR7DTB5vKxFtKhDGTR5XIg1sKhBvKxC0RhwjDQU0FAdXIg1vKxHHTh4jDQUkDQUyEwdJHAtHGwpGGwp4LhIjDQUlDgVGGwpbIw1YIg17MBMkDQVIHApeJA6gPhklDgV+MROgPxlVIQ18MRN8MBN+MROhPxmhPxmgPxmiPxkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADPoLFAAAABAHRSTlMA/vUvz0+QbbD7+9D7+3CxkPtP+y4Q+vz7C9AwrY75cNBQDM/60rQLkK3VDlNwrHATL89tka/ULrIrCW6MstJRrlRtS9JKEjEtbpSWFVSPjhJQMlORETVnMDC4R9ZsiqrRHmiBtgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAz0m3rQAAIcNJREFUeNrtnWeb3LaugFfSNLXpZXe2r9ctsR3bSWzHduLkpPfkJCen3/7/f8NVmaKZHREACVLaNfEhz5MP3qHIlwAIgsDenhUrVqxYsWLFihUrDDIe9vv97vjCzoSVmsmkGzoL6Vs+rdRKhk5RXtkJsVIfxdlzNuW1nRMrdYEzdLblfz3PzouVesLpOH9tWj6t1BRO56xt8bRSP59zIR9aPK1ULt3dcDpBy+JppWIZl8Dp+I1OgufNMxXDfurJ9Lrv2rWvv/TL6HRmnRYXngfjYbff660d3DAMe/1+d3j40jCbBUtxbhe/9qqkFE4nanRa6nQejLu90BFIr396eLcSQ3Fsl//aqk7Hd5Vte0Kmg5KeEUKH23cO1q2ut4jUmqumPMf90KFI71wzoFdd7Hv22Hctz0SpTN2GtOdZSCohyNH5Y6NOjP++DUvUWLoiVmJp0z7pO7Jyqk2B9u2dwzUToVsYSZr2sTyb2WHluUEz8anF83q6nU7gpqadunYTNTYzPv9sbCMG6f6zeNZSDhyITqppn3QdDnlozMN+diPvHG7+ocjx6XSOQ4dH5v80FDqL+O4crPDKEKaT4ngyGPW1fMCLTFh+YUv3XqxUfmR3HCKdk9DhlDtPGKEZi6K6VnleTzpdAp1Dh1n8zzwDXzqwyvPa0ok/tHcddvH/xHac7onuHKzyvOl0aoAzkf9gwual+M6hZemsofTZ6NQDp+P8zMPNGKDTmvabTKcuOB3nd5Zg+VB0I6aQTmDlGtA51Aan43/PgWdXTKd1POsoPR46J45GGXHchPctnW8rncxxzm35hAFPwYdeuvZYdJPp7GqF0/E76niGQDaBpfOm0jl2NMsn6ocWx9J5/STkoLOnm85AOVHjwNJ54+j0UXRqV52LRA0VfMZiOmXSWK1cCzq1q06GRI2hpfMaiqNO50Q/nL7ybY6IzpGl81rSiVq3rn46A+WIZNfS+XbSSYp1+kEUpxIlEox85L+Klc8tfUvn9ZMLUGeB60Y4EwUJZVuyP42jEWzYlensWTqvnxyo04k27MHALZNZAKnONAtahZ/Q0vlW0ok8sfuzDR4bmRR0aCAeharutHReQwHM8iVi3ZCZHPubYHZyaSzFdSORXVem07F03jg6I3jdJthD9wrNBMrWhiw4LcHT31/QqXJmP7B0vpV0jolwJmS2E2nm0s4lZ/RSoHQVL4smqv6LlQpkqEwnJu3Y32AzgdLbkAWmrVZQzrViuHNs6bx5dJ7A64Y5sg+WhKXJHCmam39iiWi7Ndq1PRhUp/g7QToPxsP+onxz2D+35eZrQmfMQme0Jqw8TzMDtL2pPf1pAU6la/auHJ0Hk7Ta/ZUSZJZPM9JVprOPtes5YaI/lfDZvlX4d6vYvTKc4rDXFToTXZlSWR6FOmWM6WXtHsLib4Vhr9fvds8PLyydEJ0dVTojJJwpn832o0t/+15JHU6wDmRO50eHYigLJci+5iETKl3e6x5aOstkBscZuzivs9FAvb5I8Gx1bk+ng2LcXh3Ol0BEYTCNz97BXvpz1dBBluANT//yttIJTNCUgc5CMB2xoBmehUukRn6UUkRBQ360Yg0dUlX947uWTk10RjTjvMCzsYrdZ8d8vYc/OTzfl8ZzMqQmbB8/tnTuMsoQneDCx8RwZYpna3HH2cniowpKanHm0JJ0eiap0uWKQz98C+ns6adzRg1XppGl/H4zvVZqSsI5Ge+IBfHKp22TDR/mD6rHZTIej4eZHB4evFs1nfswnYfQrE7JKRxZ5LO9uO+UYXPRp1V7xj7dIVaqDX3nz5Vh+XK8ywSFvX5XZ9gL8ZwdAOsCpztp67i43vQ8GTbHfceQ3Kbiqej/+u9x37bmh7Ne90LoHYm7SYa902/00Il4zg6BhfE7JW6x5chkrlwPfRotnMAwNF71WRjQqeJe7+m44GWgE7KhkWuyPObQMSi0HswTDjeYU31utEc5+mEnvgQPqccemEU8Z4fohPaWb7LSRtcknE5AcVm4KqHd+dLTMlfzJ+q6/ugN62o66nSewqbdGJ1m4czoxH4ZX5k+JvV5Za7mm76UXOArPP3BFJ0jDJ3god03RufYMU0numgyaw3JOz96OubqfjFAIj/g46/M0IlKy/0KsYhm/M5JaJhOfFla5qH59zwdc/Wf61s5Jf/9Nc/NFsOTTMyjzMBMWXbDdp1QBIJ/38x/8/jnyv9+uUyqh8uHBui8RNF5Dg929KEJOk2rTgd7z6BFqSv1aZyI7xfU9znHzZb6ozdMPD6VW/rxNO115tODoHOi50Z1rnA6KsPvaYbnKcfw7jypBZ24egv+/S+9m2XYR9hn9tqu++UBKFPmo/SE8LomsQWAzhMcnefYydSbx9AzC2f+zh5Bp8ZdIwtA+bo/7bTvsw3vvhqe6o/eUvmBEK59pS/R26zbOcIWgdB7e/WB1H1vV3CAvVWbs1uXhc69Y9KITz+6AXQu35mC0QjdtXfvyeApMDMRt3L3dNE5Q5Z++zs5YPvmMT+dJtncXz/IA+DUvmd+picZTgxO1X15PNUfbuRyRB/10Zsfrqnu9E8Ir0X1H9X8n8h4Go1unEkHa9RT43N5LjXuozdfcdJp5FQUxAPKa1ETHNAbNZqNbrzzq6T6DJnopHmeG4D+wkan7sTOIIoHmyVIQTjN3K3eouJpOroh+T4QmLx9NJ1/kx/7Mdch6VCfdori6f5WueZFxTLmhg9+EEVxPEskjvDv6z9s0fA0fanmvy9l3Zlu6hJ5qBJ3eFNXxzPtwXCFy7w+bgfxlJlo1y83dbM7DbC7h/Yw5sD0pZocngd8dO7NlYZ/zFH55ZxRW6ZY7qxz31jWx0W8FqVY0GC248f2L5ExBFKWjfErXzk8gciCT3mv9jfF8R89V8fzmEVZzgb7bhmXy8rNqJfMhDh8MN31W42GOxih/j3p/d3QqQDPb8l4jhnp3HtP9QOOPlfG80gayozKspYgKy6zkuLt9q4ipCpHoo2OD8Wy+mnNCVR4PKAUDOhWQGcWWWC9yByR6PQ+UL/4UuXTu+eTfzQqUZUFFbbksrUoKY57LoqG4HLjBzfL6if/9wzzTU8Jrme/CjqdgIonMH8BscTMOwwXs4ppq963t6h8xuVU5ipsgeUKTI/5IVG8geZ2Wf0E0AbidDQiPF7uVUInOYkSQyf+zYXXnDN8g/9Q5ZIzLcL0LAoohE5FVBZY8TzaE/sh9fcXHR82y+qnhLY6COt+gn+7VRGdzsc0PAEVHxHrJHi/+ixf8eqxCp5ZgcX9wSzOZTadgVcOG65lgcoillSf/gCnOtfFxxvLOMDGT6WAJvrzE/gP4a1cWBGdDu2FRI+Xzj3vfR48ndfSabVeimexAKjrDsArh0WZ0C0qJbGkqc51ZfxOSYwq05+tp7D/jD4YVQWn45MCX8AmOiHT6bXPmD7kobzyTAuAdgptDgdgUDdnY5tKtdRZnPmMi5eiZTGqVH22PwQ3/m2s8lS9z10GglMDFZH0EakuWghPHa0CUjKN/2LCc/5Pee2ZFQBddTmcYuhcGlVlKkkR72jjxt4TfhOIZ4A8GMlfFfnRdMeNwSzA/4WnBDwdbjpTPD9msu7O6z+k8Wy228sOh53OU8yFmFINW9mozQidToLCM8YdjGSvioJpaeQtHmH57qBTAqBNNJOoHpcqroDLTXngyfK5qACaeZIf813XMuf3DghtG5KJ/clnORjJ0RkNdoXcVq2isTkBl+izGzTMqcy6pXje5uJT/tnUssNhIi8YL8RYz0QxqeFNMrG/+2BUCXEwkrnIDAZXMg2y6EahU/QMZzOfYW37GN7aElolb+rCxOdcpfHKwo38oAI6ewS7jo2jJ7vtYw7lSaezcNO6vsxqtzda8GLvXEfY0MJQC505np0vIh7/856yP3hsnk6UYZ9SW4Ul1uAFHFUC/xj5mj3Y6M/TWV3oJufI4pVWp4G6c42Rkw0NU9Yjy4M6jUbMwuedXz3tdHIXIRui15zUKizB8wyKKrXY6Yw3ekct0rOWwY1Vl+gM0C8QpyMfWVSrr4nOPKiTKnv0WU74OYr1APtwqgs3nX2C6mzT+j2Ikxkw9dRoSSDFy6xOqyQ9a3HnmvAZYJQnyrZro3Nxv5HyOWVwQBXbqlVAZ0hRnZSP86DruGfwgpHo9AfFV1RtQXrWYs0DhPJE7UjAdVfyyLL7jYzPAYMDek/FLewZp3OMVZ0NculIz7sHKE9wxShJIP7+xk2rB/WIRsUTcc0gQvhMqXBeWPPpxsoK9L4Cnj3ORCyO3K/l1pcLiQCJilOwPEaPDqf4pnXLpQO9uRHqsxG2R+k0u/RFGo3GvqoHeiZ/l2OeToTtjKVbe3s/KirPkGzWG/jLtGTJvwNt5RRjMpB0KizTks9UgQ5ORtXgaZ5OxPrLqs50Uu/DytNjoXMg0YM8WfLfQZ8b8eHQRWbEsW7L/NksaUgJ0DPZVsOhaToR0c5Azuvc23t5eHo8V1Oe6BmfFa4L8OOEo7LJ3oS/fGyCznVSRp51OZD3QWV7+hqnc4hceJrqnAyRbWm/AJQn+ma9eJdFSwWC3vDE8KdDdJ5wrZtXMPAJoPuygEpW9zZOZxdr2JEZb+Nhl9LEOxYrz5e0GyKZ/C3vr6BpB78d2uIx47oVFWgGqJSJfyGFp3E6+0jDDuqPyVimubwvDqIi0zsXx/VGhjr55Aa9z90Hz25dhPXhWzdvC1CpMKhUR3TjdMI8xcA1Uaou5Zt4z4RLP6Y4nY1GpyVzHPV82LS3leiccq/bNqAzsoX3v5PA0zFNJ/wd+4sz0ZVfvci8S8VnaYFw6cdUuy4TK/Heg/48pDwhAzTQkJa7BShZgQYSAULTdMJHdn+XYZ/QvEvhnxct/Rj3J1zpgGy+0HNwiGK0ehXQeRVQIp+36NNlmk54+aMtw56C6TCKcN0IidHycO7tPYAC8oBphybE1da6egNQ94TE5yOyH2SaziHOp8t/9HDY5y9+IAwHYOgcFU5EstMwB/AH/nhYGZ3bgFISQQPyjJmmEw4oZW5n5/t7d+aOFtkXLT0mvXOqcJWFU55g8/AQk6KksXV1MQxK4PMTqrUxTWcf4dRNadV06LqzfOG6aNXZUeu9Owcdz7b8ncFIy4ObnQqUxKdPnbT60akRzKXVK196BJ2xRGL0VXko733s6U9RQgOaF1pD83lCVOim6ayqiNam1Sv9pD7q3zPYzceA8yCEC2oNfGmEzoKBx/LpE0f11tEZKNIZyaaobMkRdCwS4I9MUWru6RcinzHNtpumM6yazli4cvDmmbo8R47PxXgJHc8J7hu9vb268enTZs5IJlad6BwIP6mHNOzKqlNs2gPxtENB45lJOml8zkhT97bRGbhqdEYuV7TmSHzoVrnRmpqls8gndP8ekObubaNzKqYzxDgGPCeOU7GGVqFzYJrOAp8QniS7Exqmsxaqs3z7hijHoMMxJefSQVmQTt3BeCGfIzgBy9IpFw4KMX+AZ+Uv5OkcVnxVJOTzkQ+YdoLyDN8qyw6WGEHqXpZQInCdK1DQQ0ww3jydCz6hopuE6Xub6PTXpcM8SdUesxl28VQMhPM+RJwWDATjS/hsj9QSsN5OOlcP0AULh0mg4lJL2uiMK6Qz5fNntQQsNC0nN4jOyIUz2sFnRQPGhe9J0zk2N0gpPH2lBCx0gC8Wpkxcp5vMVX1iYXIRSCdTKB5FZzlfh6hBVgQn9KzPJ7hGGDqb157OdV13ceYbdEXocy58KE3nBZziVyWde18rJWBR6GQ+/JlvkrrRqQV4gA4FEllPw/J0iv2jqLIjO859n+Ldjv6NptOP4sFGMwygOgKqAkwN6OyZOrlpuKWFErCqpNNc+/Mgmm33Ru5ApTtwdLYrp/MciJVWeSiCbmmhBKwq6Tw3AeZoU2WuG2hDBblQFWC4Ft6Rp/MCdDurpfMc2OJYr7hrmM5D82Auegi18trZeyp0cqamXQD6TwjYEZRFVeWhCFjlAL95TNP5Up+PmZjyK2Auu1stu2EAo4Po5ExNO1Ch8yMwT6VK1bn3jSOfHohfD346daSBjHZy6TZWZGZoYl76Q14xZ2raGMwyEq3gEWDYoUU7ONBJ50sHSg9s1ZPOkNmOT3dwuQIzJzNHk6NJFWcFmKESnc/lE1Anw0WNtF7//K4eOi+Y6Dw0TWefy46f7NKXJWBiC6ToaqFG/S1ER5eHwhzBcv0+2fzd08c66DyAwvF1pfNcj3+5au27AWaT2FHeJJ19NTpLbHsMGPbJdqg0fF4BnVj36MA0nYf8XDY2uCyC6TErdk46e0BUCKLzyVyQXl32Tyc7fvWB4TM7gc67pum8y68vOwUud4H57uGw2+0OD5noNBDuRHV0+XJekl7doL3X97/0uM/3QyY690zTSTwWyXC5MdyD7uoHw/Ma0SlMOLnELOCO/ggx8DJld5xAod2VjIdEaQ0cmqbzGHsevzxB+JcCLrPl2LRkR1/JW1tmOofqWd9e84W/I4VV8HCnZPf9xH2x1L+2dMLHorI4EYnLHWwmMn9SFzq74I0pTKfX/u7Wms9lw+PyFSvT10GrbdA+UgrM9EzTCTqeIwYuc5u+44/PPdWawkz1ieA0I3gBs17qT6PA9xMPKIYzWEv19T948Txw1A0DQgnroBNOQB6ocpkrit0b+J7IycLRqd3tRN+YZnimPTA2MrFKSStd66jDiid4xcOTBqKFzlMwk5127qFdFPqiPKXQGJ3iBdzH/lCGZ5FPYZea0s3n865yny1ZQThNJzro/AY8py+zMeW4BD5L1PohhLU6E519prhq3km9kTURWqQJlhsHwUJzptxNwC2OnsVDKBWPP90FU6wo1QFyXEIWQVQeGhrZlI3OEDzVIuc96/qe6M/OIuVFkCUouP32G4yPG4cI3VNfOo8R56K8d68El7C78rT8yXCI2DYsqzjme7607IDRyu1MU67NYsyoPMWzeEn5uL+AiaLsdH4ExpRmeeBGNkgs3ryCLtgIj5jnzN7nfCCSFchutsE0QZHFZfQ8h4gMbvSPhaASY09kDWHlqfJoHCqCVR5zAd8qMcU7DzAL2Ka0fV+JrMKeGXkvtXQ70b/V40l2Yj21KxkasJ3coPSbwHEx0TlEJDnzvwwS7okR10IPEdFs/Mf1gXnq8D9ReRe+XpefK7jX4az0rg/8p1Oe3YpRL/zTLi7SMOWpcYKpaU/4uK6RY8CmHIEYRLJzNcG02C7bu/CwWOhEVDjUMu0h4I5zKE9EIg1lDs8hR0vDNH0OJ4HclpsrBJzOSdn0wE/yfJb6iD0HcSjS8G6tr195Dh3MzsN/HJhlr+PxKdwDcyQ1Vxg4yx9UHzgY0648H6iWGTroFCcF+1+o/ybY4HxGfW0vaQWV5BWCIYm5QsGZ38/u+igEnYH6fBxAg9RWzOOxDoVAmn8fyI6meiOaykogICJ3pEXCme5faToFB34u4+frK+YB3IMEip920EMoBqJd6GteDVnl6TwrLwOrAmf5u98J4h8Hqo7nBOF46CrmAd2DRGrKE35vS++AewqdUnVM1A+YVxuPSHOFhbP8FnuM+eeqh4c+7NrqK+YBBUtutRRecXQd3MYjbW/gleS+HiPzihtPLJyCIzGKTsU7vyFKvyB/YzzsdofDw3fZlKdzJr/WXZReoO68u7Ap00DnL5iWtP6n6MkaO1jZV6NTPhSLcx7QTWfGay3cO73gijRL49nH6QVyZfNQrykrkYcoFD5Gup5DNJxR+eojCY8VjAlcmXyGczu330wd4xToc0cPnpOeo0V1gie5kaZikHMUCmcYPCeE+jeuMp3+7ZY+BYPsJrdjN75iuqYbfSsRZ8b0A4il+jOfw5HHtleV8nT8n8HfHhPeyMeCiBtWAfuPJH2drpJqhyg/wozpa8Tn/UT9OtQCjKRUJ5AdkIZ29CjPIyQM73zmIf0vB+fVlU0R2j0gRhMof3+A0S8lXzzH6JDXGIXQ9Jg3nYNoAynneCbHVC2e59dopuYPeNhcvvcsmSK88yqFZxerYKCYS+kfwlT1eII5jv4f4esmuC4/kSvZARd8ShHoCb99gKfKf/35LjS7xHKg4lIuQ8J4PiUHBlEaZoZYQsEwXyBG9T+o7/sr9vOQk+a7rmQrsnMYfC3K05uT0Do6Pf9oVQ71YNztkyvVjsRTNKT8rRc0PHEaZoRYQmFQ6qcmvE53UN93D/V56PPoVFZ1YurC3dJyMHrg0CXMxJGSgXiKSHQ677xPmBHkwQ1zDy3kYYRQI3/2cd/3o8elOAt2XULLIc4nt7QozzuOSTkBpojYTMm/h8Vz0qWYP/HBAQh7PUWs/3vID7z/BGAzpBotqeP1uVMRnk98g3CCU0Ru9TX/k8eoOJflN8UBvD54RACtHF4p3PmsfMcNQwmjJWOBUSVfteD5nkE6C3adiU7h8tGvCgKEbwZehWIeFfyBVwrzV7tKdx8MSaGSmYJdx4Yed+M5Sc/NYdg9lLPt943BGYNTJNUm8c4DFqO+zAAQld9EeXqYNADvN5Knf3z6zfqe9GA87BM7RUcqdj2RNzjT+PuVv15QDL2PDJzb5SWAp0iyief84S8cbIKVi3F3oT7Gfnr3ZE6jPbnjaOCq2HVMQH55jttytDY9qlcydP5mBk5/H54i+Razx39XvykIUOYPVlsDjI4yaLNGrppd38MUQFgpivVB7mB79j+Q+HWJbSwjU8QUqTRAnh9//nhLbfbkto94DREPojHpvZ535phVCyq5RM8Jv3d0+vl/p50sdmiG9yRUt5FtfIJxfVQ7fR0dn39zcXdv7+JwSL8pmOHMH/x3I5SDt6Mngh44B650HJ5wm4kby/v0zH/PgOsZuNB5nYNOFcGeHELEt6JIMITnVN2uE5WnQM7aEnj+6BuDs6104jCzfRQPCD62bvK3/nWBE5/PBsgjGTz/ZMYvl0xMM2H/0IuI8BiQsRvP+3ak+7tmTHAS8tnEFqolg6fWk9HCL4cVU2V0LpyzBiJU2cPRiXHyvGZbM54xF5yotFTMRMuMxPNeGPHLgXhbZXRO8SeHPh+dKZ5nJuBkefrDczi5LYVn874BzQmNqyo6Kfavi6ETW9ZSL55TRBsQvflsO8YkFTvwmmeVw1kVnSTn7BxFJ7ZCRoLnLd0miwdOUq66SJ1LvfPQhOfIJSx9r/5wwo/AaF2VEjw/1g4nT/oQS+Axlgu8elrwDChwVkPnzEWfiHCHdp9UhinB80MNkaXRPjece3t/zDlmW64Olufx+0ARCc4q6PSnxZMDZtZOMTuSUPsqwfO7QJtWYIRzz/tSfRtNZVOl2H0gf7OxaR3plHDOvoGNF61vTdqOi9n5PNEBZ4qn8vXWvnQiX+oDMRqZ0YAIp3k6A1fi5IBol0irG5jiyWndl/Zg0RKNMWVd2fvzFdJMk2n6nm2WIpcKp3E6IykVc4o4B9KqWma9YNmse7BPnnjCQF8oz7h0Pko6Tf9i3r+EOTJLpz8rak78hP0SwiFwYs3VrNnmJ35VWoEEyKcqw1TrBJXO0lOfc4ooaskonfIq5g1ku+jqIcPzH0FFWoFoXuWvXwPFoucsRmY0Xe9fis00SWesoGKOoAsauvHK8Owoq89LV895aBOQQEV1KpXkTzvmqqlPP96cIvxQzNEZDFRUzN98wGjILEA28Z2IxVdxs/7lWmqLZ3j+l4JGaChVms938YmvbNTpK2+KzsIqytm/B+IggGzAOZ34Z/J2M3L1WvUCnlLOZ8SQpL+YpS8u5UzLoDhFxDkCr2FmLAeHwv6RVDFlCbFKJTfyiW91YrmPLLhTWuHMtfwjX3balROmkllK+LwdKLC59DhJ40D0goqV+Yz2ZR2P4gz92y8Pn8q7fLl1b0TK7pQmq17YRt+NZOFUbiGTq08qn+t1X00Rcx3T9E/PVM5s/obfIa9iPG/Hvdr6akz+UJqrzy8ic+6U9DADGWeqwVGK1svVZ+N2hNVVo9XmlV94FJ2uu38i6Zv5m2NUuUhJ5ufRxtz4UTFCJU9Hrj47tyNpc6AfzoXz+UlA3j0NpgYyi13caGB0lR8NrrApMUVIOhsNdxAHdLW5OUbFVcysyzQKRr7j+0E0dV2X55nEUjE0sIqhaLI63HeXwu9v4ZTX6GRDJbBsHW+xixMWxCj4haVZsim38MgepJm47jQaEdCcuTv2j+rypJOzKRxxxpVimF7SzYEJxVnw/hqDk4BiUxkzpvJd3MlRCHaverzvMrEJ0zlaar1OZ8HF9CSAd29wMnBdDt2+a3Ua7HBuKIaZSDtt6AVjRv3qBEzjklXYUlwd3huCNZ/pIgxmcWrJkoH4/iiIoniwrTeU2ETSmf5Cqlo6uQZNhpWMqmwJR9uDbCwWkWEVVypuQWhj+bc9VsOVfp+PNFlNg3Cuzs6Lz0/piIKUjyUgG1Pf0BFLyPlcAVouOZpqE4SjM/mJZnMT0OSkNE3nZrl1RkEyN7PpQMMYr5xgckWe/enF39agGJK1P0mWfrHyycdNXT6TpTgBMBtrpcB/719cg9Lfzpddcd0hOoNlxwEvG9SaDBchTGO8OjfJMBbC+rfXEw98YKMqNreUV+kouZXC7jVYKonGJpdLrZH9utLPo+nMBpWNqjAs4frlE5TOEHPGYzqMdBztTKV7np6JL/0+vStPg+MKHYWZb2sc4RqFwigWXOarni+74s8j6fS2yWgVds7VyclHmY6xzTDGXXOzFj1rL9AMuleeDkcRj9XM65j4nUqitSXtJZnqv06kc4HGeljbc7PaPOtB7l03WX7g1c9br3yz4u9ar8IVOswNcDGIhSFbWbMmm9Kg01kcVtnkLG3uNUSzCOgOzVCnPeet6CjgYXrmvR3C9sfl6Cyfm3zzNL1rTOaV76ts5WXpuOYzz0GnYHJuzvTc4E97G+i0YsXSacXSaem0Yum0YgUjjqXTiqXTihVLpxVLpxUrNaDz0tJppbZ0RpZOK5ZOK1YsnVYsnVasMEho6bRi6bRihZ3OE0unldrSGVs6rdSazo6l00qN6WxaOq3UkM6ZctVxK1ZkpWfptHJt6ZxaOq3Uls6BpdNKZdK3dFq5tnS6lk4rlUnX0mnlutLpc3QKs2JFToa4wtyWTisVyCHi0Zul00ot6YwsnVaqkwtUilLTTpSVKgQMd9oEOiuVSQgFlCydViqTHnQosumdViqTLuh22mC8larkHDTslk4rVckhZNhtQMlKZfKVOLlz3YfQipU6Hdr9hWG3hyIrVcmx8Exk3U4rtTwW+a51O61ULO+K7titYbdSrfSs6rRSWzkVeJ32xG6ljqY9cO2ZyEpNT+25Xbeq00rV8veyQLxVnVbqqDxnOZxWdVqpXL6ab5n1qWtVp5W6yIPNh5iDFZxWdVqpXj7z14ozDyVZOK3URbxf72d8+pcz18JppW54NluPbg/ctTQ66S2RpdNKLehstzqNNZu55rRwWqkRno0lmxZOK7XDM+GzkbFp4bRSNzzbrVza7aY9EFmpF55eMwG0naFpFaeV2uGZApr+17JppZ6E2jmwYsWKFStWrFixYsWKFStWrOiU/we1pZbeKdmp7AAAAABJRU5ErkJggg==';
+  const STEP_RATIO = 277 / 669;   // image height / width
+  const stepTemplate = new Image();
+  stepTemplate.src = STEP_SRC;
+  stepTemplate.alt = '';
+  stepTemplate.className = 'step-pop';
+  // Comes out of the metronome's left or right side (alternating) at mid-height, tilted at random.
+  let stepSide = -1;   // -1 = left, 1 = right; flips every time
+  function popStep() {
+    if (!state.showStep) return;
+    const r = metroSvg.getBoundingClientRect();
+    if (!r.width || !r.height) return;   // metronome not on screen
+    stepSide = -stepSide;
+    const dir = stepSide;
+    const H = r.height;
+    const w = r.width * 0.75;
+    const h = w * STEP_RATIO;
+    // Body edge at mid-height: the trapezoid spans x 59-241 of 300 at y 250 of 500 in the drawing.
+    const ex = r.left + r.width * (dir < 0 ? 59 / 300 : 241 / 300);
+    const ey = r.top + H * 0.5;
+    const tilt = (Math.random() * 60 - 30).toFixed(1);   // -30 to 30 degrees (330 to 30)
+    const out = dir * (w * 0.5 + r.width * 0.04);       // clears the side of the metronome
+    const el = stepTemplate.cloneNode();
+    el.style.width = w + 'px';
+    el.style.left = (ex - w / 2) + 'px';
+    el.style.top = (ey - h / 2) + 'px';
+    document.body.appendChild(el);
+    const t = (x, y, sc) => `translate(${x}px, ${y}px) rotate(${tilt}deg) scale(${sc})`;
+    const frames = reducedMotion
+      ? [
+          { transform: t(out, 0, 1), opacity: 0 },
+          { transform: t(out, 0, 1), opacity: 1, offset: 0.2 },
+          { transform: t(out, 0, 1), opacity: 0 },
+        ]
+      : [
+          { transform: t(0, 0, 0.2), opacity: 0.4 },
+          { transform: t(out * 1.06, -0.02 * H, 1.08), opacity: 1, offset: 0.2, easing: 'ease-in-out' },
+          { transform: t(out, -0.05 * H, 1), opacity: 1, offset: 0.35, easing: 'ease-in' },
+          { transform: t(out * 1.1, -0.38 * H, 0.92), opacity: 0 },
+        ];
+    const anim = el.animate(frames, { duration: 950, easing: 'ease-out', fill: 'forwards' });
+    anim.onfinish = () => el.remove();
+    anim.oncancel = () => el.remove();
+  }
+
   function lightBeat(idx) {
     Array.from(counterEl.children).forEach((sp, k) => sp.classList.toggle('on', k === idx));
   }
@@ -1247,17 +1315,39 @@
     metroHint.classList.toggle('live', !!live);
   }
 
+  // Clicks are scheduled a little ahead of time. In a background tab browsers slow down
+  // page timers, so the ticks come from a small worker and we schedule further ahead.
+  let runOut = null;      // gain node for the current run; muting it cancels clicks already queued
+  let tickWorker = null;
   function scheduler() {
+    if (!running) return;
     const c = ctx;
-    while (nextTime < c.currentTime + 0.12) {
+    const ahead = document.hidden ? 1.5 : 0.12;
+    while (nextTime < c.currentTime + ahead) {
       const idx = beatCount % currentMeter();
       const accent = state.accent && idx === 0;
-      beat(nextTime, accent);
+      beat(nextTime, accent, runOut);
       pendingBeats.push({ time: nextTime, accent, idx });
       beatCount++;
       nextTime += beatDur;
     }
-    schedTimer = setTimeout(scheduler, 25);
+  }
+  function startTicker() {
+    try {
+      if (!tickWorker) {
+        const code = 'let t=null;onmessage=e=>{clearInterval(t);t=null;if(e.data==="start")t=setInterval(()=>postMessage(0),25);};';
+        tickWorker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+        tickWorker.onmessage = scheduler;
+      }
+      tickWorker.postMessage('start');
+    } catch (e) {
+      tickWorker = null;
+      schedTimer = setInterval(scheduler, 25);   // fallback if workers aren't allowed
+    }
+  }
+  function stopTicker() {
+    if (tickWorker) tickWorker.postMessage('stop');
+    clearInterval(schedTimer);
   }
 
   function startMetronome() {
@@ -1268,15 +1358,25 @@
     nextTime = startTime;
     beatCount = 0;
     pendingBeats = [];
+    runOut = c.createGain();
+    runOut.connect(master);
     running = true;
     scheduler();
+    startTicker();
     setMetroHint('Click the metronome to stop', true);
   }
 
   function stopMetronome() {
     if (!running) return;
     running = false;
-    clearTimeout(schedTimer);
+    stopTicker();
+    if (runOut) {
+      // Silence clicks that were already queued ahead of time.
+      const old = runOut;
+      old.gain.setValueAtTime(0, ctx.currentTime);
+      setTimeout(() => old.disconnect(), 2000);
+      runOut = null;
+    }
     pendingBeats = [];
     lightBeat(-1);
     setMetroHint('Click the metronome to start');
@@ -1305,8 +1405,10 @@
       armAngle = phase < -0.5 ? 0 : MAX_ARM * Math.cos(Math.PI * phase);
       while (pendingBeats.length && pendingBeats[0].time <= now) {
         const b = pendingBeats.shift();
-        flash(b.accent);
         lightBeat(b.idx);
+        if (now - b.time > 0.15) continue;   // passed while the tab was hidden
+        flash(b.accent);
+        if (b.idx === 0) popStep();
       }
     } else {
       armAngle += (0 - armAngle) * 0.12;
@@ -1425,7 +1527,11 @@
     const s = decodeHash();
     if (s) { state = s; renderEntries(); syncSettings(); setMetronomeTempo(state.bpm); renderCounter(); drawWheel(); }
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) stopMetronome(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!running) return;
+    if (document.hidden && !state.bgPlay) { stopMetronome(); return; }
+    scheduler();   // switch between the short and long schedule-ahead right away
+  });
 })();
 </script>
 </body>
