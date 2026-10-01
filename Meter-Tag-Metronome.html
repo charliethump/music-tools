@@ -1080,9 +1080,9 @@
       }
       return;
     }
-    // B: one-shot accent sound.
+    // B: one-shot accent sound plus a "Step!".
     if (e.key === 'b' || e.key === 'B') {
-      if (!e.repeat) playAccentOnce();
+      if (!e.repeat) { playAccentOnce(); popStep(true); }
       return;
     }
     if (document.body.dataset.mode === 'play') {
@@ -1174,8 +1174,8 @@
   stepTemplate.className = 'step-pop';
   // Comes out of the metronome's left or right side (alternating) at mid-height, tilted at random.
   let stepSide = -1;   // -1 = left, 1 = right; flips every time
-  function popStep() {
-    if (!state.showStep) return;
+  function popStep(force) {
+    if (!state.showStep && !force) return;   // B key passes force, so it always pops
     const r = metroSvg.getBoundingClientRect();
     if (!r.width || !r.height) return;   // metronome not on screen
     stepSide = -stepSide;
