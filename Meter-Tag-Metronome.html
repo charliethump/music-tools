@@ -645,9 +645,9 @@
       src.buffer = buf;
       src.connect(out);
       src.start(time);
-      return;
+      return [src];
     }
-    woodblock(time, accent, out);
+    return woodblock(time, accent, out);
   }
 
   // Woodblock fallback: two short sine partials with a fast pitch drop plus a click of noise.
@@ -655,6 +655,7 @@
     const c = ctx;
     const base = accent ? 1250 : 880;
     const vol = accent ? 1.0 : 0.7;
+    const nodes = [];
     [[1, 1], [2.4, 0.35]].forEach(([ratio, amp]) => {
       const osc = c.createOscillator();
       osc.type = 'sine';
@@ -666,6 +667,7 @@
       osc.connect(g).connect(out);
       osc.start(time);
       osc.stop(time + 0.1);
+      nodes.push(osc);
     });
     const src = c.createBufferSource();
     src.buffer = noiseBuffer;
@@ -678,6 +680,8 @@
     src.connect(hp).connect(g).connect(out);
     src.start(time);
     src.stop(time + 0.025);
+    nodes.push(src);
+    return nodes;
   }
 
   // ---------- Wheel ----------
@@ -1317,16 +1321,17 @@
 
   // Clicks are scheduled a little ahead of time. In a background tab browsers slow down
   // page timers, so the ticks come from a small worker and we schedule further ahead.
-  let runOut = null;      // gain node for the current run; muting it cancels clicks already queued
+  let queued = [];       // clicks scheduled but not started yet: { time, nodes }
   let tickWorker = null;
   function scheduler() {
     if (!running) return;
     const c = ctx;
     const ahead = document.hidden ? 1.5 : 0.12;
+    queued = queued.filter(q => q.time > c.currentTime);
     while (nextTime < c.currentTime + ahead) {
       const idx = beatCount % currentMeter();
       const accent = state.accent && idx === 0;
-      beat(nextTime, accent, runOut);
+      queued.push({ time: nextTime, nodes: beat(nextTime, accent) });
       pendingBeats.push({ time: nextTime, accent, idx });
       beatCount++;
       nextTime += beatDur;
@@ -1358,8 +1363,7 @@
     nextTime = startTime;
     beatCount = 0;
     pendingBeats = [];
-    runOut = c.createGain();
-    runOut.connect(master);
+    queued = [];
     running = true;
     scheduler();
     startTicker();
@@ -1370,13 +1374,12 @@
     if (!running) return;
     running = false;
     stopTicker();
-    if (runOut) {
-      // Silence clicks that were already queued ahead of time.
-      const old = runOut;
-      old.gain.setValueAtTime(0, ctx.currentTime);
-      setTimeout(() => old.disconnect(), 2000);
-      runOut = null;
-    }
+    // Cancel clicks queued for the future; a sound that has already started rings out fully.
+    const now = ctx.currentTime;
+    queued.forEach(q => {
+      if (q.time > now) q.nodes.forEach(n => { try { n.stop(0); } catch (e) { /* already done */ } });
+    });
+    queued = [];
     pendingBeats = [];
     lightBeat(-1);
     setMetroHint('Click the metronome to start');
