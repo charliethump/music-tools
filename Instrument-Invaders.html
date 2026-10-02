@@ -66,13 +66,14 @@
   .btn:hover { background: rgba(255, 255, 255, .08); }
   .btn:focus-visible, .mini:focus-visible, #initials:focus-visible { outline: calc(var(--u) * 2) dashed var(--ink); outline-offset: calc(var(--u) * 3); }
   .btn.easy { color: var(--woodwinds); }
+  .btn.medium { color: var(--brass); }
   .btn.hard { color: var(--strings); }
   .btn.quiet { color: var(--dim); }
   .btn:disabled { opacity: .4; cursor: wait; }
 
-  .scores { display: flex; gap: calc(var(--u) * 40); }
+  .scores { display: flex; gap: calc(var(--u) * 26); }
   .scores h2 { font-size: calc(var(--u) * 7); color: var(--dim); margin-bottom: calc(var(--u) * 5); }
-  ol { list-style: none; margin: 0; padding: 0; min-width: calc(var(--u) * 110); }
+  ol { list-style: none; margin: 0; padding: 0; min-width: calc(var(--u) * 96); }
   li { display: flex; justify-content: space-between; gap: calc(var(--u) * 16); font-size: calc(var(--u) * 7); line-height: 1.9; }
   li.empty { color: #3d3270; }
   .note { color: var(--brass); }
@@ -110,11 +111,13 @@
     <h1 id="logo" aria-label="Instrument Invaders"></h1>
     <p>Read the instrument name at the top, then blast that instrument. Hit the wrong one and you lose a life.</p>
     <div class="choices">
-      <button class="btn easy" data-diff="easy" disabled>Easy<small>picture clues</small></button>
-      <button class="btn hard" data-diff="hard" disabled>Hard<small>names only</small></button>
+      <button class="btn easy" data-diff="easy" disabled>Easy<small>slower</small></button>
+      <button class="btn medium" data-diff="medium" disabled>Medium<small>families too</small></button>
+      <button class="btn hard" data-diff="hard" disabled>Hard<small>fastest</small></button>
     </div>
     <div class="scores">
       <div><h2>Easy top 5</h2><ol id="scores-easy"></ol></div>
+      <div><h2>Medium top 5</h2><ol id="scores-medium"></ol></div>
       <div><h2>Hard top 5</h2><ol id="scores-hard"></ol></div>
     </div>
     <p id="board-note" class="note"></p>
@@ -184,11 +187,18 @@
     woodwinds:  { label: 'Woodwinds',  color: '#5ee08a' },
     brass:      { label: 'Brass',      color: '#ffcc3d' },
     percussion: { label: 'Percussion', color: '#b48cff' },
-    keyboard:   { label: 'Keyboard',   color: '#5fd8ff' }
+    keyboard:   { label: 'Keyboard',   color: '#5fd8ff' } // color for instruments in more than one family
+  };
+
+  // An instrument can belong to more than one family, e.g. family: ['strings', 'percussion']
+  const familiesOf = inst => Array.isArray(inst.family) ? inst.family : [inst.family];
+  const colorOf = inst => {
+    const f = familiesOf(inst);
+    return f.length > 1 ? FAMILIES.keyboard.color : FAMILIES[f[0]].color;
   };
 
   const INSTRUMENTS = [
-    { name: 'Piano',         file: 'piano',         family: 'keyboard' },
+    { name: 'Piano',         file: 'piano',         family: ['strings', 'percussion'] },
     { name: 'Guitar',        file: 'guitar',        family: 'strings' },
     { name: 'Piccolo',       file: 'piccolo',       family: 'woodwinds' },
     { name: 'Flute',         file: 'flute',         family: 'woodwinds' },
@@ -213,7 +223,20 @@
   const START_LIVES = 3;
   const MAX_LIVES = 5;
   const EXTRA_LIFE_EVERY = 3000;     // points
-  const FAMILY_PROMPT_CHANCE = 0.25; // Hard mode, wave 2 and up
+
+  // Difficulty levels. Multipliers compare to Medium (1 = Medium's numbers).
+  //   stepTime / bombTime: above 1 = slower marching / fewer bombs
+  //   bombSpeed: below 1 = bombs fall slower
+  //   hits: correct hits needed to clear a wave
+  //   familyChance: share of prompts that ask for a whole family (wave 2 and up)
+  //   pictureClue: show the instrument's picture next to its name in the prompt
+  //   colorClue: color the instrument's name by family in the prompt
+  const LEVELS = {
+    easy:   { label: 'Easy',   stepTime: 1.2, bombTime: 1.2, bombSpeed: 0.8, bombSpeedAdd: 0,  hits: 0.8, familyChance: 0,     pictureClue: true, colorClue: true },
+    medium: { label: 'Medium', stepTime: 1,   bombTime: 1,   bombSpeed: 1,   bombSpeedAdd: 0,  hits: 1,   familyChance: 1 / 6, pictureClue: true, colorClue: true },
+    hard:   { label: 'Hard',   stepTime: 0.8, bombTime: 0.8, bombSpeed: 1,   bombSpeedAdd: 20, hits: 1,   familyChance: 0.25,  pictureClue: true, colorClue: false }
+  };
+  const LEVEL_KEYS = Object.keys(LEVELS);
 
   /* ===== Layout (game pixels; the canvas scales to fit) ===== */
 
@@ -223,7 +246,7 @@
   const SPRITE_RES = 2;
   const FONT = '"Press Start 2P", ui-monospace, "Courier New", monospace';
   const INK = '#f4f1ff', DIM = '#8f89b8', GOLD = '#ffcc3d', BOMB = '#ff8a5b';
-  const SCORE_KEY = 'instrument-invaders-scores-v1';
+  const SCORE_KEY = 'instrument-invaders-scores-v2';
   const MUTE_KEY = 'instrument-invaders-muted';
 
   /* ===== Elements ===== */
@@ -263,8 +286,12 @@
   function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { memStore[k] = v; } }
 
   function loadScores() {
-    try { const s = JSON.parse(storeGet(SCORE_KEY)); if (s && s.easy && s.hard) return s; } catch (e) {}
-    return { easy: [], hard: [] };
+    const out = { easy: [], medium: [], hard: [] };
+    try {
+      const s = JSON.parse(storeGet(SCORE_KEY));
+      if (s) LEVEL_KEYS.forEach(k => { if (Array.isArray(s[k])) out[k] = s[k]; });
+    } catch (e) {}
+    return out;
   }
   let localScores = loadScores();
   let boardScores = null; // shared leaderboard, null when not loaded or unreachable
@@ -286,7 +313,7 @@
       .finally(() => clearTimeout(timer));
   }
   function applyBoards(d) {
-    if (d && Array.isArray(d.easy) && Array.isArray(d.hard)) boardScores = { easy: d.easy, hard: d.hard };
+    if (d && d.ok) boardScores = { easy: d.easy || [], medium: d.medium || [], hard: d.hard || [] };
   }
   function refreshBoard() {
     if (!LEADERBOARD_URL) return Promise.resolve(false);
@@ -317,8 +344,7 @@
     }
   }
   function renderScores() {
-    fillList($('scores-easy'), shownScores().easy);
-    fillList($('scores-hard'), shownScores().hard);
+    LEVEL_KEYS.forEach(k => fillList($('scores-' + k), shownScores()[k]));
   }
 
   /* ===== Sprites ===== */
@@ -475,7 +501,7 @@
     const g = game;
     g.wave++;
     g.hits = 0;
-    g.hitsNeeded = Math.min(5 + g.wave, 10);
+    g.hitsNeeded = Math.round(Math.min(5 + g.wave, 10) * LEVELS[difficulty].hits);
     const cells = [];
     let pool = [];
     for (let r = 0; r < ROWS; r++) {
@@ -517,8 +543,9 @@
     const g = game;
     const alive = frontInvaders();
     if (!alive.length) { g.target = null; return; }
-    if (difficulty === 'hard' && g.wave >= 2 && Math.random() < FAMILY_PROMPT_CHANCE) {
-      const fams = [...new Set(alive.map(v => v.inst.family))].filter(f => f !== 'keyboard');
+    const lvl = LEVELS[difficulty];
+    if (lvl.familyChance && g.wave >= 2 && Math.random() < lvl.familyChance) {
+      const fams = [...new Set(alive.flatMap(v => familiesOf(v.inst)))].filter(f => f !== 'keyboard');
       if (fams.length) { g.target = { type: 'family', family: pick(fams) }; return; }
     }
     let options = alive.map(v => v.inst).filter(i => i.name !== g.lastInstName);
@@ -531,7 +558,7 @@
   function isCorrect(v) {
     const t = game.target;
     if (!t) return false;
-    return t.type === 'inst' ? v.inst.name === t.inst.name : v.inst.family === t.family;
+    return t.type === 'inst' ? v.inst.name === t.inst.name : familiesOf(v.inst).includes(t.family);
   }
   function targetStillThere() {
     return frontInvaders().some(isCorrect);
@@ -540,16 +567,16 @@
   function stepInterval() {
     const g = game;
     const frac = aliveInvaders().length / (ROWS * COLS);
-    let base = Math.max(0.16, 0.62 - (g.wave - 1) * 0.06);
-    if (difficulty === 'hard') base *= 0.8;
+    const base = Math.max(0.16, 0.62 - (g.wave - 1) * 0.06) * LEVELS[difficulty].stepTime;
     return base * (0.35 + 0.65 * frac);
   }
   function bombInterval() {
     const base = Math.max(0.9, 2.4 - (game.wave - 1) * 0.18);
-    return difficulty === 'hard' ? base * 0.8 : base;
+    return base * LEVELS[difficulty].bombTime;
   }
   function bombSpeed() {
-    return 85 + Math.min(game.wave, 10) * 10 + (difficulty === 'hard' ? 20 : 0);
+    const lvl = LEVELS[difficulty];
+    return (85 + Math.min(game.wave, 10) * 10) * lvl.bombSpeed + lvl.bombSpeedAdd;
   }
 
   function stepFormation() {
@@ -613,7 +640,7 @@
       g.streak++;
       const pts = 100 + Math.min(g.streak - 1, 8) * 25;
       addScore(pts);
-      burst(x, y, FAMILIES[v.inst.family].color, 14);
+      burst(x, y, colorOf(v.inst), 14);
       addText('+' + pts, x, y, INK, 0.9, 8);
       sfx.correct();
       g.hits++;
@@ -621,7 +648,7 @@
       else pickTarget();
     } else {
       burst(x, y, DIM, 10);
-      addText("That's the " + v.inst.name + '!', x, y, FAMILIES[v.inst.family].color, 2, 8);
+      addText("That's the " + v.inst.name + '!', x, y, colorOf(v.inst), 2, 8);
       sfx.wrong();
       loseLife(null, { quiet: true });
       if (state === 'playing') {
@@ -824,8 +851,8 @@
     const segs = [];
     if (t.type === 'inst') {
       segs.push({ text: 'Blast the', size: 8, color: DIM });
-      segs.push({ text: t.inst.name, size: 14, color: difficulty === 'easy' ? FAMILIES[t.inst.family].color : INK });
-      if (difficulty === 'easy') segs.push({ img: t.inst.sprite });
+      segs.push({ text: t.inst.name, size: 14, color: LEVELS[difficulty].colorClue ? colorOf(t.inst) : INK });
+      if (LEVELS[difficulty].pictureClue) segs.push({ img: t.inst.sprite });
     } else {
       segs.push({ text: 'Blast any', size: 8, color: DIM });
       segs.push({ text: FAMILIES[t.family].label, size: 14, color: FAMILIES[t.family].color });
@@ -954,7 +981,7 @@
   function showOver() {
     state = 'over';
     $('final-score').textContent = game.score;
-    $('over-list-title').textContent = (difficulty === 'easy' ? 'Easy' : 'Hard') + ' top 5';
+    $('over-list-title').textContent = LEVELS[difficulty].label + ' top 5';
     $('hs').classList.remove('show');
     $('over-list').style.display = 'none';
     $('over-note').textContent = LEADERBOARD_URL ? 'Checking the leaderboard...' : '';
