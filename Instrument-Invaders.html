@@ -278,7 +278,7 @@
     storeSet(SCORE_KEY, JSON.stringify(localScores));
   }
 
-  function fetchJSON(url, opts = {}, ms = 9000) {
+  function fetchJSON(url, opts = {}, ms = 20000) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), ms);
     return fetch(url, Object.assign({}, opts, { signal: ctrl.signal, redirect: 'follow' }))
@@ -290,9 +290,16 @@
   }
   function refreshBoard() {
     if (!LEADERBOARD_URL) return Promise.resolve(false);
-    return fetchJSON(LEADERBOARD_URL + '?action=top')
+    if (!boardScores) $('board-note').textContent = 'Loading the class leaderboard...';
+    const url = LEADERBOARD_URL + '?action=top';
+    return fetchJSON(url)
+      .catch(err => {
+        console.warn('Leaderboard load failed, retrying:', err);
+        return fetchJSON(url);
+      })
       .then(d => { applyBoards(d); $('board-note').textContent = ''; return true; })
-      .catch(() => {
+      .catch(err => {
+        console.warn('Leaderboard load failed:', err);
         boardScores = null;
         $('board-note').textContent = "Can't reach the class leaderboard. Showing this Chromebook's scores.";
         return false;
@@ -988,20 +995,23 @@
       return;
     }
 
-    const offline = () => {
+    const offline = err => {
+      console.warn('Leaderboard save failed:', err);
       saveLocal(entry);
       boardScores = null;
-      $('over-note').textContent = "Couldn't reach the class leaderboard. Saved on this Chromebook.";
+      $('over-note').textContent = err && err.name === 'AbortError'
+        ? 'The leaderboard is slow right now. Your score may still show up there soon.'
+        : "Couldn't reach the class leaderboard. Saved on this Chromebook.";
       showList();
     };
     saving = true;
     $('save').disabled = true;
-    $('over-note').textContent = 'Saving...';
-    fetchJSON(LEADERBOARD_URL, { method: 'POST', body: JSON.stringify(entry) })
+    $('over-note').textContent = 'Saving... this can take a few seconds.';
+    fetchJSON(LEADERBOARD_URL, { method: 'POST', body: JSON.stringify(entry) }, 30000)
       .then(d => {
         if (d && d.ok) { applyBoards(d); $('over-note').textContent = 'Saved!'; showList(); }
         else if (d && (d.error === 'blocked' || d.error === 'name')) rejectInitials(NOT_ALLOWED);
-        else offline();
+        else offline(d);
       })
       .catch(offline)
       .finally(() => { saving = false; $('save').disabled = false; });
