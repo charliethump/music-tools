@@ -72,11 +72,12 @@
   .btn.britten.locked { opacity: .35; cursor: not-allowed; }
   .btn.quiet { color: var(--dim); }
   .btn:disabled { opacity: .4; cursor: wait; }
+  .btn.gone { visibility: hidden; }
+  #fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 
   .scores { display: flex; gap: calc(var(--u) * 26); }
   .scores h2 { font-size: calc(var(--u) * 7); color: var(--dim); margin-bottom: calc(var(--u) * 5); }
   ol { list-style: none; margin: 0; padding: 0; min-width: calc(var(--u) * 150); }
-  li .lvl { color: var(--dim); }
   li { display: flex; justify-content: space-between; gap: calc(var(--u) * 16); font-size: calc(var(--u) * 7); line-height: 1.9; }
   li.empty { color: #3d3270; }
   .note { color: var(--brass); }
@@ -169,6 +170,8 @@
 
   <input id="unlock" type="text" autocomplete="off" spellcheck="false" aria-label="Code" hidden>
   <div id="admin-note" aria-live="polite"></div>
+
+  <canvas id="fx"></canvas>
 
   <div id="corner">
     <button id="pause-btn" class="mini" hidden>Pause</button>
@@ -323,7 +326,6 @@
   LEVELS.medium.points = 2;
   LEVELS.hard.points = 3;
   LEVELS.britten.points = 1;
-  const LEVEL_TAGS = { easy: 'E', medium: 'M', hard: 'H' }; // shown next to scores on the board
 
   /* ===== Benjamin Britten Battle ===== */
   // Unlocks on this device once any Easy, Medium or Hard game reaches this score.
@@ -466,11 +468,10 @@
       const li = document.createElement('li');
       const e = list[i];
       if (e) {
-        li.innerHTML = '<span></span><span class="lvl"></span><span></span>';
+        li.innerHTML = '<span></span><span></span>';
         li.children[0].textContent = e.name;
-        li.children[1].textContent = LEVEL_TAGS[e.level] || '';
-        li.children[2].textContent = e.score.toLocaleString('en-US');
-      } else { li.className = 'empty'; li.innerHTML = '<span>---</span><span></span><span>0</span>'; }
+        li.children[1].textContent = e.score.toLocaleString('en-US');
+      } else { li.className = 'empty'; li.innerHTML = '<span>---</span><span>0</span>'; }
       ol.appendChild(li);
     }
   }
@@ -717,6 +718,14 @@
         if (last) c.slice(0, 3).forEach(n => tone(mtof(n), 1.8, { vol: 0.045, delay: t + 3 * step }));
         t += 4 * step + 0.06;
       });
+    },
+    smash: () => { tone(220, 0.25, { to: 55, vol: 0.12 }); tone(110, 0.3, { type: 'triangle', to: 40, vol: 0.16 }); },
+    // Descending diminished-7th arpeggio flourish (Britten Battle intro)
+    dimFlourish: () => {
+      const mtof = n => 440 * Math.pow(2, (n - 69) / 12);
+      [84, 81, 78, 75, 72, 69, 66, 63, 60].forEach((n, i, a) =>
+        tone(mtof(n), i === a.length - 1 ? 0.7 : 0.12, { vol: 0.1, delay: i * 0.06 }));
+      tone(mtof(36), 0.9, { type: 'triangle', vol: 0.18, delay: 8 * 0.06 });
     },
     oneUp: () => [880, 1318.5].forEach((f, i) => tone(f, 0.1, { type: 'triangle', vol: 0.12, delay: i * 0.08 })),
     over: () => [392, 349.23, 311.13, 261.63].forEach((f, i) => tone(f, 0.25, { type: 'triangle', vol: 0.14, delay: i * 0.2 }))
@@ -1585,6 +1594,131 @@
     }
   }
 
+  /* ===== Britten Battle intro (title screen) =====
+     Britten rises from behind his button, stands on it, knocks out the Hard, Medium
+     and Easy buttons with treble clefs, a diminished flourish plays, he flies off
+     the top and the battle loads. Any click or key skips straight to the battle. */
+  const fx = $('fx'), fxc = fx.getContext('2d');
+  let intro = null;
+  function stageRect(el) {
+    const s = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - s.left, y: r.top - s.top, w: r.width, h: r.height };
+  }
+  function startBrittenIntro() {
+    if (intro || !brittenFrames[0]) { if (!intro) newGame('britten'); return; }
+    initAudio();
+    const sr = stage.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    fx.width = Math.round(sr.width * dpr); fx.height = Math.round(sr.height * dpr);
+    fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const u = sr.width / W;                       // CSS pixels per game pixel
+    const home = stageRect(screens.title.querySelector('[data-diff="britten"]'));
+    const targets = ['hard', 'medium', 'easy'].map(k => {
+      const el = screens.title.querySelector('[data-diff="' + k + '"]');
+      return { el, r: stageRect(el), color: getComputedStyle(el).color, hit: false };
+    });
+    screens.title.style.pointerEvents = 'none';
+    intro = {
+      t: 0, u, x: home.x + home.w / 2, top: home.y, y: home.y + BRITTEN_SPRITE.frameH * u * INTRO_SCALE,
+      targets, clefs: [], parts: [], throws: 0, anim: -1, released: false, flourish: false,
+      last: performance.now()
+    };
+    window.addEventListener('pointerdown', skipBrittenIntro, true);
+    window.addEventListener('keydown', skipBrittenIntro, true);
+    requestAnimationFrame(introFrame);
+  }
+  function skipBrittenIntro(e) {
+    if (!intro) return;
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    intro.targets.forEach(tg => tg.el.classList.add('gone'));
+    endBrittenIntro();
+  }
+  function endBrittenIntro() {
+    window.removeEventListener('pointerdown', skipBrittenIntro, true);
+    window.removeEventListener('keydown', skipBrittenIntro, true);
+    fxc.clearRect(0, 0, fx.width, fx.height);
+    screens.title.style.pointerEvents = '';
+    intro = null;
+    newGame('britten');
+  }
+  function introBurst(x, y, color, n, u) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = (60 + Math.random() * 180) * u;
+      intro.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40 * u, life: 0.6 + Math.random() * 0.5, color, s: (2 + Math.random() * 3) * u });
+    }
+  }
+  const INTRO_THROWS = [1.0, 1.7, 2.4];  // when he throws at Hard, Medium, Easy (seconds)
+  const INTRO_SCALE = 3;                 // Britten's size in the intro compared with in the game
+  const INTRO_RISE = 2 / 3;              // how much of him rises above the button before he stops
+  const INTRO_CLEF_SCALE = 2;            // clef size in the intro compared with in the game
+  const INTRO_FLOURISH = 3.15, INTRO_FLY = 3.15, INTRO_END = 4.5; // flourish and flight start once the last button is gone
+  function introFrame(now) {
+    if (!intro) return;
+    const I = intro, u = I.u, dt = Math.min(0.05, (now - I.last) / 1000);
+    I.last = now; I.t += dt;
+    const S = BRITTEN_SPRITE, su = u * INTRO_SCALE; // su = sprite scale
+    const standY = I.top + S.frameH * su * (1 - INTRO_RISE); // feet stay hidden below the button's top edge
+
+    // Rise from behind the button, then stand on it, then fly off the top
+    if (I.t < 0.8) { const p = I.t / 0.8, e = 1 - Math.pow(1 - p, 3); I.y = standY + (1 - e) * S.frameH * su * INTRO_RISE; } // starts just out of sight
+    else if (I.t < INTRO_FLY) I.y = standY;
+    else { const f = I.t - INTRO_FLY; I.y = standY - f * f * 1100 * u - f * 90 * u; } // keeps rising, then shoots off the top
+
+    // Throws: sprite 1 > 2 > 3 > 2 > 1, releasing a clef on sprite 3
+    if (I.throws < INTRO_THROWS.length && I.anim < 0 && I.t >= INTRO_THROWS[I.throws]) { I.anim = 0; I.released = false; }
+    if (I.anim >= 0) {
+      I.anim += dt;
+      const idx = Math.floor(I.anim / BRITTEN_FRAME_TIME);
+      if (idx >= 2 && !I.released) {
+        I.released = true;
+        const tg = I.targets[I.throws];
+        const sx = I.x + S.tipX * su, sy = I.y + S.tipY * su;
+        I.clefs.push({ sx, sy, tx: tg.r.x + tg.r.w / 2, ty: tg.r.y + tg.r.h / 2, p: 0, target: tg });
+        sfx.clef();
+      }
+      if (idx >= BRITTEN_THROW_SEQ.length) { I.anim = -1; I.throws++; }
+    }
+
+    // Clefs arc to their buttons and knock them out
+    for (const c of I.clefs) {
+      if (c.p >= 1) continue;
+      c.p = Math.min(1, c.p + dt / 0.38);
+      if (c.p >= 1) {
+        c.target.hit = true;
+        c.target.el.classList.add('gone');
+        introBurst(c.tx, c.ty, c.target.color, 46, u);
+        introBurst(c.tx, c.ty, '#f4f1ff', 12, u);
+        sfx.smash();
+      }
+    }
+    if (!I.flourish && I.t >= INTRO_FLOURISH) { I.flourish = true; sfx.dimFlourish(); }
+
+    // Particles
+    for (const pt of I.parts) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 380 * u * dt; pt.life -= dt; }
+    I.parts = I.parts.filter(pt => pt.life > 0);
+
+    // Draw
+    const g = fxc;
+    g.clearRect(0, 0, fx.width, fx.height);
+    for (const pt of I.parts) { g.globalAlpha = Math.min(1, pt.life * 2); g.fillStyle = pt.color; g.fillRect(pt.x - pt.s / 2, pt.y - pt.s / 2, pt.s, pt.s); }
+    g.globalAlpha = 1;
+    const frame = brittenFrames[I.anim >= 0 ? BRITTEN_THROW_SEQ[Math.min(4, Math.floor(I.anim / BRITTEN_FRAME_TIME))] : (I.t >= INTRO_FLY ? 1 : 0)];
+    g.save();
+    g.beginPath(); g.rect(0, 0, fx.width, I.top); g.clip(); // anything below the button's top edge stays hidden behind it
+    g.drawImage(frame, I.x - S.ax * su, I.y - S.ay * su, S.frameW * su, S.frameH * su);
+    g.restore();
+    for (const c of I.clefs) {
+      if (c.p >= 1) continue;
+      const x = c.sx + (c.tx - c.sx) * c.p, y = c.sy + (c.ty - c.sy) * c.p - Math.sin(Math.PI * c.p) * 40 * u;
+      g.save(); g.translate(x, y); g.rotate(-c.p * Math.PI * 2);
+      const cs = u * INTRO_CLEF_SCALE;
+      g.drawImage(clefSprite, -8.25 * cs, -13.2 * cs, 16.5 * cs, 26.4 * cs);
+      g.restore();
+    }
+
+    if (I.t >= INTRO_END) { endBrittenIntro(); return; }
+    requestAnimationFrame(introFrame);
+  }
+
   /* ===== Drawing ===== */
 
   // Treble clef that Britten throws
@@ -1816,6 +1950,7 @@
   }
 
   function showTitle() {
+    screens.title.querySelectorAll('.btn.gone').forEach(b => b.classList.remove('gone')); // rebuild after the intro
     musicStop();
     music.paused = false;
     state = 'title';
@@ -1979,7 +2114,7 @@
   window.addEventListener('blur', pause);
 
   screens.title.querySelectorAll('[data-diff]').forEach(btn => {
-    btn.addEventListener('click', () => newGame(btn.dataset.diff));
+    btn.addEventListener('click', () => btn.dataset.diff === 'britten' ? startBrittenIntro() : newGame(btn.dataset.diff));
   });
   $('resume').addEventListener('click', resume);
   $('quit').addEventListener('click', showTitle);
