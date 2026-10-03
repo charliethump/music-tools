@@ -75,7 +75,8 @@
 
   .scores { display: flex; gap: calc(var(--u) * 26); }
   .scores h2 { font-size: calc(var(--u) * 7); color: var(--dim); margin-bottom: calc(var(--u) * 5); }
-  ol { list-style: none; margin: 0; padding: 0; min-width: calc(var(--u) * 96); }
+  ol { list-style: none; margin: 0; padding: 0; min-width: calc(var(--u) * 150); }
+  li .lvl { color: var(--dim); }
   li { display: flex; justify-content: space-between; gap: calc(var(--u) * 16); font-size: calc(var(--u) * 7); line-height: 1.9; }
   li.empty { color: #3d3270; }
   .note { color: var(--brass); }
@@ -136,10 +137,7 @@
       <button class="btn britten locked" data-diff="britten" disabled>Britten Battle<small id="britten-sub">score 10000 to unlock</small></button>
     </div>
     <div class="scores">
-      <div><h2>Easy top 5</h2><ol id="scores-easy"></ol></div>
-      <div><h2>Medium top 5</h2><ol id="scores-medium"></ol></div>
-      <div><h2>Hard top 5</h2><ol id="scores-hard"></ol></div>
-      <div><h2>Britten top 5</h2><ol id="scores-britten"></ol></div>
+      <div><h2>Top 5</h2><ol id="scores-all"></ol></div>
     </div>
     <p id="board-note" class="note"></p>
     <p>Move with the arrow keys or mouse. Fire with the space bar or a click. Press P to pause.</p>
@@ -319,7 +317,13 @@
     hard:   { label: 'Hard',   stepTime: 0.8, bombTime: 0.8, bombSpeed: 1,   bombSpeedAdd: 20, hits: 1,   familyChance: 0.25,  pictureClue: false, colorClue: false, bonusChance: 0.25, restChance: 1 / 6, bonusRows: { front: 0.10, middle: 0.45, top: 0.45 } }
   };
   LEVELS.britten = Object.assign({}, LEVELS.medium, { label: 'Britten Battle', pictureClue: false, familyChance: 0 });
-  const LEVEL_KEYS = ['easy', 'medium', 'hard', 'britten']; // levels with leaderboards
+  // Points multiplier for each level (everything earned is multiplied, rounded to 25s).
+  // Britten Battle has no leaderboard, so it stays at 1x.
+  LEVELS.easy.points = 1;
+  LEVELS.medium.points = 2;
+  LEVELS.hard.points = 3;
+  LEVELS.britten.points = 1;
+  const LEVEL_TAGS = { easy: 'E', medium: 'M', hard: 'H' }; // shown next to scores on the board
 
   /* ===== Benjamin Britten Battle ===== */
   // Unlocks on this device once any Easy, Medium or Hard game reaches this score.
@@ -361,7 +365,7 @@
   const SPRITE_RES = 2;
   const FONT = '"Press Start 2P", ui-monospace, "Courier New", monospace';
   const INK = '#f4f1ff', DIM = '#8f89b8', GOLD = '#ffcc3d', BOMB = '#ff8a5b';
-  const SCORE_KEY = 'instrument-invaders-scores-v2';
+  const SCORE_KEY = 'instrument-invaders-scores-v3';
   const MUTE_KEY = 'instrument-invaders-muted';
 
   /* ===== Elements ===== */
@@ -400,23 +404,28 @@
   function storeGet(k) { try { return localStorage.getItem(k); } catch (e) { return memStore[k] ?? null; } }
   function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { memStore[k] = v; } }
 
+  // One combined top-5 list: [{ name, score, level }]
+  function topFive(list) {
+    return list.filter(e => e && e.name && e.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+  }
   function loadScores() {
-    const out = { easy: [], medium: [], hard: [], britten: [] };
     try {
       const s = JSON.parse(storeGet(SCORE_KEY));
-      if (s) LEVEL_KEYS.forEach(k => { if (Array.isArray(s[k])) out[k] = s[k]; });
+      if (Array.isArray(s)) return topFive(s);
     } catch (e) {}
-    return out;
+    // Carry over this device's older per-level lists, tagged with their level
+    try {
+      const old = JSON.parse(storeGet('instrument-invaders-scores-v2')) || {};
+      return topFive(['easy', 'medium', 'hard'].flatMap(k => (old[k] || []).map(e => ({ name: e.name, score: e.score, level: k }))));
+    } catch (e) {}
+    return [];
   }
   let localScores = loadScores();
   let boardScores = null; // shared leaderboard, null when not loaded or unreachable
   const shownScores = () => boardScores || localScores;
 
   function saveLocal(entry) {
-    const list = localScores[entry.level];
-    list.push({ name: entry.name, score: entry.score });
-    list.sort((a, b) => b.score - a.score);
-    localScores[entry.level] = list.slice(0, 5);
+    localScores = topFive(localScores.concat([{ name: entry.name, score: entry.score, level: entry.level }]));
     storeSet(SCORE_KEY, JSON.stringify(localScores));
   }
 
@@ -428,7 +437,10 @@
       .finally(() => clearTimeout(timer));
   }
   function applyBoards(d) {
-    if (d && d.ok) boardScores = { easy: d.easy || [], medium: d.medium || [], hard: d.hard || [], britten: d.britten || [] };
+    if (!d || !d.ok) return;
+    if (Array.isArray(d.top)) { boardScores = topFive(d.top); return; }
+    // Older script versions send per-level lists: combine them
+    boardScores = topFive(['easy', 'medium', 'hard'].flatMap(k => (d[k] || []).map(e => Object.assign({ level: k }, e))));
   }
   function refreshBoard() {
     if (!LEADERBOARD_URL) return Promise.resolve(false);
@@ -453,13 +465,17 @@
     for (let i = 0; i < 5; i++) {
       const li = document.createElement('li');
       const e = list[i];
-      if (e) { li.innerHTML = '<span></span><span></span>'; li.children[0].textContent = e.name; li.children[1].textContent = e.score; }
-      else { li.className = 'empty'; li.innerHTML = '<span>---</span><span>0</span>'; }
+      if (e) {
+        li.innerHTML = '<span></span><span class="lvl"></span><span></span>';
+        li.children[0].textContent = e.name;
+        li.children[1].textContent = LEVEL_TAGS[e.level] || '';
+        li.children[2].textContent = e.score.toLocaleString('en-US');
+      } else { li.className = 'empty'; li.innerHTML = '<span>---</span><span></span><span>0</span>'; }
       ol.appendChild(li);
     }
   }
   function renderScores() {
-    LEVEL_KEYS.forEach(k => fillList($('scores-' + k), shownScores()[k]));
+    fillList($('scores-all'), shownScores());
   }
 
   /* ===== Sprites ===== */
@@ -875,7 +891,7 @@
     initAudio();
     difficulty = diff;
     game = {
-      score: 0, lives: START_LIVES, wave: 0, streak: 0, nextLifeAt: EXTRA_LIFE_EVERY,
+      score: 0, basePoints: 0, lives: START_LIVES, wave: 0, streak: 0, nextLifeAt: EXTRA_LIFE_EVERY,
       player: { x: W / 2, invuln: 0, cue: 0 },
       bullet: null, bombs: [], particles: [], texts: [], messages: [],
       invaders: [], fx: 0, fy: 0, dir: 1, stepTimer: 0, marchNote: 0, bombTimer: 0,
@@ -1080,17 +1096,22 @@
     sfx.shoot();
   }
 
+  // Adds points with the level's multiplier and returns what was actually added.
+  // Extra lives count base (unmultiplied) points, so harder levels don't get more lives.
   function addScore(pts) {
     const g = game;
-    g.score += pts;
+    const got = Math.round(pts * (LEVELS[difficulty].points || 1) / 25) * 25;
+    g.score += got;
+    g.basePoints += pts;
     if (!g.britten && !g.testStart && g.score >= BRITTEN_UNLOCK_SCORE && !brittenUnlocked) {
       unlockBritten(true);
       addMessage('Britten Battle unlocked!', '#c9d1e8', 1.5, 1);
     }
-    while (g.score >= g.nextLifeAt) {
+    while (g.basePoints >= g.nextLifeAt) {
       g.nextLifeAt += EXTRA_LIFE_EVERY;
       gainLife();
     }
+    return got;
   }
   function gainLife() {
     const g = game;
@@ -1121,9 +1142,9 @@
     }
     if (v.inst.bonus) {
       if (v.inst.kind === 'sticker') {
-        addScore(BONUS_POINTS);
+        const got = addScore(BONUS_POINTS);
         burst(x, y, GOLD, 24);
-        addMessage('Gold sticker! +' + BONUS_POINTS, GOLD, 0.8 + MESSAGE_EXTRA, 0.8);
+        addMessage('Gold sticker! +' + got, GOLD, 0.8 + MESSAGE_EXTRA, 0.8);
         sfx.bonus();
         gainLife();
         g.hits++; // only the gold sticker counts toward clearing the wave
@@ -1138,9 +1159,9 @@
       // rounded to a multiple of 25 so the leaderboard accepts it
       const base = 100 + Math.min(g.streak - 1, 8) * 25;
       const pts = Math.round(base * (1 + WAVE_POINTS_STEP * (rampWave() - 1)) / 25) * 25;
-      addScore(pts);
+      const got = addScore(pts);
       burst(x, y, colorOf(v.inst), 14);
-      addText('+' + pts, x, y, INK, 0.9, 8);
+      addText('+' + got, x, y, INK, 0.9, 8);
       sfx.correct();
       g.hits++;
       if (g.hits >= g.hitsNeeded || !aliveInvaders().length) waveClear();
@@ -1160,14 +1181,14 @@
   function waveClear() {
     const g = game;
     if (g.britten) { pickTarget(); return; }
-    addScore(500);
+    const clearPts = addScore(500);
     for (const v of g.invaders) {
       if (v.alive) { v.alive = false; burst(invX(v), invY(v), DIM, 4); }
     }
     g.bullet = null;
     g.bombs = [];
     g.target = null;
-    addMessage('Wave ' + g.wave + ' clear! +500', GOLD, 1, 1);
+    addMessage('Wave ' + g.wave + ' clear! +' + clearPts, GOLD, 1, 1);
     sfx.wave();
     state = 'wavebreak';
     g.breakTimer = 2.2;
@@ -1828,13 +1849,13 @@
   }
 
   function qualifies(score) {
-    const list = shownScores()[difficulty];
+    const list = shownScores();
     return score > 0 && (list.length < 5 || score > list[list.length - 1].score);
   }
   function showList() {
     $('hs').classList.remove('show');
     $('over-list').style.display = '';
-    fillList($('scores-over'), shownScores()[difficulty]);
+    fillList($('scores-over'), shownScores());
     $('again').focus({ preventScroll: true });
   }
   function showOver() {
@@ -1843,7 +1864,7 @@
     $('over-title').textContent = game.britten && game.britten.phase === 'won' ? 'Victory!' : 'Game over';
     const winNote = game.britten && game.britten.phase === 'won'
       ? 'You defeated Benjamin Britten in ' + clockText(game.britten.finalTime) + '!' : '';
-    $('over-list-title').textContent = LEVELS[difficulty].label + ' top 5';
+    $('over-list-title').textContent = 'Top 5';
     $('hs').classList.remove('show');
     $('over-list').style.display = 'none';
     $('over-note').textContent = LEADERBOARD_URL ? 'Checking the leaderboard...' : '';
@@ -1856,6 +1877,8 @@
       if (game.testStart) {
         $('over-note').textContent = 'Test game (started past wave 1). Score not saved.';
         showList();
+      } else if (game.britten) {
+        showList(); // Britten Battle scores aren't saved
       } else if (qualifies(game.score)) {
         $('hs').classList.add('show');
         $('initials').value = '';
@@ -2048,7 +2071,7 @@
   buildLogo();
   // '1' = unlocked, '0' = locked from the admin box (stays locked even with old high scores)
   const brittenFlag = storeGet(BRITTEN_UNLOCK_KEY);
-  if (brittenFlag === '1' || (brittenFlag !== '0' && LEVEL_KEYS.some(k => localScores[k].some(e => e.score >= BRITTEN_UNLOCK_SCORE)))) unlockBritten(false);
+  if (brittenFlag === '1' || (brittenFlag !== '0' && localScores.some(e => e.score >= BRITTEN_UNLOCK_SCORE))) unlockBritten(false);
   // Hidden test mode: double-click the title, then type "test" + Enter
   if (TEST_WAVE_PICKER) {
     const unlock = $('unlock');
