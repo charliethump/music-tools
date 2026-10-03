@@ -89,6 +89,12 @@
     border: 1px solid #3d3270; padding: calc(var(--u) * 4) calc(var(--u) * 6);
   }
   #unlock[hidden] { display: none; }
+  #admin-note {
+    position: absolute; right: calc(var(--u) * 8); bottom: calc(var(--u) * 24); z-index: 6;
+    font-size: calc(var(--u) * 6); color: var(--brass); pointer-events: none;
+    transition: opacity .4s; opacity: 0;
+  }
+  #admin-note.show { opacity: 1; }
   #start-wave { font-family: var(--pixel); font-size: calc(var(--u) * 8); width: 6ch; margin-left: calc(var(--u) * 6); text-align: center; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--brass); }
 
   #hs { display: none; flex-direction: column; align-items: center; gap: calc(var(--u) * 9); }
@@ -133,6 +139,7 @@
       <div><h2>Easy top 5</h2><ol id="scores-easy"></ol></div>
       <div><h2>Medium top 5</h2><ol id="scores-medium"></ol></div>
       <div><h2>Hard top 5</h2><ol id="scores-hard"></ol></div>
+      <div><h2>Britten top 5</h2><ol id="scores-britten"></ol></div>
     </div>
     <p id="board-note" class="note"></p>
     <p>Move with the arrow keys or mouse. Fire with the space bar or a click. Press P to pause.</p>
@@ -163,6 +170,7 @@
   </section>
 
   <input id="unlock" type="text" autocomplete="off" spellcheck="false" aria-label="Code" hidden>
+  <div id="admin-note" aria-live="polite"></div>
 
   <div id="corner">
     <button id="pause-btn" class="mini" hidden>Pause</button>
@@ -281,10 +289,11 @@
   // TESTING: put a fermata in the front row of every wave. Set to false when done.
   const TEST_FORCE_FERMATA = false;
 
-  // TESTING: a hidden "start at wave" box for the title screen. To reveal it,
-  // double-click the INSTRUMENT INVADERS title, type "test" in the box that
-  // appears at the bottom right and press Enter. Games started past wave 1 are
-  // never saved to the leaderboard. Set to false to remove the feature entirely.
+  // ADMIN BOX: double-click the INSTRUMENT INVADERS title on the title screen, type a
+  // code in the box at the bottom right and press Enter (not case sensitive):
+  //   test    - shows or hides the "start at wave" box (test games are never saved)
+  //   britten - unlocks or relocks Britten Battle on this device
+  // Set to false to remove the admin box entirely.
   const TEST_WAVE_PICKER = true;
   const BONUS_IMG = 'assets/goldsticker.png';
   const BONUS_POINTS = 500;
@@ -310,7 +319,7 @@
     hard:   { label: 'Hard',   stepTime: 0.8, bombTime: 0.8, bombSpeed: 1,   bombSpeedAdd: 20, hits: 1,   familyChance: 0.25,  pictureClue: false, colorClue: false, bonusChance: 0.25, restChance: 1 / 6, bonusRows: { front: 0.10, middle: 0.45, top: 0.45 } }
   };
   LEVELS.britten = Object.assign({}, LEVELS.medium, { label: 'Britten Battle', pictureClue: false, familyChance: 0 });
-  const LEVEL_KEYS = ['easy', 'medium', 'hard']; // levels with leaderboards
+  const LEVEL_KEYS = ['easy', 'medium', 'hard', 'britten']; // levels with leaderboards
 
   /* ===== Benjamin Britten Battle ===== */
   // Unlocks on this device once any Easy, Medium or Hard game reaches this score.
@@ -321,6 +330,8 @@
   const BRITTEN_HIT_POINTS = 250;    // points per hit on Britten
   const BRITTEN_WIN_POINTS = 2000;   // bonus for defeating him
   const BRITTEN_LIFE_POINTS = 1000;  // bonus per life left at the win
+  const BRITTEN_TIME_BONUS = 10000;  // time bonus for an instant win...
+  const BRITTEN_TIME_RATE = 25;      // ...minus this many points per second (0 after 6:40)
   const BRITTEN_SPEED = 70;          // side-to-side speed (game px per second)
   const BRITTEN_THROW_EVERY = 2.0;   // seconds between clefs at full health...
   const BRITTEN_THROW_MIN = 1.2;     // ...getting faster as he weakens, down to this
@@ -390,7 +401,7 @@
   function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { memStore[k] = v; } }
 
   function loadScores() {
-    const out = { easy: [], medium: [], hard: [] };
+    const out = { easy: [], medium: [], hard: [], britten: [] };
     try {
       const s = JSON.parse(storeGet(SCORE_KEY));
       if (s) LEVEL_KEYS.forEach(k => { if (Array.isArray(s[k])) out[k] = s[k]; });
@@ -417,7 +428,7 @@
       .finally(() => clearTimeout(timer));
   }
   function applyBoards(d) {
-    if (d && d.ok) boardScores = { easy: d.easy || [], medium: d.medium || [], hard: d.hard || [] };
+    if (d && d.ok) boardScores = { easy: d.easy || [], medium: d.medium || [], hard: d.hard || [], britten: d.britten || [] };
   }
   function refreshBoard() {
     if (!LEADERBOARD_URL) return Promise.resolve(false);
@@ -701,7 +712,7 @@
     game.britten = null;
     if (diff === 'britten') {
       startAt = BRITTEN_WAVE;
-      game.britten = { phase: 'front', hp: BRITTEN_HP, x: W / 2, y: -80, dir: 1, throwT: BRITTEN_THROW_EVERY, anim: -1, flash: 0, introT: 0 };
+      game.britten = { phase: 'front', time: 0, hp: BRITTEN_HP, x: W / 2, y: -80, dir: 1, throwT: BRITTEN_THROW_EVERY, anim: -1, flash: 0, introT: 0 };
       game.clefs = [];
     }
     $('start-wave').value = startAt;
@@ -1056,6 +1067,7 @@
   function update(dt) {
     const g = game;
     updateEffects(dt);
+    if (g.britten && g.britten.phase !== 'won') g.britten.time += dt;
 
     if (g.britten && (g.britten.phase === 'enter' || g.britten.phase === 'won')) {
       updateBrittenScene(dt);
@@ -1150,6 +1162,27 @@
     $('britten-sub').textContent = 'boss battle';
     const ready = !screens.title.querySelector('[data-diff="easy"]').disabled;
     if (ready) btn.disabled = false;
+  }
+
+  const clockText = secs => Math.floor(secs / 60) + ':' + String(Math.floor(secs % 60)).padStart(2, '0');
+
+  function relockBritten() {
+    brittenUnlocked = false;
+    storeSet(BRITTEN_UNLOCK_KEY, '0');
+    const btn = screens.title.querySelector('[data-diff="britten"]');
+    btn.classList.add('locked');
+    btn.disabled = true;
+    $('britten-sub').textContent = 'score 10000 to unlock';
+  }
+
+  // Short confirmation in the corner after an admin code
+  let adminNoteTimer = 0;
+  function adminNote(text) {
+    const n = $('admin-note');
+    n.textContent = text;
+    n.classList.add('show');
+    clearTimeout(adminNoteTimer);
+    adminNoteTimer = setTimeout(() => n.classList.remove('show'), 2000);
   }
 
   function frontRowLeft() {
@@ -1288,14 +1321,18 @@
     if (b.hp <= 0) {
       b.phase = 'won';
       b.introT = 0;
-      const bonus = BRITTEN_WIN_POINTS + g.lives * BRITTEN_LIFE_POINTS;
+      const secs = Math.floor(b.time);
+      const timeBonus = Math.max(0, BRITTEN_TIME_BONUS - secs * BRITTEN_TIME_RATE);
+      b.finalTime = secs;
+      const bonus = BRITTEN_WIN_POINTS + g.lives * BRITTEN_LIFE_POINTS + timeBonus;
       addScore(bonus);
       g.bullet = null;
       g.bombs = [];
       g.clefs = [];
       g.target = null;
       addMessage('You defeated Benjamin Britten!', GOLD, 2.2, 0.8, 12);
-      addMessage('Victory bonus +' + bonus, GOLD, 2, 0.8);
+      addMessage('Time ' + clockText(secs) + '  time bonus +' + timeBonus, GOLD, 2, 0.8);
+      addMessage('Victory bonus +' + (bonus - timeBonus), GOLD, 2, 0.8);
       sfx.wave();
     }
   }
@@ -1423,6 +1460,11 @@
     const y = (TOP_BAND - 3) / 2;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
+    if (g.britten) { // battle clock in the top-left corner
+      setFont(8);
+      ctx.fillStyle = DIM;
+      ctx.fillText('Time ' + clockText(g.britten.finalTime ?? g.britten.time), 10, y + 1);
+    }
     const t = g.target;
     if (!t) {
       setFont(10);
@@ -1613,16 +1655,8 @@
     state = 'over';
     $('final-score').textContent = game.score;
     $('over-title').textContent = game.britten && game.britten.phase === 'won' ? 'Victory!' : 'Game over';
-    if (game.britten) {
-      $('hs').classList.remove('show');
-      $('over-list').style.display = 'none';
-      $('over-note').textContent = game.britten.phase === 'won'
-        ? 'You defeated Benjamin Britten!' : 'Britten Battle has no leaderboard.';
-      setScreen('over');
-      needsRender = true;
-      $('again').focus({ preventScroll: true });
-      return;
-    }
+    const winNote = game.britten && game.britten.phase === 'won'
+      ? 'You defeated Benjamin Britten in ' + clockText(game.britten.finalTime) + '!' : '';
     $('over-list-title').textContent = LEVELS[difficulty].label + ' top 5';
     $('hs').classList.remove('show');
     $('over-list').style.display = 'none';
@@ -1632,7 +1666,7 @@
     $('again').focus({ preventScroll: true });
     refreshBoard().then(() => {
       if (state !== 'over') return;
-      $('over-note').textContent = '';
+      $('over-note').textContent = winNote;
       if (game.testStart) {
         $('over-note').textContent = 'Test game (started past wave 1). Score not saved.';
         showList();
@@ -1825,7 +1859,9 @@
   }
 
   buildLogo();
-  if (storeGet(BRITTEN_UNLOCK_KEY) === '1' || LEVEL_KEYS.some(k => localScores[k].some(e => e.score >= BRITTEN_UNLOCK_SCORE))) unlockBritten(false);
+  // '1' = unlocked, '0' = locked from the admin box (stays locked even with old high scores)
+  const brittenFlag = storeGet(BRITTEN_UNLOCK_KEY);
+  if (brittenFlag === '1' || (brittenFlag !== '0' && LEVEL_KEYS.some(k => localScores[k].some(e => e.score >= BRITTEN_UNLOCK_SCORE)))) unlockBritten(false);
   // Hidden test mode: double-click the title, then type "test" + Enter
   if (TEST_WAVE_PICKER) {
     const unlock = $('unlock');
@@ -1837,7 +1873,15 @@
     });
     unlock.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
-        if (unlock.value.trim().toLowerCase() === 'test') { $('test-wave').hidden = false; unlockBritten(false); }
+        const code = unlock.value.trim().toLowerCase();
+        if (code === 'test') {              // toggles the "start at wave" box
+          const show = $('test-wave').hidden;
+          $('test-wave').hidden = !show;
+          adminNote(show ? 'Test mode on' : 'Test mode off');
+        } else if (code === 'britten') {    // toggles Britten Battle on this device
+          if (brittenUnlocked) { relockBritten(); adminNote('Britten Battle locked'); }
+          else { unlockBritten(true); adminNote('Britten Battle unlocked'); }
+        }
         unlock.value = '';
         unlock.hidden = true;
       } else if (e.key === 'Escape') {
