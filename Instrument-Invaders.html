@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Instrument Invaders</title>
+<!-- Favicon: green pixel-art eighth note, built in (no separate file) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiIgc2hhcGUtcmVuZGVyaW5nPSJjcmlzcEVkZ2VzIj48cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHJ4PSIzIiBmaWxsPSIjMDcwNDE4Ii8+PGcgZmlsbD0iIzVlZTA4YSI+PHJlY3QgeD0iOCIgeT0iMi41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iOSIgeT0iMi41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iOCIgeT0iMy41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iMTAiIHk9IjMuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjgiIHk9IjQuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjExIiB5PSI0LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI4IiB5PSI1LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSIxMiIgeT0iNS41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iOCIgeT0iNi41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iMTIiIHk9IjYuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjgiIHk9IjcuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjExIiB5PSI3LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI0IiB5PSI4LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI1IiB5PSI4LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI2IiB5PSI4LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI3IiB5PSI4LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI4IiB5PSI4LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSIzIiB5PSI5LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI0IiB5PSI5LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI1IiB5PSI5LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI2IiB5PSI5LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI3IiB5PSI5LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI4IiB5PSI5LjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSIzIiB5PSIxMC41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iNCIgeT0iMTAuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjUiIHk9IjEwLjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI2IiB5PSIxMC41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iNyIgeT0iMTAuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjgiIHk9IjEwLjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSIzIiB5PSIxMS41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iNCIgeT0iMTEuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjUiIHk9IjExLjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI2IiB5PSIxMS41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iNyIgeT0iMTEuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjgiIHk9IjExLjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI0IiB5PSIxMi41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PHJlY3QgeD0iNSIgeT0iMTIuNSIgd2lkdGg9IjEiIGhlaWdodD0iMSIvPjxyZWN0IHg9IjYiIHk9IjEyLjUiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48cmVjdCB4PSI3IiB5PSIxMi41IiB3aWR0aD0iMSIgaGVpZ2h0PSIxIi8+PC9nPjwvc3ZnPg==">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -135,7 +137,7 @@
       <button class="btn easy" data-diff="easy" disabled>Easy<small>slower</small></button>
       <button class="btn medium" data-diff="medium" disabled>Medium<small>families too</small></button>
       <button class="btn hard" data-diff="hard" disabled>Hard<small>fastest</small></button>
-      <button class="btn britten locked" data-diff="britten" disabled>Britten Battle<small id="britten-sub">score 10000 to unlock</small></button>
+      <button class="btn britten locked" data-diff="britten" disabled>Benjamin Britten<small id="britten-sub">score 10000 to unlock</small></button>
     </div>
     <div class="scores">
       <div><h2>Top 5</h2><ol id="scores-all"></ol></div>
@@ -154,7 +156,7 @@
 
   <section id="over" class="screen">
     <h2 class="big" id="over-title">Game over</h2>
-    <p class="final">Score <span id="final-score">0</span></p>
+    <p class="final"><span id="final-label">Score</span> <span id="final-score">0</span></p>
     <div id="hs">
       <label for="initials">New high score! Type your initials</label>
       <input id="initials" maxlength="3" autocomplete="off" spellcheck="false">
@@ -333,11 +335,7 @@
   const BRITTEN_UNLOCK_KEY = 'instrument-invaders-britten-unlocked';
   const BRITTEN_WAVE = 5;            // speeds and points match this wave of Medium
   const BRITTEN_HP = 10;             // hits needed to defeat him
-  const BRITTEN_HIT_POINTS = 250;    // points per hit on Britten
-  const BRITTEN_WIN_POINTS = 2000;   // bonus for defeating him
-  const BRITTEN_LIFE_POINTS = 1000;  // bonus per life left at the win
-  const BRITTEN_TIME_BONUS = 10000;  // time bonus for an instant win...
-  const BRITTEN_TIME_RATE = 25;      // ...minus this many points per second (0 after 6:40)
+  // No points are earned in the boss battle; the result is the time it took to win.
   const BRITTEN_SPEED = 70;          // side-to-side speed (game px per second)
   const BRITTEN_THROW_EVERY = 2.0;   // seconds between clefs at full health...
   const BRITTEN_THROW_MIN = 1.2;     // ...getting faster as he weakens, down to this
@@ -1109,12 +1107,13 @@
   // Extra lives count base (unmultiplied) points, so harder levels don't get more lives.
   function addScore(pts) {
     const g = game;
+    if (g.britten) return 0; // no points in the boss battle
     const got = Math.round(pts * (LEVELS[difficulty].points || 1) / 25) * 25;
     g.score += got;
     g.basePoints += pts;
     if (!g.britten && !g.testStart && g.score >= BRITTEN_UNLOCK_SCORE && !brittenUnlocked) {
       unlockBritten(true);
-      addMessage('Britten Battle unlocked!', '#c9d1e8', 1.5, 1);
+      addMessage('Benjamin Britten unlocked!', '#c9d1e8', 1.5, 1);
     }
     while (g.basePoints >= g.nextLifeAt) {
       g.nextLifeAt += EXTRA_LIFE_EVERY;
@@ -1153,7 +1152,7 @@
       if (v.inst.kind === 'sticker') {
         const got = addScore(BONUS_POINTS);
         burst(x, y, GOLD, 24);
-        addMessage('Gold sticker! +' + got, GOLD, 0.8 + MESSAGE_EXTRA, 0.8);
+        addMessage(got ? 'Gold sticker! +' + got : 'Gold sticker!', GOLD, 0.8 + MESSAGE_EXTRA, 0.8);
         sfx.bonus();
         gainLife();
         g.hits++; // only the gold sticker counts toward clearing the wave
@@ -1170,7 +1169,7 @@
       const pts = Math.round(base * (1 + WAVE_POINTS_STEP * (rampWave() - 1)) / 25) * 25;
       const got = addScore(pts);
       burst(x, y, colorOf(v.inst), 14);
-      addText('+' + got, x, y, INK, 0.9, 8);
+      if (got) addText('+' + got, x, y, INK, 0.9, 8);
       sfx.correct();
       g.hits++;
       if (g.hits >= g.hitsNeeded || !aliveInvaders().length) waveClear();
@@ -1525,26 +1524,20 @@
     const g = game, b = g.britten;
     b.hp--;
     b.flash = 0.3;
-    addScore(BRITTEN_HIT_POINTS);
     burst(b.x, b.y - 30, '#c9d1e8', 18);
-    addText('+' + BRITTEN_HIT_POINTS, b.x, b.y - 62, INK, 0.9, 8);
     sfx.brittenHit();
     if (b.hp <= 0) {
       b.phase = 'won';
       b.introT = 0;
       const secs = Math.floor(b.time);
-      const timeBonus = Math.max(0, BRITTEN_TIME_BONUS - secs * BRITTEN_TIME_RATE);
       b.finalTime = secs;
-      const bonus = BRITTEN_WIN_POINTS + g.lives * BRITTEN_LIFE_POINTS + timeBonus;
-      addScore(bonus);
       g.bullet = null;
       g.bombs = [];
       g.clefs = [];
       g.target = null;
       musicStop(0.4); // fade the music out under the victory fanfare
       addMessage('You defeated Benjamin Britten!', GOLD, 2.2, 0.8, 12);
-      addMessage('Time ' + clockText(secs) + '  time bonus +' + timeBonus, GOLD, 2, 0.8);
-      addMessage('Victory bonus +' + (bonus - timeBonus), GOLD, 2, 0.8);
+      addMessage('Time ' + clockText(secs), GOLD, 2, 0.8);
       sfx.fanfare();
     }
   }
@@ -1578,7 +1571,7 @@
     if (b.phase === 'front') {
       ctx.textAlign = 'center';
       ctx.fillStyle = DIM;
-      ctx.fillText('Britten Battle', W / 2, y);
+      ctx.fillText('Benjamin Britten', W / 2, y);
       return;
     }
     const label = 'Britten', lw = ctx.measureText(label).width, pip = 7, gap = 2;
@@ -1852,7 +1845,7 @@
     ctx.textBaseline = 'middle';
     ctx.fillStyle = INK;
     ctx.textAlign = 'left';
-    ctx.fillText('Score ' + g.score, 10, y);
+    if (!g.britten) ctx.fillText('Score ' + g.score, 10, y);
     // Power-up countdowns: first one left of the wave label, second one to its right
     const timers = [];
     if (g.restT > 0) timers.push([REST, g.restT, REST_SECONDS, REST_COLOR]);
@@ -1995,14 +1988,17 @@
   }
   function showOver() {
     state = 'over';
-    $('final-score').textContent = game.score;
+    const bossWin = game.britten && game.britten.phase === 'won';
+    $('final-label').textContent = bossWin ? 'Time' : 'Score';
+    $('final-score').textContent = bossWin ? clockText(game.britten.finalTime) : game.score;
+    document.querySelector('#over .final').style.display = game.britten && !bossWin ? 'none' : ''; // no score for a boss battle loss
     $('over-title').textContent = game.britten && game.britten.phase === 'won' ? 'Victory!' : 'Game over';
     const winNote = game.britten && game.britten.phase === 'won'
-      ? 'You defeated Benjamin Britten in ' + clockText(game.britten.finalTime) + '!' : '';
+      ? 'You defeated Benjamin Britten!' : '';
     $('over-list-title').textContent = 'Top 5';
     $('hs').classList.remove('show');
     $('over-list').style.display = 'none';
-    $('over-note').textContent = LEADERBOARD_URL ? 'Checking the leaderboard...' : '';
+    $('over-note').textContent = LEADERBOARD_URL && !game.britten ? 'Checking the leaderboard...' : '';
     setScreen('over');
     needsRender = true;
     $('again').focus({ preventScroll: true });
@@ -2013,7 +2009,10 @@
         $('over-note').textContent = 'Test game (started past wave 1). Score not saved.';
         showList();
       } else if (game.britten) {
-        showList(); // Britten Battle scores aren't saved
+        // Boss battle: no score, so no leaderboard either
+        $('hs').classList.remove('show');
+        $('over-list').style.display = 'none';
+        $('again').focus({ preventScroll: true });
       } else if (qualifies(game.score)) {
         $('hs').classList.add('show');
         $('initials').value = '';
@@ -2224,8 +2223,8 @@
           $('test-wave').hidden = !show;
           adminNote(show ? 'Test mode on' : 'Test mode off');
         } else if (code === 'britten') {    // toggles Britten Battle on this device
-          if (brittenUnlocked) { relockBritten(); adminNote('Britten Battle locked'); }
-          else { unlockBritten(true); adminNote('Britten Battle unlocked'); }
+          if (brittenUnlocked) { relockBritten(); adminNote('Benjamin Britten locked'); }
+          else { unlockBritten(true); adminNote('Benjamin Britten unlocked'); }
         }
         unlock.value = '';
         unlock.hidden = true;
