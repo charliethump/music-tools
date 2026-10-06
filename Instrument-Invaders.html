@@ -1033,29 +1033,33 @@
     return frontInvaders().some(isCorrect);
   }
 
-  // Difficulty ramps up every wave until RAMP_LAST_WAVE, then holds steady.
-  // Early waves ramp quickly; later waves creep up in smaller steps.
-  const RAMP_LAST_WAVE = 15;
-  const WAVE_POINTS_STEP = 0.10; // correct hits are worth 10% more each wave
-  const rampWave = () => Math.min(game.wave, RAMP_LAST_WAVE);
+  // Difficulty ramps up every wave with no ceiling. Waves 1-15 ramp quickly; after
+  // LATE_WAVE, each wave keeps getting a little harder (LATE_RAMP), so no game lasts forever.
+  const LATE_WAVE = 15;
+  const LATE_RAMP = 0.96;        // after wave 15: marching and sour-note timing x0.96 per wave (4% faster)
+  const LATE_FALL_STEP = 4;      // after wave 15: sour notes fall 4 px/s faster per wave
+  const WAVE_POINTS_STEP = 0.10; // correct hits are worth 10% more each wave, with no cap
+  const rampWave = () => game.wave;
+  const lateFactor = w => Math.pow(LATE_RAMP, Math.max(0, w - LATE_WAVE));
 
   function stepInterval() {
     const g = game, w = rampWave();
     const frac = aliveInvaders().length / (ROWS * COLS);
-    // 0.62s at wave 1, -0.06 per wave to 0.20s at wave 8, then -0.01 per wave to 0.13s at wave 15
-    const base = (w <= 8 ? 0.62 - (w - 1) * 0.06 : 0.20 - (w - 8) * 0.01) * LEVELS[difficulty].stepTime;
+    // 0.62s at wave 1, -0.06 per wave to 0.20s at wave 8, -0.01 per wave to 0.13s at wave 15, then 4% faster each wave
+    const early = w <= 8 ? 0.62 - (w - 1) * 0.06 : 0.20 - (Math.min(w, LATE_WAVE) - 8) * 0.01;
+    const base = early * lateFactor(w) * LEVELS[difficulty].stepTime;
     return base * (0.35 + 0.65 * frac);
   }
   function bombInterval() {
     const w = rampWave();
-    // 2.4s at wave 1, -0.18 per wave to 0.96s at wave 9, then -0.03 per wave to 0.78s at wave 15
-    const base = w <= 9 ? 2.4 - (w - 1) * 0.18 : 0.96 - (w - 9) * 0.03;
-    return base * LEVELS[difficulty].bombTime;
+    // 2.4s at wave 1, -0.18 per wave to 0.96s at wave 9, -0.03 per wave to 0.78s at wave 15, then 4% more often each wave
+    const early = w <= 9 ? 2.4 - (w - 1) * 0.18 : 0.96 - (Math.min(w, LATE_WAVE) - 9) * 0.03;
+    return early * lateFactor(w) * LEVELS[difficulty].bombTime;
   }
   function bombSpeed() {
     const lvl = LEVELS[difficulty], w = rampWave();
-    // 95 at wave 1, +10 per wave to 185 at wave 10, then +4 per wave to 205 at wave 15
-    const base = w <= 10 ? 85 + w * 10 : 185 + (w - 10) * 4;
+    // 95 at wave 1, +10 per wave to 185 at wave 10, +4 per wave to 205 at wave 15, then +4 per wave
+    const base = w <= 10 ? 85 + w * 10 : 185 + (w - 10) * LATE_FALL_STEP;
     return base * lvl.bombSpeed + lvl.bombSpeedAdd;
   }
 
@@ -1163,7 +1167,7 @@
     }
     if (isCorrect(v)) {
       g.streak++;
-      // Base 100 + 25 per hit in a row, then worth 10% more per wave (up to RAMP_LAST_WAVE),
+      // Base 100 + 25 per hit in a row, then worth 10% more per wave (no cap),
       // rounded to a multiple of 25 so the leaderboard accepts it
       const base = 100 + Math.min(g.streak - 1, 8) * 25;
       const pts = Math.round(base * (1 + WAVE_POINTS_STEP * (rampWave() - 1)) / 25) * 25;
