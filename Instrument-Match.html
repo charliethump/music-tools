@@ -1581,12 +1581,32 @@
     }
     fitGrid(studyBoard, INSTRUMENTS.length);
   }
+  // Study cards are dealt the first time, then again only after a level is completed.
+  // Remembered on this Chromebook, so refreshing the page doesn't re-deal either.
+  let studyNeedsDeal = true;
+  try { studyNeedsDeal = localStorage.getItem('imgStudyDealt') !== '1'; } catch (e) {}
+  function setStudyNeedsDeal(v) {
+    studyNeedsDeal = v;
+    try { localStorage.setItem('imgStudyDealt', v ? '0' : '1'); } catch (e) {}
+  }
+
   function openStudy() {
-    buildStudy(); // fresh layout with every card picture-side up
-    studyBoard.classList.add('predeal');
+    if (studyNeedsDeal) {
+      buildStudy(); // fresh table, every card picture-side up
+      studyBoard.classList.add('predeal');
+      showScreen('study');
+      layoutStudy();
+      dealStudy();
+      setStudyNeedsDeal(false);
+      return;
+    }
+    if (!studyCards.length) buildStudy(); // first visit after a page refresh: lay them out, no deal
+    studyCards.forEach((c) => {
+      c.el.classList.remove('flipped');
+      c.el.setAttribute('aria-label', 'Picture of an instrument. Tap to see its name.');
+    });
     showScreen('study');
     layoutStudy();
-    dealStudy();
   }
 
   // Same deal as the game levels, minus the shuffle: the pile lands, slides to the
@@ -1834,6 +1854,7 @@
   }
 
   function finish() {
+    setStudyNeedsDeal(true); // completing a level earns a fresh study deal
     finalMs = Math.round(banked);
     sfx.win();
     later(showFinish, 350);
@@ -1986,9 +2007,7 @@
   document.querySelectorAll('.js-fs').forEach((b) => b.addEventListener('click', toggleFullscreen));
   document.getElementById('study-btn').addEventListener('click', openStudy);
   document.getElementById('study-back').addEventListener('click', () => {
-    studyToken++; // stop any deal in progress
-    studyDealing = false;
-    sfx.stopAll();
+    skipStudyDeal(); // a deal in progress finishes instantly, so the table is ready next time
     showScreen('splash');
   });
   // Tap anywhere (except the back button) or press a key to skip the study deal.
