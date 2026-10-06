@@ -146,11 +146,11 @@
   .top-left { display: flex; align-items: center; gap: 14px; }
   .clock { display: flex; flex-direction: column; line-height: 1.05; }
   .timer {
-    font-size: clamp(24px, 3.4vw, 36px);
+    font-size: clamp(32px, 4.6vw, 50px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
-  .pairs { font-size: 14px; color: var(--muted-light); }
+  .pairs { font-size: 19px; color: var(--muted-light); }
   .status {
     font-family: var(--display);
     font-size: clamp(20px, 2.8vw, 30px);
@@ -162,8 +162,8 @@
   .status.bad { color: var(--text-light); }
   .top-right { display: flex; justify-content: flex-end; gap: 8px; }
   .icon-btn {
-    width: 44px;
-    height: 44px;
+    width: 58px;
+    height: 58px;
     border-radius: 50%;
     border: none;
     background: rgba(255, 255, 255, .12);
@@ -174,7 +174,7 @@
     flex: none;
   }
   .icon-btn:hover { background: rgba(255, 255, 255, .22); }
-  .icon-btn svg { width: 22px; height: 22px; }
+  .icon-btn svg { width: 30px; height: 30px; }
   .icon-btn[hidden] { display: none; }
 
   .board-wrap { flex: 1; position: relative; min-height: 0; }
@@ -1477,7 +1477,7 @@
       if (Math.abs(r.width - introSize.w) > 2 || Math.abs(r.height - introSize.h) > 2) skipIntro();
     }
     layoutBoard();
-  }).observe(els.board);
+  }).observe(els.board.parentElement); // watch the wrapper: layoutBoard changes the board's own padding
 
   loadBoards();
 })();
