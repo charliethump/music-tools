@@ -1890,6 +1890,7 @@
     els.saveBtn.disabled = false;
     els.initials.disabled = false;
     document.getElementById('trophy').className = 'trophy';
+    setExitButtons(true);
     els.saveBox.hidden = true;
     els.finishOverlay.classList.add('show');
     if (!CONFIG.SCRIPT_URL) {
@@ -1899,7 +1900,12 @@
     }
     els.saveMsg.textContent = 'Checking the leaderboard...';
     const shownFor = finalMs;
+    // Grey out Play again / Main menu until the check finishes, or 5 seconds at most.
+    setExitButtons(false);
+    const unlock = setTimeout(() => setExitButtons(true), 5000);
     fetchBoards().then((boards) => {
+      clearTimeout(unlock);
+      setExitButtons(true);
       if (state !== 'done' || finalMs !== shownFor) return; // student already moved on
       const rows = (boards && boards[level]) || [];
       const size = CONFIG.LEADERBOARD_SIZE;
@@ -1913,6 +1919,13 @@
         els.initials.focus();
       }
     });
+  }
+
+  let exitsLocked = false;
+  function setExitButtons(on) {
+    exitsLocked = !on;
+    els.againBtn.disabled = !on;
+    els.menuBtn.disabled = !on;
   }
 
   async function saveTime(e) {
@@ -2021,7 +2034,10 @@
     if (btn) onCard(Number(btn.dataset.i));
   });
   els.pauseBtn.addEventListener('click', () => (state === 'paused' ? resume() : pause()));
-  els.backBtn.addEventListener('click', () => (state === 'done' ? goToMenu() : pause()));
+  els.backBtn.addEventListener('click', () => {
+    if (state === 'done') { if (!exitsLocked) goToMenu(); }
+    else pause();
+  });
   els.resumeBtn.addEventListener('click', resume);
   els.quitBtn.addEventListener('click', goToMenu);
   els.menuBtn.addEventListener('click', goToMenu);
