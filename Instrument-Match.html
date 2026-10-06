@@ -170,13 +170,18 @@
   }
   .alltime-cols {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 320px));
-    gap: clamp(12px, 2vw, 24px);
+    grid-template-columns: repeat(3, minmax(0, 370px));
+    gap: clamp(10px, 1.6vw, 22px);
     justify-content: center;
     width: 100%;
   }
   .alltime-cols .board-list h2 { font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--text-light); }
-  .alltime-cols .board-list li { grid-template-columns: 1.7em 2.8em auto 1fr; }
+  /* Columns are shared across all rows (subgrid) so initials, times and dates line up,
+     and the initials column grows to fit the longest name. */
+  .alltime-cols .board-list ol { display: grid; grid-template-columns: 1.7em max-content max-content minmax(0, 1fr); column-gap: 12px; }
+  .alltime-cols .board-list li { grid-column: 1 / -1; grid-template-columns: subgrid; column-gap: 12px; }
+  .alltime-cols .board-list li .date { white-space: normal; font-size: 13px; } /* in a narrow window the date wraps, not the name */
+  .board-list li span { white-space: nowrap; } /* longer names like MR. LARSON stay on one line */
   .board-list .date { text-align: right; color: var(--muted-light); font-size: 14px; white-space: nowrap; }
 
   @media (max-width: 640px) {
