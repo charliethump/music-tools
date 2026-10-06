@@ -1986,6 +1986,17 @@
     fillList($('scores-over'), shownScores());
     $('again').focus({ preventScroll: true });
   }
+  // Play again / Menu stay grayed out until the leaderboard check finishes,
+  // or for OVER_BUTTON_WAIT seconds at most, so kids don't skip past saving a high score.
+  const OVER_BUTTON_WAIT = 5;
+  let overButtonTimer = 0;
+  function setOverButtons(enabled) {
+    clearTimeout(overButtonTimer);
+    $('again').disabled = !enabled;
+    $('menu').disabled = !enabled;
+    if (enabled && state === 'over' && !$('hs').classList.contains('show')) $('again').focus({ preventScroll: true });
+  }
+
   function showOver() {
     state = 'over';
     const bossWin = game.britten && game.britten.phase === 'won';
@@ -2001,9 +2012,14 @@
     $('over-note').textContent = LEADERBOARD_URL && !game.britten ? 'Checking the leaderboard...' : '';
     setScreen('over');
     needsRender = true;
-    $('again').focus({ preventScroll: true });
-    refreshBoard().then(() => {
+    const checking = LEADERBOARD_URL && !game.britten;
+    if (checking) {
+      setOverButtons(false);
+      overButtonTimer = setTimeout(() => setOverButtons(true), OVER_BUTTON_WAIT * 1000);
+    } else setOverButtons(true);
+    (game.britten ? Promise.resolve() : refreshBoard()).then(() => {
       if (state !== 'over') return;
+      setOverButtons(true);
       $('over-note').textContent = winNote;
       if (game.testStart) {
         $('over-note').textContent = 'Test game (started past wave 1). Score not saved.';
