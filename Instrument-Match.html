@@ -44,8 +44,27 @@
     flex-direction: column;
     align-items: center;
     overflow-y: auto;
-    padding: clamp(16px, 4vh, 40px) 16px 28px;
+    padding: 10px 14px 28px;
   }
+  .menu-bar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: clamp(4px, 2vh, 16px);
+  }
+  .btn-light.btn-small {
+    margin-top: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    padding: 10px 18px;
+  }
+  #study { flex-direction: column; }
+  .study-title { font-family: var(--display); font-size: clamp(22px, 2.6vw, 30px); }
+  /* Study cards are two-sided: picture first, name on the flip side */
+  .study-card .face.side-a { transform: none; }
   .title {
     font-family: var(--display);
     font-weight: 400;
@@ -224,7 +243,7 @@
   .board.hidden { visibility: hidden; }
   .board { z-index: 1; }
   .board.predeal .card { visibility: hidden; }
-  .status.hint { font-family: var(--body); font-size: 16px; color: var(--muted-light); }
+  .status.hint { font-family: var(--body); font-size: 16px; color: var(--muted-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
   .card {
     width: var(--card-w);
@@ -328,7 +347,36 @@
   .card.miss .front { background: var(--miss); }
   .card.matched .front { box-shadow: 0 0 0 3px var(--brass), 0 0 18px var(--brass); }
   .card { transform: rotate(var(--tilt, 0deg)); }
-  .card.gone { opacity: 0; transform: rotate(var(--tilt, 0deg)) scale(.88); pointer-events: none; }
+  .card.gone { visibility: hidden; pointer-events: none; }
+
+  /* Discard pile for matched pairs, bottom-left */
+  .discard { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .discard-slot {
+    position: absolute;
+    left: var(--pile-left, 14px);
+    bottom: 14px;
+    width: var(--pile-w, 70px);
+    aspect-ratio: 2.5 / 3.5;
+    border: 2px dashed rgba(255, 255, 255, .22);
+    border-radius: 8px;
+  }
+  .discard-slot span {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px + var(--pile-rise, 0px)); /* rises with the pile */
+    transform: translateX(-50%);
+    font-size: 13px;
+    color: var(--muted-light);
+    white-space: nowrap;
+  }
+  .discard-card {
+    position: absolute;
+    aspect-ratio: 2.5 / 3.5;
+    transform-origin: 50% 50%;
+    border-radius: calc(var(--card-w) * .07); /* same corners as the cards on the board */
+  }
+  .discard-card .face { transform: none; box-shadow: 0 1px 0 rgba(20, 25, 50, .45), 0 2px 5px rgba(0, 0, 0, .3); }
+  .discard-card.greyed { filter: grayscale(1) brightness(.72) contrast(.9); }
 
   /* ---------- Overlays ---------- */
   .overlay {
@@ -400,10 +448,33 @@
 
 <!-- Splash -->
 <section id="splash" class="screen active" aria-labelledby="game-title">
+  <div class="menu-bar">
+    <button class="btn-light btn-small" id="study-btn" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5v13"/></svg> Study mode</button>
+    <div class="top-right">
+      <button class="icon-btn js-sound" type="button" aria-label="Sound on"></button>
+      <button class="icon-btn js-fs" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </div>
   <h1 class="title" id="game-title">Instrument Matching Game</h1>
   <p class="subtitle">Match each instrument's name to its picture as fast as you can.</p>
   <div class="levels" id="levels"></div>
   <button class="btn-light" id="alltime-btn" type="button">Top Scores of All Time</button>
+</section>
+
+<!-- Study mode -->
+<section id="study" class="screen" aria-label="Study mode">
+  <div class="topbar">
+    <div class="top-left">
+      <button class="icon-btn" id="study-back" type="button" aria-label="Back to the main menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="study-title">Study mode</span>
+    </div>
+    <div class="status hint" id="study-hint">Tap a picture to see its name. Tap again to flip it back.</div>
+    <div class="top-right">
+      <button class="icon-btn js-sound" type="button" aria-label="Sound on"></button>
+      <button class="icon-btn js-fs" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </div>
+  <div class="board-wrap"><div class="board" id="study-board"></div></div>
 </section>
 
 <!-- All-time leaderboard -->
@@ -429,8 +500,8 @@
     <div class="status" id="status" aria-live="polite"></div>
     <div class="top-right">
       <button class="icon-btn" id="pause-btn" type="button" aria-label="Pause"></button>
-      <button class="icon-btn" id="sound-btn" type="button" aria-label="Sound on"></button>
-      <button class="icon-btn" id="fs-btn" type="button" aria-label="Full screen">
+      <button class="icon-btn js-sound" id="sound-btn" type="button" aria-label="Sound on"></button>
+      <button class="icon-btn js-fs" id="fs-btn" type="button" aria-label="Full screen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
       </button>
     </div>
@@ -438,6 +509,9 @@
 
   <div class="board-wrap">
     <div class="board" id="board"></div>
+    <div class="discard" id="discard" aria-hidden="true">
+      <div class="discard-slot"><span>Matched</span></div>
+    </div>
 
     <div class="overlay" id="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title">
       <div class="panel">
@@ -600,7 +674,7 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    splash: $('splash'), game: $('game'), alltime: $('alltime'), levels: $('levels'), board: $('board'),
+    splash: $('splash'), game: $('game'), study: $('study'), discard: $('discard'), alltime: $('alltime'), levels: $('levels'), board: $('board'),
     timer: $('timer'), pairs: $('pairs'), status: $('status'),
     pauseBtn: $('pause-btn'), soundBtn: $('sound-btn'), fsBtn: $('fs-btn'), backBtn: $('back-btn'),
     pauseOverlay: $('pause-overlay'), resumeBtn: $('resume-btn'), quitBtn: $('quit-btn'),
@@ -1050,6 +1124,7 @@
   function showScreen(which) {
     els.splash.classList.toggle('active', which === 'splash');
     els.alltime.classList.toggle('active', which === 'alltime');
+    els.study.classList.toggle('active', which === 'study');
     els.game.classList.toggle('active', which === 'game');
   }
 
@@ -1073,6 +1148,7 @@
     ]));
 
     els.board.innerHTML = '';
+    clearPile();
     deck.forEach((card, i) => {
       card.up = false;
       card.tilt = randomTilt();
@@ -1425,7 +1501,20 @@
   function layoutBoard() {
     if (!deck.length || !els.game.classList.contains('active')) return;
     const n = deck.length;
-    const rect = els.board.getBoundingClientRect();
+    // Left gutter holds the discard pile.
+    const wrapW = els.board.parentElement.getBoundingClientRect().width;
+    pileW = Math.round(Math.min(92, Math.max(52, wrapW * 0.06)));
+    const gutter = pileW + 28;
+    els.board.style.left = gutter + 'px';
+    els.discard.style.setProperty('--pile-w', pileW + 'px');
+    els.discard.style.setProperty('--pile-left', Math.round((gutter - pileW) / 2) + 'px');
+    fitGrid(els.board, n);
+    placePile();
+  }
+
+  // Picks the column count that gives the biggest cards for the space available.
+  function fitGrid(boardEl, n) {
+    const rect = boardEl.getBoundingClientRect();
     const W = rect.width;
     const H = rect.height;
     if (W <= 0 || H <= 0) return;
@@ -1441,13 +1530,148 @@
       if (rows * cols !== n) w *= 0.94; // prefer full rows
       if (w > best.w) best = { w, cols };
     }
-    els.board.style.setProperty('--cols', best.cols);
-    els.board.style.setProperty('--gap', gap + 'px');
+    boardEl.style.setProperty('--cols', best.cols);
+    boardEl.style.setProperty('--gap', gap + 'px');
     const cardW = Math.floor(Math.min(best.w, 200));
-    els.board.style.setProperty('--card-w', cardW + 'px');
+    boardEl.style.setProperty('--card-w', cardW + 'px');
     // Side padding limits each row to exactly best.cols cards.
     const rowW = best.cols * cardW + (best.cols - 1) * gap;
-    els.board.style.setProperty('--pad-x', Math.max(0, Math.floor((W - rowW) / 2) - 1) + 'px');
+    boardEl.style.setProperty('--pad-x', Math.max(0, Math.floor((W - rowW) / 2) - 1) + 'px');
+  }
+
+  /* ---------- Study mode ---------- */
+  const studyBoard = document.getElementById('study-board');
+  const STUDY_TIP = 'Tap a picture to see its name. Tap again to flip it back.';
+  let studyCards = [];
+  let studyDealing = false;
+  let studyToken = 0;
+  let studySize = null;
+
+  function buildStudy() {
+    studyBoard.innerHTML = '';
+    studyCards = [];
+    INSTRUMENTS.forEach((inst) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'card study-card';
+      btn.style.setProperty('--tilt', randomTilt().toFixed(2) + 'deg');
+      btn.setAttribute('aria-label', `Picture of an instrument. Tap to see its name.`);
+      const corner = '&#9834;';
+      const src = EMBEDDED_IMAGES[inst.file] || CONFIG.IMAGE_FOLDER + inst.file;
+      btn.innerHTML =
+        `<span class="card-inner">` +
+          `<span class="face front side-a has-photo"><span class="corner tl" aria-hidden="true">${corner}</span><img alt="" draggable="false" src="${src}"><span class="corner br" aria-hidden="true">${corner}</span></span>` +
+          `<span class="face front side-b"><span class="corner tl" aria-hidden="true">${corner}</span><span class="name">${esc(inst.name)}</span><span class="corner br" aria-hidden="true">${corner}</span></span>` +
+        `</span>`;
+      btn.addEventListener('click', () => {
+        if (studyDealing) return;
+        const flipped = btn.classList.toggle('flipped');
+        btn.setAttribute('aria-label', flipped ? `${inst.name}. Tap to see the picture.` : 'Picture of an instrument. Tap to see its name.');
+        sfx.flip();
+      });
+      studyBoard.appendChild(btn);
+      studyCards.push({ el: btn, tilt: parseFloat(btn.style.getPropertyValue('--tilt')) });
+    });
+  }
+  function layoutStudy() {
+    if (!els.study.classList.contains('active')) return;
+    if (studyDealing && studySize) {
+      const r = studyBoard.getBoundingClientRect();
+      if (Math.abs(r.width - studySize.w) > 2 || Math.abs(r.height - studySize.h) > 2) skipStudyDeal();
+    }
+    fitGrid(studyBoard, INSTRUMENTS.length);
+  }
+  function openStudy() {
+    buildStudy(); // fresh layout with every card picture-side up
+    studyBoard.classList.add('predeal');
+    showScreen('study');
+    layoutStudy();
+    dealStudy();
+  }
+
+  // Same deal as the game levels, minus the shuffle: the pile lands, slides to the
+  // bottom-right spot, then deals out. Every timing matches the levels.
+  async function dealStudy() {
+    const token = ++studyToken;
+    const live = () => token === studyToken;
+    const n = studyCards.length;
+    const k = n / (LEVELS.Easy.pairs * 2);
+    const rect = studyBoard.getBoundingClientRect();
+    studySize = { w: rect.width, h: rect.height };
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    studyCards.forEach((c) => {
+      const r = c.el.getBoundingClientRect();
+      c.base = { x: cx - (r.left + r.width / 2), y: cy - (r.top + r.height / 2) };
+    });
+    studyDealing = true;
+    document.getElementById('study-hint').textContent = 'Tap to skip';
+
+    // Pile lands in the middle: first card on top
+    const order = studyCards.slice().reverse(); // bottom to top
+    const pileOn = () => {
+      order.forEach((c) => c.el.classList.add('in-pile'));
+      order[0].el.classList.add('pile-base');
+    };
+    const lands = order.map((c, j) => {
+      c.el.style.zIndex = j + 1;
+      c.pose = { x: pileX(j), y: -70 - j * STACK_STEP, r: -4, s: 1.1 };
+      return moveCard(c, { x: pileX(j), y: -j * STACK_STEP, r: c.tilt, s: 1 }, INTRO.LAND_MS, 0, 'cubic-bezier(.3,1.25,.5,1)');
+    });
+    pileOn();
+    studyBoard.classList.remove('predeal');
+    sfx.deal([INTRO.LAND_MS - 40]);
+    await waitFor(lands);
+    if (!live()) return;
+    await sleep(INTRO.SETTLE_MS);
+    if (!live()) return;
+
+    // Slide to the bottom-right spot
+    const last = studyCards[n - 1].base;
+    const moves = order.map((c, j) =>
+      moveCard(c, { x: -last.x + pileX(j), y: -last.y - j * STACK_STEP, r: c.tilt, s: 1 }, INTRO.DECK_MOVE_MS, 0, 'ease-in-out')
+    );
+    await waitFor(moves);
+    if (!live()) return;
+    await sleep(INTRO.SETTLE_MS);
+    if (!live()) return;
+
+    // Deal in order
+    const gapMs = (INTRO.DEAL_TOTAL_MS - INTRO.DEAL_FLIGHT_MS) * k / n;
+    const times = [];
+    const deals = studyCards.map((c, i) => {
+      const delay = i * gapMs;
+      times.push(delay);
+      setTimeout(() => { if (live()) c.el.classList.remove('in-pile', 'pile-base'); }, delay);
+      const tilt = (Math.random() * 2 - 1) * 14;
+      return c.el.animate([
+        { transform: poseT(c, c.pose), zIndex: 1000 + i },
+        { transform: `translate(${(c.base.x + c.pose.x) * 0.4}px, ${(c.base.y + c.pose.y) * 0.4}px) rotate(${tilt}deg)`, zIndex: 1000 + i, offset: 0.55 },
+        { transform: `translate(0px, 0px) rotate(${c.tilt}deg)`, zIndex: 1000 + i }
+      ], { duration: INTRO.DEAL_FLIGHT_MS, delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+    });
+    sfx.deal(times);
+    await waitFor(deals);
+    if (!live()) return;
+    finishStudyDeal();
+  }
+
+  function finishStudyDeal() {
+    studyCards.forEach((c) => {
+      c.el.getAnimations().forEach((a) => a.cancel());
+      c.el.style.zIndex = '';
+      c.el.classList.remove('in-pile', 'pile-base');
+    });
+    studyBoard.classList.remove('predeal');
+    studyDealing = false;
+    document.getElementById('study-hint').textContent = STUDY_TIP;
+  }
+
+  function skipStudyDeal() {
+    if (!studyDealing) return;
+    studyToken++;
+    sfx.stopAll();
+    finishStudyDeal();
   }
 
   /* ---------- Play ---------- */
@@ -1466,6 +1690,99 @@
     card.up = false;
     card.el.classList.remove('flipped', 'miss');
     setCardLabel(card);
+  }
+
+  /* ---------- Discard pile ---------- */
+  const DISCARD_MS = 900;   // pair meets, then flies to the pile
+  let pileW = 70;
+  let pileCount = 0;
+
+  function pileCenter() {
+    const wrap = els.board.parentElement.getBoundingClientRect();
+    const h = pileW * 1.4;
+    return { x: (pileW + 28) / 2, y: wrap.height - 14 - h / 2 };
+  }
+
+  // Resting spot of one discarded card: each pair sits 3px higher than the last,
+  // the second card of a pair a little down and right of the first.
+  function pileRest(clone) {
+    const c = pileCenter();
+    const k = Number(clone.dataset.k);
+    const top = clone.dataset.top === '1';
+    const w = Number(clone.dataset.w);
+    const s = pileW / w;
+    const off = top ? 0.06 : -0.06;
+    return {
+      left: c.x - w / 2 + off * pileW,
+      top: c.y - (w * 1.4) / 2 + off * 0.7 * pileW - k * 3,
+      transform: `rotate(${clone.dataset.r}deg) scale(${s})`
+    };
+  }
+
+  function placePile() {
+    els.discard.querySelectorAll('.discard-card').forEach((clone) => {
+      if (clone.getAnimations().length) return; // still flying; it lands where the pile is now
+      const r = pileRest(clone);
+      clone.style.left = r.left + 'px';
+      clone.style.top = r.top + 'px';
+      clone.style.transform = r.transform;
+    });
+  }
+
+  function clearPile() {
+    els.discard.querySelectorAll('.discard-card').forEach((el) => el.remove());
+    pileCount = 0;
+    els.discard.style.setProperty('--pile-rise', '0px');
+  }
+
+  function discardPair(a, b) {
+    const wrap = els.board.parentElement.getBoundingClientRect();
+    const k = pileCount++;
+    els.discard.style.setProperty('--pile-rise', (pileCount * 3 + 8) + 'px');
+    const centers = [a, b].map((c) => {
+      const r = c.el.getBoundingClientRect();
+      return { x: r.left + r.width / 2 - wrap.left, y: r.top + r.height / 2 - wrap.top };
+    });
+    const meet = { x: (centers[0].x + centers[1].x) / 2, y: (centers[0].y + centers[1].y) / 2 };
+    [a, b].forEach((card, idx) => {
+      const w = card.el.offsetWidth;
+      const h = card.el.offsetHeight;
+      const clone = document.createElement('div');
+      clone.className = 'discard-card';
+      clone.innerHTML = card.el.querySelector('.front').outerHTML;
+      clone.style.width = w + 'px';
+      clone.style.setProperty('--card-w', w + 'px');
+      clone.style.zIndex = k * 2 + idx + 1;
+      clone.dataset.k = k;
+      clone.dataset.top = idx;
+      clone.dataset.w = w;
+      clone.dataset.r = ((Math.random() * 2 - 1) * 8).toFixed(1);
+      // Start exactly over the card on the board
+      const start = centers[idx];
+      clone.style.left = (start.x - w / 2) + 'px';
+      clone.style.top = (start.y - h / 2) + 'px';
+      els.discard.appendChild(clone);
+
+      const rest = pileRest(clone);
+      const meetOff = idx ? 0.08 * w : -0.08 * w;
+      const toMeet = { x: meet.x - start.x + meetOff, y: meet.y - start.y + meetOff * 0.7 };
+      const toPile = { x: rest.left - (start.x - w / 2), y: rest.top - (start.y - h / 2) };
+      const anim = clone.animate([
+        { transform: `translate(0px, 0px) rotate(${card.tilt}deg) scale(1)`, filter: 'grayscale(0) brightness(1)' },
+        { transform: `translate(${toMeet.x}px, ${toMeet.y}px) rotate(0deg) scale(1.06)`, filter: 'grayscale(0) brightness(1)', offset: 0.38 },
+        { transform: `translate(${toMeet.x}px, ${toMeet.y}px) rotate(0deg) scale(1.06)`, filter: 'grayscale(.2) brightness(.97)', offset: 0.48 },
+        { transform: `translate(${toPile.x}px, ${toPile.y}px) ${rest.transform}`, filter: 'grayscale(1) brightness(.72) contrast(.9)' }
+      ], { duration: DISCARD_MS, easing: 'ease-in-out' });
+      anim.onfinish = () => {
+        clone.classList.add('greyed');
+        const r = pileRest(clone); // pile may have moved if the window was resized
+        clone.style.left = r.left + 'px';
+        clone.style.top = r.top + 'px';
+        clone.style.transform = r.transform;
+      };
+      anim.oncancel = anim.onfinish;
+    });
+    later(() => sfx.deal([0]), DISCARD_MS - 60);
   }
 
   function onCard(i) {
@@ -1496,8 +1813,9 @@
         sfx.match();
       }, FLIP_MS);
       later(() => {
+        discardPair(a, b);
         [a, b].forEach((c) => { c.el.classList.add('gone'); c.el.disabled = true; });
-        if (allDone) finish();
+        if (allDone) later(finish, DISCARD_MS);
       }, FLIP_MS + 450);
     } else {
       lock = true;
@@ -1626,6 +1944,7 @@
     state = 'menu';
     deck = [];
     els.board.innerHTML = '';
+    clearPile();
     els.pauseOverlay.classList.remove('show');
     els.finishOverlay.classList.remove('show');
     showScreen('splash');
@@ -1635,8 +1954,10 @@
   /* ---------- Sound + full screen buttons ---------- */
   function setSoundIcon() {
     const m = sfx.isMuted();
-    els.soundBtn.innerHTML = m ? ICONS.soundOff : ICONS.soundOn;
-    els.soundBtn.setAttribute('aria-label', m ? 'Sound off. Turn sound on' : 'Sound on. Turn sound off');
+    document.querySelectorAll('.js-sound').forEach((btn) => {
+      btn.innerHTML = m ? ICONS.soundOff : ICONS.soundOn;
+      btn.setAttribute('aria-label', m ? 'Sound off. Turn sound on' : 'Sound on. Turn sound off');
+    });
   }
   function toggleFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -1649,7 +1970,7 @@
   setSoundIcon();
   setPauseIcon();
   document.documentElement.style.setProperty('--back-img', `url("${CONFIG.CARD_BACK}")`);
-  if (!document.fullscreenEnabled) els.fsBtn.hidden = true;
+  if (!document.fullscreenEnabled) document.querySelectorAll('.js-fs').forEach((b) => { b.hidden = true; });
 
   els.board.addEventListener('click', (e) => {
     const btn = e.target.closest('.card');
@@ -1661,8 +1982,31 @@
   els.quitBtn.addEventListener('click', goToMenu);
   els.menuBtn.addEventListener('click', goToMenu);
   els.againBtn.addEventListener('click', () => startLevel(level));
-  els.soundBtn.addEventListener('click', () => { sfx.toggle(); setSoundIcon(); });
-  els.fsBtn.addEventListener('click', toggleFullscreen);
+  document.querySelectorAll('.js-sound').forEach((b) => b.addEventListener('click', () => { sfx.toggle(); setSoundIcon(); }));
+  document.querySelectorAll('.js-fs').forEach((b) => b.addEventListener('click', toggleFullscreen));
+  document.getElementById('study-btn').addEventListener('click', openStudy);
+  document.getElementById('study-back').addEventListener('click', () => {
+    studyToken++; // stop any deal in progress
+    studyDealing = false;
+    sfx.stopAll();
+    showScreen('splash');
+  });
+  // Tap anywhere (except the back button) or press a key to skip the study deal.
+  els.study.addEventListener('pointerdown', (e) => {
+    if (!studyDealing || e.target.closest('#study-back')) return;
+    skipStudyDeal();
+    const eat = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+    els.study.addEventListener('click', eat, { capture: true, once: true });
+    setTimeout(() => els.study.removeEventListener('click', eat, { capture: true }), 600);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (studyDealing && els.study.classList.contains('active')) { skipStudyDeal(); e.preventDefault(); }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) skipStudyDeal(); });
+  // Layout runs on the next frame, outside the observer, so a layout change can
+  // never trigger a resize loop (the "ResizeObserver loop" error).
+  const nextFrame = (fn) => { let queued = false; return () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; fn(); }); }; };
+  new ResizeObserver(nextFrame(layoutStudy)).observe(studyBoard.parentElement);
   els.saveBox.addEventListener('submit', saveTime);
   els.initials.addEventListener('input', () => {
     const v = cleanInitials(els.initials.value);
@@ -1701,13 +2045,13 @@
     }
   });
 
-  new ResizeObserver(() => {
+  new ResizeObserver(nextFrame(() => {
     if (state === 'intro' && introSize) {
       const r = els.board.getBoundingClientRect();
       if (Math.abs(r.width - introSize.w) > 2 || Math.abs(r.height - introSize.h) > 2) skipIntro();
     }
     layoutBoard();
-  }).observe(els.board.parentElement); // watch the wrapper: layoutBoard changes the board's own padding
+  })).observe(els.board.parentElement); // watch the wrapper: layoutBoard changes the board's own padding
 
   loadBoards();
 })();
