@@ -552,7 +552,7 @@
         <p id="finish-level"></p>
         <div class="big-time" id="final-time">0:00.0</div>
         <form class="save-box" id="save-box" autocomplete="off">
-          <label for="initials">Type your initials to save your time</label>
+          <label for="initials" id="initials-label">Type your initials and press save to join the leaderboard!</label>
           <div class="save-row">
             <input id="initials" maxlength="3" spellcheck="false" autocapitalize="characters" aria-describedby="save-msg">
             <button class="btn" id="save-btn" type="submit">Save time</button>
@@ -660,6 +660,12 @@
   const GOOD_TRY = [
     'Good try!', 'Nice effort!', 'Keep at it!', 'Almost there!', 'Great hustle!',
     'Nice work!', "Don't give up!", 'Way to stick with it!', 'Keep practicing!', 'Good effort!'
+  ];
+
+  // Openers for the "you made the board" message. Picked at random, never twice in a row.
+  const YOURE_FAST = [
+    "You're fast!", 'Lightning quick!', 'What a memory!', 'Sharp eyes!', 'Speedy fingers!',
+    'You know your instruments!', 'Super speedy!', 'Excellent memory!', 'Way to go, speedster!', 'Quick thinking!'
   ];
 
   // Keep this list in sync with BLOCKED in the Apps Script.
@@ -1080,6 +1086,14 @@
           ).join('') + '</ol>'
         : '<p class="note">No times yet.</p>';
     });
+  }
+
+  let lastFast = -1;
+  function youreFastMessage() {
+    let i;
+    do { i = Math.floor(Math.random() * YOURE_FAST.length); } while (YOURE_FAST.length > 1 && i === lastFast);
+    lastFast = i;
+    return `<em>${esc(YOURE_FAST[i])}</em> Type your initials and press save to join the leaderboard!`;
   }
 
   function goodTryMessage(tenthMs) {
@@ -1894,6 +1908,7 @@
         els.againBtn.focus();
       } else {
         els.saveMsg.textContent = '';
+        document.getElementById('initials-label').innerHTML = youreFastMessage();
         els.saveBox.hidden = false;
         els.initials.focus();
       }
