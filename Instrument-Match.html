@@ -129,8 +129,40 @@
   .board-list .rank { color: var(--muted-light); }
   .board-list .note { font-size: 14px; color: var(--muted-light); margin: 2px 0 4px; }
 
+  .btn-light {
+    margin-top: clamp(18px, 3vh, 28px);
+    flex: none;
+    background: transparent;
+    border: 2px solid var(--brass);
+    color: var(--text-light);
+    font-size: 17px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 10px 24px;
+    cursor: pointer;
+  }
+  .btn-light:hover { background: var(--brass); color: var(--velvet-deep); }
+
+  #alltime {
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+    padding: clamp(16px, 4vh, 40px) 16px 28px;
+  }
+  .alltime-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 320px));
+    gap: clamp(12px, 2vw, 24px);
+    justify-content: center;
+    width: 100%;
+  }
+  .alltime-cols .board-list h2 { font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--text-light); }
+  .alltime-cols .board-list li { grid-template-columns: 1.7em 2.8em auto 1fr; }
+  .board-list .date { text-align: right; color: var(--muted-light); font-size: 14px; white-space: nowrap; }
+
   @media (max-width: 640px) {
     .levels { grid-template-columns: minmax(0, 300px); }
+    .alltime-cols { grid-template-columns: minmax(0, 340px); }
     .level-col:nth-child(n) .level-card { transform: none; }
   }
 
@@ -371,13 +403,22 @@
   <h1 class="title" id="game-title">Instrument Matching Game</h1>
   <p class="subtitle">Match each instrument's name to its picture as fast as you can.</p>
   <div class="levels" id="levels"></div>
+  <button class="btn-light" id="alltime-btn" type="button">Top Scores of All Time</button>
+</section>
+
+<!-- All-time leaderboard -->
+<section id="alltime" class="screen" aria-labelledby="alltime-title">
+  <h1 class="title" id="alltime-title">Top Scores of All Time</h1>
+  <p class="subtitle">The fastest times ever on each level.</p>
+  <div class="alltime-cols" id="alltime-cols"></div>
+  <button class="btn-light" id="alltime-back" type="button">Main menu</button>
 </section>
 
 <!-- Game -->
 <section id="game" class="screen" aria-label="Game board">
   <div class="topbar">
     <div class="top-left">
-      <button class="icon-btn" id="back-btn" type="button" aria-label="Pause and choose a different level">
+      <button class="icon-btn" id="back-btn" type="button" aria-label="Pause or go to the main menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
       <div class="clock">
@@ -404,7 +445,7 @@
         <p>The clock is stopped. The cards are hidden until you come back.</p>
         <div class="btn-row">
           <button class="btn" id="resume-btn" type="button">Resume</button>
-          <button class="btn secondary" id="quit-btn" type="button">Choose a level</button>
+          <button class="btn secondary" id="quit-btn" type="button">Main menu</button>
         </div>
       </div>
     </div>
@@ -444,7 +485,7 @@
         <p class="save-msg" id="save-msg" aria-live="polite"></p>
         <div class="btn-row">
           <button class="btn" id="again-btn" type="button">Play again</button>
-          <button class="btn secondary" id="menu-btn" type="button">Choose a level</button>
+          <button class="btn secondary" id="menu-btn" type="button">Main menu</button>
         </div>
       </div>
     </div>
@@ -491,7 +532,7 @@
 
   const CONFIG = {
     // Paste your Apps Script web app URL here (ends in /exec). Leave blank to run without a leaderboard.
-    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxhHGszNpwx_ndDdY5gfj5XN3lAryzIV-KcADJBoZvi0PdbaKv0sZZ9mTao0cn3KoDNVg/exec',
+    SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbw3InL6CfdCdaLoFZ6Nm37kBCqQYaAdSYzS6U1JxSrft_sJCzLDyv7jmTnH5SWUL18S1g/exec',
     IMAGE_FOLDER: 'images/',
     CARD_BACK: CARD_BACK_DATA,       // built-in image; or set to a file name like 'card-back.jpg'
     MISMATCH_MS: 1000,        // how long a wrong pair stays face up
@@ -559,7 +600,7 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    splash: $('splash'), game: $('game'), levels: $('levels'), board: $('board'),
+    splash: $('splash'), game: $('game'), alltime: $('alltime'), levels: $('levels'), board: $('board'),
     timer: $('timer'), pairs: $('pairs'), status: $('status'),
     pauseBtn: $('pause-btn'), soundBtn: $('sound-btn'), fsBtn: $('fs-btn'), backBtn: $('back-btn'),
     pauseOverlay: $('pause-overlay'), resumeBtn: $('resume-btn'), quitBtn: $('quit-btn'),
@@ -859,6 +900,20 @@
       '</svg>'
   };
 
+  function buildAllTime() {
+    document.getElementById('alltime-cols').innerHTML = Object.keys(LEVELS).map((name) => `
+      <div class="board-list">
+        <h2>${name}</h2>
+        <div data-alltime="${name}"><p class="note">Loading times...</p></div>
+      </div>`).join('');
+    document.getElementById('alltime-btn').addEventListener('click', () => {
+      showScreen('alltime');
+      els.alltime.scrollTop = 0;
+      loadBoards();
+    });
+    document.getElementById('alltime-back').addEventListener('click', () => showScreen('splash'));
+  }
+
   function buildSplash() {
     els.levels.innerHTML = Object.keys(LEVELS).map((name) => {
       const cards = LEVELS[name].pairs * 2;
@@ -871,7 +926,7 @@
             <span class="corner br" aria-hidden="true">${cards}${SUITS[name]}</span>
           </button>
           <div class="board-list">
-            <h2>Fastest times</h2>
+            <h2>Today's fastest</h2>
             <div data-board="${name}"><p class="note">Loading times...</p></div>
           </div>
         </div>`;
@@ -883,7 +938,7 @@
   }
 
   function setBoardNote(text) {
-    document.querySelectorAll('[data-board]').forEach((el) => {
+    document.querySelectorAll('[data-board], [data-alltime]').forEach((el) => {
       el.innerHTML = `<p class="note">${esc(text)}</p>`;
     });
   }
@@ -896,9 +951,53 @@
     try {
       const res = await fetch(CONFIG.SCRIPT_URL + '?t=' + Date.now());
       const data = await res.json();
-      if (data.ok && data.boards) { cachedBoards = data.boards; return data.boards; }
+      if (data.ok) { storeBoards(data); return cachedBoards; }
     } catch (err) {}
     return cachedBoards;
+  }
+
+  // The script sends every saved time with its timestamp ("rows"). The game sorts
+  // them into today's board and the all-time board itself.
+  let cachedAllTime = null;
+  const dayKey = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+  const longDate = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  function storeBoards(data) {
+    if (data.rows) {
+      const size = CONFIG.LEADERBOARD_SIZE;
+      const today = dayKey(Date.now());
+      cachedBoards = {};
+      cachedAllTime = {};
+      Object.keys(LEVELS).forEach((name) => {
+        // Fastest first; on a tie, whoever got it first stays ahead.
+        const all = (data.rows[name] || []).slice().sort((a, b) => a.ms - b.ms || a.when - b.when);
+        cachedBoards[name] = all.filter((r) => r.when && dayKey(r.when) === today).slice(0, size);
+        cachedAllTime[name] = all.slice(0, size).map((r) => ({ ...r, date: r.when ? longDate(r.when) : '' }));
+      });
+    } else {
+      // Older script versions
+      cachedBoards = data.today || data.boards || null;
+      cachedAllTime = data.allTime || null;
+    }
+  }
+
+  // Where a time would land on a board (1 = first), or 0 if it doesn't make the board.
+  function placeOnBoard(rows, ms) {
+    const size = CONFIG.LEADERBOARD_SIZE;
+    const place = rows.filter((r) => r.ms <= ms).length + 1;
+    return place <= size ? place : 0;
+  }
+
+  function renderAllTime() {
+    Object.keys(LEVELS).forEach((name) => {
+      const el = document.querySelector(`[data-alltime="${name}"]`);
+      if (!cachedAllTime) return;
+      const rows = cachedAllTime[name] || [];
+      el.innerHTML = rows.length
+        ? '<ol>' + rows.map((r, i) =>
+            `<li><span class="rank">${i + 1}</span><span>${esc(r.initials)}</span><span>${formatTime(r.ms)}</span><span class="date">${esc(r.date || '')}</span></li>`
+          ).join('') + '</ol>'
+        : '<p class="note">No times yet.</p>';
+    });
   }
 
   function goodTryMessage(tenthMs) {
@@ -927,17 +1026,21 @@
       const res = await fetch(CONFIG.SCRIPT_URL + '?t=' + Date.now());
       const data = await res.json();
       if (!data.ok) throw new Error('bad response');
-      cachedBoards = data.boards || null;
+      storeBoards(data);
       Object.keys(LEVELS).forEach((name) => {
         const el = document.querySelector(`[data-board="${name}"]`);
-        const rows = (data.boards && data.boards[name]) || [];
+        const rows = (cachedBoards && cachedBoards[name]) || [];
         if (!rows.length) {
-          el.innerHTML = '<p class="note">No times yet. Be the first!</p>';
+          el.innerHTML = '<p class="note">No times yet today. Be the first!</p>';
           return;
         }
         el.innerHTML = '<ol>' + rows.map((r, i) =>
           `<li><span class="rank">${i + 1}</span><span>${esc(r.initials)}</span><span>${formatTime(r.ms)}</span></li>`
         ).join('') + '</ol>';
+      });
+      if (cachedAllTime) renderAllTime();
+      else document.querySelectorAll('[data-alltime]').forEach((el) => {
+        el.innerHTML = '<p class="note">All-time scores need the updated leaderboard script.</p>';
       });
     } catch (err) {
       setBoardNote("Couldn't load times. Refresh the page to try again.");
@@ -946,6 +1049,7 @@
 
   function showScreen(which) {
     els.splash.classList.toggle('active', which === 'splash');
+    els.alltime.classList.toggle('active', which === 'alltime');
     els.game.classList.toggle('active', which === 'game');
   }
 
@@ -1467,8 +1571,12 @@
       const data = await res.json();
       if (data.ok) {
         els.saveBox.hidden = true;
-        els.saveMsg.textContent = `Saved! You're ${ordinal(data.rank)} on the ${level} board.`;
-        if (data.rank <= 3) showTrophy(data.rank);
+        const todayPlace = placeOnBoard((cachedBoards && cachedBoards[level]) || [], finalMs) || data.rank || 1;
+        const allTimePlace = cachedAllTime ? placeOnBoard(cachedAllTime[level] || [], finalMs) : 0;
+        let msg = `Saved! You're ${ordinal(todayPlace)} on today's ${level} board.`;
+        if (allTimePlace) msg += ` That's also ${ordinal(allTimePlace)} on the Top Scores of All Time!`;
+        els.saveMsg.textContent = msg;
+        if (todayPlace <= 3) showTrophy(todayPlace);
         els.againBtn.focus();
       } else {
         const msgs = {
@@ -1537,6 +1645,7 @@
 
   /* ---------- Wire up ---------- */
   buildSplash();
+  buildAllTime();
   setSoundIcon();
   setPauseIcon();
   document.documentElement.style.setProperty('--back-img', `url("${CONFIG.CARD_BACK}")`);
