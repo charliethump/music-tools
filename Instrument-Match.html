@@ -635,7 +635,6 @@
     SHUFFLE_STYLES: ['riffle', 'wash', 'shell'], // each game picks one at random (equal chance)
     CASCADE_MAX_LAUNCH_MS: 500,     // victory cascade: most time between card launches
     CASCADE_LAUNCH_WINDOW_MS: 6000, // victory cascade: every card launches within this time
-    CASCADE_FINISH_DELAY_MS: 2000,  // victory cascade: finish screen fades in this long after it starts
     LEADERBOARD_SIZE: 10,     // must match TOP_N in the Apps Script
     PREVIEW_SHUFFLE: '',      // 'riffle', 'wash' or 'shell' forces that style for previewing; '' = random
     MATCH_STATUS_MS: 900,     // how long "Match!" / "Not a pair" stays on screen
@@ -1946,22 +1945,9 @@
           els.saveBox.hidden = false;
           els.initials.focus();
         };
-        if (boards) {
-          // Leaderboard-worthy: the victory cascade starts, and 2 seconds in the
-          // finish screen fades in on top while the cascade keeps going behind it.
-          els.finishOverlay.classList.remove('show');
-          let revealed = false;
-          const reveal = () => {
-            if (revealed) return;
-            revealed = true;
-            showForm();
-            fadeInFinish();
-          };
-          playCascade(reveal);
-          later(reveal, CONFIG.CASCADE_FINISH_DELAY_MS);
-        } else {
-          showForm(); // couldn't check the board; let them try to save
-        }
+        showForm();
+        // Confirmed leaderboard-worthy: the victory cascade plays behind the finish box.
+        if (boards) playCascade();
       }
     });
   }
@@ -1973,9 +1959,6 @@
   let cascadeStop = null; // removes the cascade (used when leaving the finish screen)
   let cascadeSkip = null; // freezes it in place (tap, key, or leaving the tab)
 
-  function fadeInFinish() {
-    els.finishOverlay.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: 'ease-out' });
-  }
 
   function roundRectPath(ctx, w, h, r) {
     ctx.beginPath();
@@ -2039,7 +2022,8 @@
   }
 
   // Resolves when the cascade ends or is skipped (tap, key, or leaving the tab).
-  async function playCascade(onTap) {
+  // Plays behind the finish box. Clicking the cards fades them away.
+  async function playCascade() {
     const clones = [...els.discard.querySelectorAll('.discard-card')]
       .filter((cl) => cl._card)
       .sort((a, b) => Number(b.style.zIndex) - Number(a.style.zIndex)); // top of the pile first
@@ -2096,11 +2080,8 @@
       };
       cascadeSkip = stop;
       cascadeStop = remove;
-      // Clicking the cards fades them away and brings up the finish box right away.
-      canvas.addEventListener('pointerdown', () => {
-        remove();
-        if (onTap) onTap();
-      });
+      // Clicking the cards (anywhere outside the finish box) fades them away.
+      canvas.addEventListener('pointerdown', remove);
 
       const frame = (t) => {
         const dt = Math.min(0.033, (t - last) / 1000);
@@ -2382,10 +2363,8 @@
       discardPair(a, b);
       [a, b].forEach((c) => { c.el.classList.add('gone'); c.el.disabled = true; });
     }, i * 80));
-    let revealed = false;
-    const reveal = () => {
-      if (revealed || state !== 'done') return;
-      revealed = true;
+    const showTestFinish = () => {
+      if (state !== 'done') return;
       document.getElementById('trophy').className = 'trophy';
       els.finishLevel.textContent = `${lv}: all ${pairs.length} pairs (test mode)`;
       els.finalTime.textContent = formatTime(finalMs);
@@ -2393,14 +2372,13 @@
       els.saveMsg.textContent = 'Test mode: this is a leaderboard-worthy finish. Nothing is saved.';
       setExitButtons(true);
       els.finishOverlay.classList.add('show');
-      fadeInFinish();
     };
     later(() => {
       finalMs = 42000;
       els.timer.textContent = formatTime(finalMs);
-      playCascade(reveal);
+      showTestFinish();
+      playCascade();
     }, pairs.length * 80 + DISCARD_MS + 300);
-    later(reveal, pairs.length * 80 + DISCARD_MS + 300 + CONFIG.CASCADE_FINISH_DELAY_MS);
   }
 })();
 </script>
