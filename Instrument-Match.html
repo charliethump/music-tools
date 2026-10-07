@@ -383,6 +383,15 @@
     border-radius: calc(var(--card-w) * .07); /* same corners as the cards on the board */
   }
   .discard-card .face { transform: none; box-shadow: 0 1px 0 rgba(20, 25, 50, .45), 0 2px 5px rgba(0, 0, 0, .3); }
+  .cascade-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 50;
+    cursor: pointer;
+    transition: opacity .5s ease;
+  }
   .discard-card.greyed { filter: grayscale(1) brightness(.72) contrast(.9); }
 
   /* ---------- Overlays ---------- */
@@ -619,6 +628,8 @@
     MISMATCH_MS: 1000,        // how long a wrong pair stays face up
     MISMATCH_LOCK_MS: 250,    // how soon after the X a new card can be picked
     SHUFFLE_STYLES: ['riffle', 'wash', 'shell'], // each game picks one at random (equal chance)
+    CASCADE_MAX_LAUNCH_MS: 500,     // victory cascade: most time between card launches
+    CASCADE_LAUNCH_WINDOW_MS: 6000, // victory cascade: every card launches within this time
     LEADERBOARD_SIZE: 10,     // must match TOP_N in the Apps Script
     PREVIEW_SHUFFLE: '',      // 'riffle', 'wash' or 'shell' forces that style for previewing; '' = random
     MATCH_STATUS_MS: 900,     // how long "Match!" / "Not a pair" stays on screen
@@ -1808,6 +1819,7 @@
       const start = centers[idx];
       clone.style.left = (start.x - w / 2) + 'px';
       clone.style.top = (start.y - h / 2) + 'px';
+      clone._card = card; // remembered for the victory cascade
       els.discard.appendChild(clone);
 
       const rest = pileRest(clone);
@@ -1918,11 +1930,178 @@
         els.saveMsg.innerHTML = goodTryMessage(rows[size - 1].ms);
         els.againBtn.focus();
       } else {
-        els.saveMsg.textContent = '';
-        document.getElementById('initials-label').innerHTML = youreFastMessage();
-        els.saveBox.hidden = false;
-        els.initials.focus();
+        const showForm = () => {
+          if (state !== 'done' || finalMs !== shownFor) return;
+          els.finishOverlay.classList.add('show');
+          els.saveMsg.textContent = '';
+          document.getElementById('initials-label').innerHTML = youreFastMessage();
+          els.saveBox.hidden = false;
+          els.initials.focus();
+        };
+        if (boards) {
+          // Leaderboard-worthy: victory cascade first, then the initials prompt
+          els.finishOverlay.classList.remove('show');
+          playCascade().then(showForm);
+        } else {
+          showForm(); // couldn't check the board; let them try to save
+        }
       }
+    });
+  }
+
+  /* ---------- Victory cascade (Windows Solitaire style) ----------
+     Matched cards launch one at a time from the discard pile, arc across the
+     screen and bounce along the bottom. The canvas is never cleared, so every
+     card leaves a trail of copies of itself. */
+  let cascadeStop = null;
+
+  function roundRectPath(ctx, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(r, 0); ctx.lineTo(w - r, 0); ctx.quadraticCurveTo(w, 0, w, r);
+    ctx.lineTo(w, h - r); ctx.quadraticCurveTo(w, h, w - r, h);
+    ctx.lineTo(r, h); ctx.quadraticCurveTo(0, h, 0, h - r);
+    ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+    ctx.closePath();
+  }
+
+  // Draws one card face (full color) onto its own small canvas, once.
+  async function renderCardFace(card, w, dpr) {
+    const h = Math.round(w * 1.4);
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+    const ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    roundRectPath(ctx, w, h, w * 0.07);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#8F9BC0'; // darker edge so the trails show card-edge stripes
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    const font = getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = '#1D3A8A';
+    ctx.font = `700 ${Math.max(10, w * 0.11)}px ${font}`;
+    ctx.textBaseline = 'top';
+    ctx.fillText('\u266A', w * 0.07, h * 0.05);
+    ctx.save();
+    ctx.translate(w, h);
+    ctx.rotate(Math.PI);
+    ctx.fillText('\u266A', w * 0.07, h * 0.05);
+    ctx.restore();
+    if (card.kind === 'name') {
+      const fs = Math.max(11, w * 0.155);
+      ctx.font = `700 ${fs}px ${font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const lines = [];
+      let line = '';
+      card.inst.name.split(' ').forEach((word) => {
+        const test = line ? line + ' ' + word : word;
+        if (ctx.measureText(test).width > w * 0.82 && line) { lines.push(line); line = word; } else line = test;
+      });
+      lines.push(line);
+      const lh = fs * 1.12;
+      lines.forEach((ln, i) => ctx.fillText(ln, w / 2, h / 2 + (i - (lines.length - 1) / 2) * lh));
+    } else {
+      const img = new Image();
+      img.src = EMBEDDED_IMAGES[card.inst.file] || CONFIG.IMAGE_FOLDER + card.inst.file;
+      try { await img.decode(); } catch (e) { return c; }
+      const boxW = card.inst.tall ? (w - 8) * (card.inst.size || 1) : w * 0.8;
+      const boxH = card.inst.tall ? (h - 8) * (card.inst.size || 1) : h * 0.66;
+      const k = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+      const iw = img.naturalWidth * k;
+      const ih = img.naturalHeight * k;
+      ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
+    }
+    return c;
+  }
+
+  // Resolves when the cascade ends or is skipped (tap, key, or leaving the tab).
+  async function playCascade() {
+    const clones = [...els.discard.querySelectorAll('.discard-card')]
+      .filter((cl) => cl._card)
+      .sort((a, b) => Number(b.style.zIndex) - Number(a.style.zIndex)); // top of the pile first
+    if (!clones.length) return;
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const cardW = Math.round(Math.min(120, Math.max(70, deck[0] ? deck[0].el.offsetWidth : 90)));
+    const cardH = Math.round(cardW * 1.4);
+    const faces = await Promise.all(clones.map((cl) => renderCardFace(cl._card, cardW, dpr)));
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'cascade-canvas';
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    document.body.appendChild(canvas);
+
+    // Launch point: the discard pile
+    const pile = els.discard.querySelector('.discard-slot').getBoundingClientRect();
+    const startX = pile.left + pile.width / 2 - cardW / 2;
+    const startY = Math.min(H - cardH, pile.bottom - cardH);
+
+    const G = 2400 * (H / 700);   // gravity, px/s^2, scaled to screen height
+    const BOUNCE = 0.74;          // how much height each bounce keeps
+    const interval = Math.min(CONFIG.CASCADE_MAX_LAUNCH_MS, CONFIG.CASCADE_LAUNCH_WINDOW_MS / clones.length);
+    const queue = clones.map((cl, i) => ({ el: cl, face: faces[i] }));
+    const flying = [];
+
+    return new Promise((resolve) => {
+      let raf = 0;
+      let ended = false;
+      const t0 = performance.now();
+      let last = t0;
+      let launched = 0;
+
+      const end = () => {
+        if (ended) return;
+        ended = true;
+        cancelAnimationFrame(raf);
+        cascadeStop = null;
+        queue.forEach((q) => q.el.remove());
+        canvas.style.opacity = '0';
+        setTimeout(() => canvas.remove(), 520);
+        resolve();
+      };
+      cascadeStop = end;
+      canvas.addEventListener('pointerdown', end);
+
+      const frame = (t) => {
+        const dt = Math.min(0.033, (t - last) / 1000);
+        last = t;
+        while (queue.length && t - t0 >= launched * interval) {
+          const q = queue.shift();
+          q.el.remove(); // card leaves the pile
+          q.x = startX;
+          q.y = startY;
+          q.vx = (260 + Math.random() * 300) * (W / 1280 + 0.3);
+          q.vy = -(1000 + Math.random() * 500) * (H / 700); // high arcs, like the original
+          flying.push(q);
+          launched++;
+          sfx.deal([0]);
+        }
+        for (let i = flying.length - 1; i >= 0; i--) {
+          const f = flying[i];
+          f.vy += G * dt;
+          f.x += f.vx * dt;
+          f.y += f.vy * dt;
+          if (f.y + cardH > H) {
+            f.y = H - cardH;
+            f.vy = -f.vy * BOUNCE;
+          }
+          ctx.drawImage(f.face, f.x, f.y, cardW, cardH);
+          if (f.x > W + 4) flying.splice(i, 1);
+        }
+        if (!queue.length && !flying.length) {
+          setTimeout(end, 700); // hold the finished picture for a moment
+          return;
+        }
+        raf = requestAnimationFrame(frame);
+      };
+      raf = requestAnimationFrame(frame);
     });
   }
 
@@ -1999,6 +2178,7 @@
     setPauseIcon();
   }
   function goToMenu() {
+    if (cascadeStop) cascadeStop();
     introToken++;
     sfx.stopAll();
     clearAllTimeouts();
@@ -2079,6 +2259,7 @@
   // Auto-pause when the student switches tabs or minimizes the window.
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
+    if (cascadeStop) cascadeStop();
     skipIntro();
     pause();
   });
@@ -2101,6 +2282,7 @@
   // P or Escape toggles pause.
   document.addEventListener('keydown', (e) => {
     if (e.target === els.initials) return;
+    if (cascadeStop) { cascadeStop(); e.preventDefault(); return; }
     if (state === 'intro') { skipIntro(); e.preventDefault(); return; }
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       if (state === 'playing') pause();
@@ -2117,6 +2299,68 @@
   })).observe(els.board.parentElement); // watch the wrapper: layoutBoard changes the board's own padding
 
   loadBoards();
+
+  /* ---------- Test mode ----------
+     Add ?test=cascade to the game's address to watch the victory cascade
+     without playing a game, for example:
+       Instrument-Match.html?test=cascade&level=Hard
+     level can be Easy, Medium or Hard (Easy if left out). Nothing is saved. */
+  // Second way in, which also works inside Canvas: on the main menu, type the word
+  // test (the menu shows "Test mode"), then click a level to run the cascade test.
+  let typed = '';
+  let testArmed = false;
+  document.addEventListener('keydown', (e) => {
+    if (!els.splash.classList.contains('active') || e.key.length !== 1) return;
+    typed = (typed + e.key.toLowerCase()).slice(-4);
+    if (typed === 'test') {
+      testArmed = !testArmed;
+      document.getElementById('game-title').textContent = testArmed ? 'Test mode: pick a level' : 'Instrument Matching Game';
+    }
+  });
+  els.levels.addEventListener('click', (e) => {
+    const btn = e.target.closest('.level-card');
+    if (!btn || !testArmed) return;
+    e.stopImmediatePropagation();
+    testArmed = false;
+    document.getElementById('game-title').textContent = 'Instrument Matching Game';
+    runCascadeTest(btn.dataset.level);
+  }, true);
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('test') === 'cascade') {
+    const lv = Object.keys(LEVELS).find((k) => k.toLowerCase() === (params.get('level') || '').toLowerCase()) || 'Easy';
+    runCascadeTest(lv);
+  }
+
+  function runCascadeTest(lv) {
+    startLevel(lv);
+    skipIntro();
+    stopClock();
+    state = 'done';
+    const byKey = {};
+    deck.forEach((c) => { (byKey[c.key] = byKey[c.key] || []).push(c); });
+    const pairs = Object.values(byKey);
+    found = pairs.length;
+    updatePairs();
+    pairs.forEach(([a, b], i) => later(() => {
+      a.done = b.done = true;
+      discardPair(a, b);
+      [a, b].forEach((c) => { c.el.classList.add('gone'); c.el.disabled = true; });
+    }, i * 80));
+    later(async () => {
+      finalMs = 42000;
+      els.timer.textContent = formatTime(finalMs);
+      await playCascade();
+      if (state !== 'done') return;
+      document.getElementById('trophy').className = 'trophy';
+      els.finishLevel.textContent = `${lv}: all ${pairs.length} pairs (test mode)`;
+      els.finalTime.textContent = formatTime(finalMs);
+      els.saveBox.hidden = true;
+      els.saveMsg.textContent = 'Test mode: this is a leaderboard-worthy finish. Nothing is saved.';
+      setExitButtons(true);
+      els.finishOverlay.classList.add('show');
+    }, pairs.length * 80 + DISCARD_MS + 300);
+  }
 })();
 </script>
 </body>
