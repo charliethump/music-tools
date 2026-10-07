@@ -410,6 +410,8 @@
   /* Clicks outside the finish box pass through to the card cascade behind it */
   #finish-overlay { pointer-events: none; }
   #finish-overlay .panel { pointer-events: auto; }
+  /* Once shown, the finish box stays where it first appeared and grows downward */
+  #finish-overlay.pinned { align-items: flex-start; }
   .panel {
     background: var(--card);
     color: var(--navy);
@@ -1917,6 +1919,7 @@
     setExitButtons(true);
     els.saveBox.hidden = true;
     els.finishOverlay.classList.add('show');
+    pinFinishPanel();
     if (!CONFIG.SCRIPT_URL) {
       els.saveMsg.textContent = 'Leaderboard not connected yet, so this time is not saved.';
       els.againBtn.focus();
@@ -2266,6 +2269,33 @@
   const nextFrame = (fn) => { let queued = false; return () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; fn(); }); }; };
   new ResizeObserver(nextFrame(layoutStudy)).observe(studyBoard.parentElement);
   els.saveBox.addEventListener('submit', saveTime);
+
+  /* ---------- Finish box position ----------
+     The box first appears centered. Its top edge is then locked there, so when
+     the initials box, messages or trophy appear it grows downward instead of
+     jumping up. It only moves up if it would otherwise run off the bottom. */
+  let finishTop = null;
+  function pinFinishPanel() {
+    const panel = els.finishOverlay.querySelector('.panel');
+    els.finishOverlay.classList.remove('pinned');
+    panel.style.marginTop = '';
+    finishTop = panel.offsetTop; // the centered spot it starts in
+    els.finishOverlay.classList.add('pinned');
+    keepFinishPanel();
+  }
+  function keepFinishPanel() {
+    if (finishTop === null || !els.finishOverlay.classList.contains('show')) return;
+    const panel = els.finishOverlay.querySelector('.panel');
+    const cs = getComputedStyle(els.finishOverlay);
+    const padTop = parseFloat(cs.paddingTop) || 0;
+    const padBottom = parseFloat(cs.paddingBottom) || 0;
+    const lowest = els.finishOverlay.clientHeight - padBottom - panel.offsetHeight;
+    const top = Math.max(padTop, Math.min(finishTop, lowest));
+    panel.style.marginTop = (top - padTop) + 'px';
+  }
+  const keepFinishSoon = nextFrame(keepFinishPanel);
+  new ResizeObserver(keepFinishSoon).observe(els.finishOverlay.querySelector('.panel'));
+  new ResizeObserver(keepFinishSoon).observe(els.finishOverlay);
   els.initials.addEventListener('input', () => {
     const v = cleanInitials(els.initials.value);
     if (v !== els.initials.value) els.initials.value = v;
@@ -2372,6 +2402,7 @@
       els.saveMsg.textContent = 'Test mode: this is a leaderboard-worthy finish. Nothing is saved.';
       setExitButtons(true);
       els.finishOverlay.classList.add('show');
+      pinFinishPanel();
     };
     later(() => {
       finalMs = 42000;
