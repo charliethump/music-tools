@@ -188,6 +188,8 @@ const CONFIG = {
   Optional: add start: 30 and/or end: 75 (in seconds) to play one excerpt.
   Leave video as "" to show "Video coming soon".
 
+  FACTS: put *stars* around a word to show it in italics, like *pizzicato*.
+
   PHOTOS: set "image" to the PNG's file name inside the images folder.
   If an instrument has no "image", it looks for images/<id>.png
   (images/flute.png, images/french-horn.png and so on).
@@ -195,12 +197,12 @@ const CONFIG = {
 */
 
 const ORCHESTRA = {
-  name: "Meet the Orchestra!",
+  name: "Conductor",
   video: "https://www.youtube.com/watch?v=zqs0VBfIkzk",
   facts: [
-    "An orchestra can have more than 100 musicians playing together.",
-    "Every instrument belongs to one of four families: strings, woodwinds, brass and percussion.",
-    "Each family makes its sound in a different way. Pick a family below to find out how."
+    "There can be over 100 musicians in an orchestra, and the conductor is in charge of them all!",
+    "The conductor starts and stops the orchestra and shows the musicians how fast or slow to play and how loud or soft to sound. They do all of this with their hand gestures and facial expressions.",
+    "Conductors often use a *baton* to make their steady beat easier for all of the musicians in the orchestra to see."
   ]
 };
 
@@ -242,81 +244,81 @@ const FAMILIES = {
 const INSTRUMENTS = {
   violin: { name: "Violin", family: "strings", image: "violin_viola.png", video: "https://www.youtube.com/watch?v=9HeK69ZeT7g",
     facts: [
-      "The violin is the smallest string instrument and has the highest voice.",
-      "Violins are the biggest section, split into first violins and second violins.",
-      "Players can drag a bow across the strings or pluck them with a finger. Plucking is called pizzicato."
+      "The violin is the smallest string instrument in the orchestra and has the highest voice.",
+      "There are typically between 26 and 34 violins in an orchestra! It’s the most common instrument by far.",
+      "Players can drag a bow across the strings or pluck them with a finger. Plucking is called *pizzicato*."
     ] },
   viola: { name: "Viola", family: "strings", image: "violin_viola.png", video: "https://www.youtube.com/watch?v=rQCDsdsZZPA",
     facts: [
       "The viola looks like a violin, but it is a little bigger and sounds lower and warmer.",
-      "Violas often play the harmony that fills in the middle of the music.",
-      "Viola players read a special clef called the alto clef."
+      "Violas often play the harmony that fills in the middle voice of the music.",
+      "There are typically between 10 and 12 violas in an orchestra."
     ] },
   cello: { name: "Cello", family: "strings", image: "cello.png", video: "https://www.youtube.com/watch?v=OQ4Buy9R_YQ",
     facts: [
-      "Cello players sit down and rest the cello on the floor on a metal spike called an endpin.",
-      "The cello's range is close to a human voice, from deep and low to high and singing.",
-      "Like the violin and viola, the cello has four strings."
+      "The cello is much too big to hold like a violin or viola! Cello players sit down when they play and hold the cello between their knees. A metal spike called an *endpin* rests on the floor.",
+      "There are typically between eight and 12 cellos in an orchestra.",
+      "The cello's range is close to a human voice, from deep and low to high and singing."
     ] },
   bass: { name: "Double Bass", family: "strings", image: "double_bass.png", video: "https://www.youtube.com/watch?v=v3GHjGJUw3o",
     facts: [
-      "The double bass is the biggest and lowest string instrument, about 6 feet tall.",
-      "Bass players stand up or sit on a tall stool to play.",
-      "The bass plays the low notes that the music is built on, like the foundation of a house."
+      "The double bass is the biggest and lowest-sounding string instrument. It’s about six feet tall, which is almost as tall as Mr. Larson!",
+      "Bass players can either sit on a tall stool or stand while they play.",
+      "There are typically five to eight double basses in an orchestra."
     ] },
   harp: { name: "Harp", family: "strings", video: "https://www.youtube.com/watch?v=Wfmk5BaHPg0",
     facts: [
-      "A concert harp has 47 strings and is one of the oldest instruments in the world.",
-      "The C strings are red and the F strings are dark blue or black so the harpist can find their place.",
-      "Seven foot pedals change the pitch of the strings."
+      "The harp is one of the oldest instruments in the world! It has 47 strings that the harp player plucks with their fingers.",
+      "There are typically only one or two harp players in an orchestra.",
+      "The harp player can change the notes of the strings with foot pedals at the bottom of the harp."
     ] },
   flute: { name: "Flute", family: "woodwinds", video: "https://www.youtube.com/watch?v=FQd22wXaWhE",
     facts: [
-      "The flute has no reed. You blow across a hole, like making a sound on a bottle.",
-      "Flutes are made of metal, but they are still part of the woodwind family.",
-      "The piccolo is a tiny flute that plays the highest notes in the orchestra."
+      "Today flutes are made from metal, but in the past they were made from wood.",
+      "Have you ever made a sound on a bottle by blowing across the top of it? A flute player makes a sound in the same way!",
+      "There are usually between two and four flutes in an orchestra."
     ] },
   oboe: { name: "Oboe", family: "woodwinds", video: "https://www.youtube.com/watch?v=MuXHXPjFGvU",
     facts: [
-      "The oboe uses a double reed: two thin pieces of cane that vibrate together.",
-      "Before a concert, the oboe plays an A so the whole orchestra can tune.",
-      "Its bright sound is easy to hear through the rest of the orchestra."
+      "The oboe looks a lot like the clarinet, but you can tell them apart by the oboe's skinny top, called a *double reed*.",
+      "Before playing, the musicians in an orchestra often play a single note together to make sure their instruments all sound like they should. This is called *tuning*, and usually the entire orchestra listens to the oboe play the note first!",
+      "There are usually between two and four oboes in an orchestra."
     ] },
   clarinet: { name: "Clarinet", family: "woodwinds", video: "https://www.youtube.com/watch?v=8TRUEORVY6E",
     facts: [
-      "The clarinet uses a single reed that vibrates against the mouthpiece.",
-      "It can play from a whisper to very loud and has a huge range of notes.",
-      "In Peter and the Wolf, the clarinet plays the cat."
+      "The clarinet uses a *single reed*, a thin, flat piece of cane that vibrates against the mouthpiece when the player blows.",
+      "The clarinet can play almost as quietly as a whisper or very loudly. It also has a huge range of notes, from low and dark to high and bright.",
+      "There are usually between two and four clarinets in an orchestra."
     ] },
   bassoon: { name: "Bassoon", family: "woodwinds", video: "https://www.youtube.com/watch?v=Zm6ISl2fgGs",
     facts: [
-      "The bassoon is the lowest regular woodwind. Unfolded, its tube would be about 8 feet long.",
-      "Like the oboe, the bassoon uses a double reed.",
-      "In Peter and the Wolf, the bassoon plays the grumpy grandfather."
+      "The bassoon is one of the lowest-sounding woodwinds. If you unfolded its long wooden tube, it would be about eight feet long!",
+      "Like the oboe, the bassoon uses a *double reed*. The reed sits on a curved metal tube that sticks out from the side of the instrument.",
+      "There are usually between two and four bassoons in an orchestra."
     ] },
   "french-horn": { name: "French Horn", family: "brass", video: "https://www.youtube.com/watch?v=kb2ccF7BKlE",
     facts: [
-      "The French horn has about 12 feet of tubing coiled up into a circle.",
-      "Horn players put one hand inside the bell to shape the sound.",
-      "In Peter and the Wolf, three horns play the part of the wolf."
+      "The French horn has about 12 feet of metal tubing coiled up into a circle!",
+      "Horn players put one hand inside the bell, which points behind them, to help shape the sound.",
+      "There are usually four French horns in an orchestra."
     ] },
   trumpet: { name: "Trumpet", family: "brass", video: "https://www.youtube.com/watch?v=reHVm6On6Wg",
     facts: [
-      "The trumpet is the highest brass instrument.",
-      "Players buzz their lips into a cup-shaped mouthpiece to make a sound.",
-      "Three valves change the length of the tubing to make different notes."
+      "The trumpet is the highest-sounding brass instrument.",
+      "Like all brass players, trumpet players make a sound by buzzing their lips into a cup-shaped *mouthpiece*. They press three *valves* to change notes.",
+      "There are usually between two and four trumpets in an orchestra."
     ] },
   trombone: { name: "Trombone", family: "brass", video: "https://www.youtube.com/watch?v=KMTJ-WiF8bA",
     facts: [
-      "Instead of valves, the trombone has a slide that moves in and out.",
-      "There are seven slide positions, and each one makes different notes.",
-      "The trombone can slide smoothly from one note to another. This is called a glissando."
+      "Instead of valves, the trombone has a *slide* that the player moves in and out to change notes.",
+      "The trombone can slide smoothly from one note to another, like a siren. This is called a *glissando*.",
+      "There are usually three trombones in an orchestra."
     ] },
   tuba: { name: "Tuba", family: "brass", video: "https://www.youtube.com/watch?v=X9sci9qcsjU",
     facts: [
-      "The tuba is the biggest and lowest brass instrument.",
-      "Some tubas have about 18 feet of tubing wrapped up inside.",
-      "The tuba usually plays the bass line along with the double basses."
+      "The tuba is the biggest and lowest-sounding brass instrument. Its tubing would stretch about 18 feet if you unwound it!",
+      "The tuba often plays the low notes underneath the music, along with the double basses.",
+      "There is usually just one tuba in an orchestra."
     ] },
   "unpitched-percussion": { name: "Unpitched Percussion", family: "percussion", video: "https://www.youtube.com/watch?v=qwbRZAZDQYM",
     facts: [
@@ -844,7 +846,20 @@ function openCard({ title, sub, color, item, facts, buttons }) {
   renderVideo(item);
   const ul = document.getElementById("facts");
   ul.innerHTML = "";
-  facts.forEach(f => { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); });
+  facts.forEach(f => {
+    const li = document.createElement("li");
+    // *word* shows in italics; everything else is plain text
+    f.split(/(\*[^*]+\*)/).forEach(part => {
+      if (/^\*[^*]+\*$/.test(part)) {
+        const em = document.createElement("em");
+        em.textContent = part.slice(1, -1);
+        li.appendChild(em);
+      } else if (part) {
+        li.appendChild(document.createTextNode(part));
+      }
+    });
+    ul.appendChild(li);
+  });
   const bw = document.getElementById("buttons");
   bw.innerHTML = "";
   (buttons || []).forEach(b => {
@@ -866,8 +881,7 @@ function openInstrument(id) {
     return;
   }
   const fam = FAMILIES[inst.family];
-  openCard({ title: inst.name, sub: fam.label, color: fam.color, item: inst, facts: inst.facts,
-    buttons: [{ label: `More from the ${fam.label}`, onClick: () => openFamily(inst.family) }] });
+  openCard({ title: inst.name, sub: fam.label, color: fam.color, item: inst, facts: inst.facts });
 }
 
 function openFamily(key) {
@@ -879,9 +893,7 @@ function openFamily(key) {
 }
 
 function openOrchestra() {
-  openCard({ title: ORCHESTRA.name, sub: "", color: "#F1EBE0", item: ORCHESTRA, facts: ORCHESTRA.facts,
-    buttons: Object.keys(FAMILIES).map(k => ({ label: FAMILIES[k].label, color: FAMILIES[k].color,
-                                               onClick: () => openFamily(k) })) });
+  openCard({ title: ORCHESTRA.name, sub: "", color: "#F1EBE0", item: ORCHESTRA, facts: ORCHESTRA.facts });
 }
 
 function openRegion(id) {
