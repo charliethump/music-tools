@@ -46,7 +46,7 @@ button{font-family:inherit}
 .opt-btn svg{width:1.15em;height:1.15em;flex-shrink:0}
 .seg{display:flex;background:#F0EEF6;border-radius:12px;padding:3px;gap:2px}
 .seg>button{flex:1;border:none;background:transparent;color:var(--muted);font-weight:700;border-radius:9px;padding:0 clamp(8px,1vw,16px);cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}
-.seg>button:hover:not(:disabled):not(.on):not(.active){color:var(--ink);background:rgba(255,255,255,0.55)}
+.seg>button:hover:not(:disabled):not(.on):not(.active):not(.hs-greyed){color:var(--ink);background:rgba(255,255,255,0.55)}
 .seg>button.on{background:var(--surface);color:var(--ink);font-weight:800;box-shadow:0 1px 3px rgba(30,27,58,.15)}
 .seg>button:disabled{cursor:not-allowed;opacity:.45}
 .seg-sm>button{height:clamp(24px,3.8vh,34px);font-size:clamp(12px,min(1vw,2vh),16px)}
@@ -54,7 +54,7 @@ button{font-family:inherit}
 /* Tempo buttons keep their .tempo-btn class for the JS */
 .seg .tempo-btn{border:none;background:transparent;color:var(--muted)}
 .seg .tempo-btn.active{background:var(--accent);color:#fff;font-weight:800;box-shadow:0 1px 3px rgba(69,39,168,.35)}
-.seg .tempo-btn.play-locked:disabled,.seg .tempo-btn.hs-greyed{opacity:.4;filter:grayscale(.4);cursor:not-allowed}
+.seg .tempo-btn.play-locked:disabled,.seg .tempo-btn.hs-greyed,.opt-btn.hs-greyed{opacity:.4;filter:grayscale(.4);cursor:not-allowed}
 /* Bottom row */
 .bottom-row{gap:clamp(6px,1vw,14px)}
 .left-col{flex:0 0 56%;gap:0;padding:clamp(8px,1.6vh,18px) clamp(10px,1.4vw,22px);overflow:hidden}
@@ -848,7 +848,7 @@ document.getElementById('silence-overlay').addEventListener('click',e=>{if(e.tar
 document.querySelectorAll('.tempo-btn').forEach(btn=>{
 btn.addEventListener('click',()=>{
 if(_hyperSpeedActive){cancelHyperSpeed();return;}
-if(_marioMode)setMarioMode(false);
+if(_marioMode)return;
 document.querySelectorAll('.tempo-btn').forEach(b=>b.classList.remove('active'));
 btn.classList.add('active');
 state.bpm=+btn.dataset.bpm;
@@ -1108,22 +1108,30 @@ const col=document.querySelector('.drummer-col');
 const colRect=col.getBoundingClientRect();
 const colH=colRect.height||400;
 document.getElementById('mario-mode-btn').disabled=true;
-// Pipe
-const pipeW=colRect.width*1.25*0.3*1.15*1.15*1.05;
-const pipeLeft=colRect.left+(colRect.width-pipeW)/2-colRect.width*0.04+colRect.width*0.0025;
-const pipeTop=colRect.bottom-pipeW;
-const pipeEl=document.createElement('img');
-pipeEl.src=IMG_DATA['pipe'];
-pipeEl.style.cssText=`position:fixed;left:${pipeLeft}px;top:${colRect.bottom+10}px;width:${pipeW}px;z-index:9999;pointer-events:none;transition:none;`;
+// Pipe - sized and placed from the drummer's on-screen size, so it scales with any screen.
+// Mario's figure spans 20%-71.7% of the image width (center 45.75%); the pipe rim sits at his lap.
+const PIPE_SCALE=1.4,PIPE_RIM=0.6;
+const imgRect=drumImg.getBoundingClientRect();
+const pipeW=imgRect.width*0.516*PIPE_SCALE;
+const pipeLeft=imgRect.left+imgRect.width*0.4575-pipeW/2;
+const pipeTop=imgRect.top+imgRect.height*PIPE_RIM;
+const pipeH=Math.max(10,colRect.bottom-pipeTop);
+// Clipping window: the pipe grows up out of the bottom of the drummer card
+const pipeEl=document.createElement('div');
+pipeEl.style.cssText=`position:fixed;left:${pipeLeft}px;top:${pipeTop}px;width:${pipeW}px;height:${pipeH}px;overflow:hidden;z-index:9999;pointer-events:none;`;
+const pipeImg=document.createElement('img');
+pipeImg.src=IMG_DATA['pipe'];
+pipeImg.style.cssText=`display:block;width:${pipeW}px;height:${pipeW}px;transform:translateY(${pipeH+10}px);transition:none;`;
+pipeEl.appendChild(pipeImg);
 document.body.appendChild(pipeEl);
 // Background fade overlay (fixed over drummer-col)
 const fadeEl=document.createElement('div');
-fadeEl.style.cssText=`position:fixed;left:${colRect.left}px;top:${colRect.top}px;width:${colRect.width}px;height:${colRect.height}px;background:#fff;opacity:0;pointer-events:none;z-index:9998;border-radius:12px;transition:none;`;
+fadeEl.style.cssText=`position:fixed;left:${colRect.left}px;top:${colRect.top}px;width:${colRect.width}px;height:${colRect.height}px;background:#fff;opacity:0;pointer-events:none;z-index:9998;border-radius:18px;transition:none;`;
 document.body.appendChild(fadeEl);
 // Pipe rises
-pipeEl.offsetHeight;
-pipeEl.style.transition='top 0.75s cubic-bezier(0.22,1,0.36,1)';
-pipeEl.style.top=`${pipeTop}px`;
+pipeImg.offsetHeight;
+pipeImg.style.transition='transform 0.75s cubic-bezier(0.22,1,0.36,1)';
+pipeImg.style.transform='translateY(0)';
 setTimeout(()=>{
 // Drummer falls + background fades out simultaneously
 playPipeSound();
