@@ -30,9 +30,15 @@ button{cursor:pointer}
 .btn.primary:hover{background:#1B2E8C}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn svg{width:16px;height:16px}
-main{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:20px;padding:20px 22px;align-items:start;max-width:1800px;margin:0 auto}
-.stage{position:sticky;top:20px;background:var(--ink);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px}
-#view{width:100%;aspect-ratio:16/9;display:block;border-radius:8px;background:#000}
+/* App layout: the preview column always fits the window, and the settings column scrolls on its own */
+html{overflow:hidden}
+body{height:100vh;overflow:hidden;display:flex;flex-direction:column}
+.top{flex-shrink:0}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 440px;grid-template-rows:100%;gap:20px;padding:16px 22px 0;max-width:1800px;width:100%;margin:0 auto}
+.stage{background:var(--ink);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;max-height:calc(100% - 16px);overflow:hidden;align-self:start;height:calc(100% - 16px)}
+.stage>*{flex-shrink:0}
+.stage>.vwrap{flex:1 1 0;min-height:140px;container-type:size;display:flex;justify-content:center;align-items:center}
+#view{width:min(100cqw,calc(100cqh * 16 / 9));height:auto;aspect-ratio:16/9;display:block;border-radius:8px;background:#000}
 .transport{display:flex;align-items:center;gap:12px;color:#E9EBF5}
 .play{width:46px;height:46px;border-radius:50%;border:none;background:var(--label);color:var(--ink);display:grid;place-items:center;flex-shrink:0}
 .play:hover{background:#FFD751}
@@ -44,7 +50,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:20px;padding:20p
 .tog[aria-pressed="true"]{border-color:var(--label);color:#fff}
 .tog[aria-pressed="true"] .dot{background:var(--label)}
 .transport .spacer{flex:1}
-#strip{width:100%;height:96px;display:block;border-radius:8px;cursor:pointer;touch-action:none}
+#strip{width:100%;height:76px;display:block;border-radius:8px;cursor:pointer;touch-action:none}
 .hint{color:#A3A8C6;font-size:12.5px}
 .finder{border-top:1px solid #3A3F63;padding-top:12px;display:flex;flex-direction:column;gap:10px;color:#E9EBF5}
 .fhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -55,7 +61,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:20px;padding:20p
 .zoom button{border:none;background:transparent;color:#C9CCE0;font-weight:800;font-size:12.5px;padding:4px 10px}
 .zoom button+button{border-left:1.5px solid #454A6B}
 .zoom button[aria-pressed="true"]{background:#3A3F63;color:#fff}
-#fWave{width:100%;height:130px;display:block;border-radius:8px;cursor:ew-resize;touch-action:none}
+#fWave{width:100%;height:110px;display:block;border-radius:8px;cursor:ew-resize;touch-action:none}
 .frow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .fbtn{border:1.5px solid #454A6B;background:transparent;color:#E9EBF5;border-radius:9px;padding:6px 12px;font-weight:800;font-size:13px}
 .fbtn:hover{border-color:#8E95C4}
@@ -65,7 +71,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:20px;padding:20p
 .nudges{display:inline-flex;gap:4px}
 .fsnap{display:flex;align-items:center;gap:6px;font-size:13px;color:#C9CCE0;margin-left:auto}
 .fmsg{font-size:13px;color:#C9CCE0;min-height:20px}
-.side{display:flex;flex-direction:column;gap:16px}
+.side{display:flex;flex-direction:column;gap:16px;overflow-y:auto;min-height:0;padding:0 4px 16px 0}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px}
 .card h2{font-family:'Fredoka',sans-serif;font-weight:600;font-size:18px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
 .card h2 .sub{font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--muted);margin-left:auto}
@@ -162,7 +168,9 @@ input[type=number]:focus,input[type=text]:focus,select:focus{border-color:var(--
 input[type=range]{width:100%;accent-color:var(--bucket)}
 .exprow{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 .exprow .field{flex:1;min-width:120px}
-@media (max-width:1100px){main{grid-template-columns:1fr}.stage{position:static}}
+.stage:has(.finder:not([hidden])) .hint{display:none}
+@media (max-height:760px){.top{padding:8px 22px}.mark{width:32px;height:32px}.top h1{font-size:19px}main{padding-top:10px}.stage{gap:8px;padding:10px}#strip{height:56px}#fWave{height:84px}.hint{display:none}.play{width:40px;height:40px}.finder{gap:7px;padding-top:8px}}
+@media (max-width:1100px){html{overflow:visible}body{height:auto;overflow:visible;display:block}main{grid-template-columns:1fr;padding-bottom:16px}.stage{height:auto;max-height:none;overflow:visible}.stage>.vwrap{container-type:normal;min-height:0}#view{width:100%}.side{overflow:visible}}
 </style>
 </head>
 <body>
@@ -176,7 +184,7 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
 </header>
 <main>
   <section class="stage" aria-label="Preview">
-    <canvas id="view" width="1920" height="1080"></canvas>
+    <div class="vwrap"><canvas id="view" width="1920" height="1080"></canvas></div>
     <div class="transport">
       <button class="play" id="playBtn" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor" id="playIc"><path d="M7 4.5v15l13-7.5z"/></svg></button>
       <div class="clock"><span id="tNow">0:00.0</span> / <span id="tDur">0:00.0</span><small id="tBar">Before beat 1</small></div>
