@@ -31,8 +31,8 @@ button{cursor:pointer}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn svg{width:16px;height:16px}
 /* App layout: the preview column always fits the window, and the settings column scrolls on its own */
-html{overflow:hidden}
-body{height:100vh;overflow:hidden;display:flex;flex-direction:column}
+html{overflow:clip}
+body{height:100vh;overflow:clip;display:flex;flex-direction:column}
 .top{flex-shrink:0}
 main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 440px;grid-template-rows:100%;gap:20px;padding:16px 22px 0;max-width:1800px;width:100%;margin:0 auto}
 .stage{background:var(--ink);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;max-height:calc(100% - 16px);overflow:hidden;align-self:start;height:calc(100% - 16px)}
@@ -151,8 +151,8 @@ input[type=number]:focus,input[type=text]:focus,select:focus{border-color:var(--
 .status{margin-top:8px;font-size:13.5px;color:var(--muted);min-height:20px}
 .status.err{color:var(--danger)}
 .drow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.switch{display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer;flex:1;min-width:220px}
-.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch{position:relative;display:flex;align-items:center;gap:10px;font-weight:700;cursor:pointer;flex:1;min-width:220px}
+.switch input{position:absolute;left:0;top:50%;opacity:0;width:1px;height:1px;margin:0}
 .switch .track{width:40px;height:24px;border-radius:12px;background:#CDD2E2;position:relative;flex-shrink:0;transition:background .15s}
 .switch .track::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
 .switch input:checked+.track{background:var(--bucket)}
