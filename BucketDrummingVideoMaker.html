@@ -2394,8 +2394,8 @@ function buildTimeline(){
   const minT=Math.min(Infinity,...count.map(k=>k.t)),pad=minT<0.4?0.4-minT:0;
   if(pad){secs.forEach(o=>{o.start+=pad;o.end+=pad;if(o.countFrom!==undefined)o.countFrom+=pad;});ev.forEach(e=>e.t+=pad);count.forEach(k=>k.t+=pad);parts.forEach(p=>{p.b1+=pad;p.end+=pad;});}
   ev.sort((a,b)=>a.t-b.t);count.sort((a,b)=>a.t-b.t);
-  // hands alternate per sound and restart on the right hand at each rhythm
-  {const last={};for(const e of ev){if(last._s!==e.sec){last._s=e.sec;last['0']=last['1']=last['2']='left';}e.hand=last[e.s]==='right'?'left':'right';last[e.s]=e.hand;}}
+  // hands strictly alternate across all sounds (R L R L...), starting on the right hand at each rhythm
+  {let sec=null,hand='left';for(const e of ev){if(sec!==e.sec){sec=e.sec;hand='left';}hand=hand==='right'?'left':'right';e.hand=hand;}}
   // when each staff is on screen
   const order=secs.slice().sort((a,b)=>a.start-b.start);
   let prevVis=null;
