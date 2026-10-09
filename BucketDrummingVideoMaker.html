@@ -233,6 +233,13 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
     </section>
 
     <section class="card">
+      <h2>Cues</h2>
+      <label class="switch"><input type="checkbox" id="cueLast"><span class="track"></span>Show "Last time!" on the final repetition</label>
+      <label class="switch" style="margin-top:10px"><input type="checkbox" id="cueNext"><span class="track"></span>Preview the next rhythm during the last time through</label>
+      <div class="help">The preview only appears when one rhythm goes straight into a different one. After listening bars, the next rhythm already fades in early.</div>
+    </section>
+
+    <section class="card">
       <h2>Drummer</h2>
       <div class="drow">
         <label class="switch"><input type="checkbox" id="drumOn"><span class="track"></span>Show the drummer in the bottom left corner</label>
@@ -2182,7 +2189,7 @@ const LANE={
 const BURST_C=[181.5,180.5];     // burst centre inside burst.webp
 const FALL_PX=760;               // distance travelled during the fall time
 const STAFF={x:18,mid:190,sp:30,maxW:860};   // staff shrinks to fit busy rhythms, like the Dorico exports
-const LABEL={x:402,y:400,size:118};
+const LABEL={x:402,y:400,size:118,gap:66};   // gap: from the lowest ink to the centre of the x8
 const DRUMMER={cx:250,bottom:1070,scale:0.9,box:[114,164,379,839],hold:0.2};   // bottom-left corner, frames from the Composer
 const FX={burst:0.32,impact:0.10,impactFade:0.12,wobble:0.16,blur:4,shake:5};
 
@@ -2237,11 +2244,11 @@ function rowLayout(ms,sp){
   const bw=[6.5,8.5,11][d]*sp,ns=4.5*sp,mw=4*bw,M=ms.length;
   let last=ns;
   ms.forEach((beats,m)=>beats.forEach((b,i)=>{if(b.k==='-')return;const p=POS[b.k];last=Math.max(last,ns+m*mw+i*bw+(p?p[p.length-1]:0)/4*bw);}));
-  return{bw,ns,mw,end:Math.max(last+3*sp,ns+(M-1)*mw+3*bw+3*sp)};
+  return{bw,ns,mw,end:Math.max(last+3.8*sp,ns+(M-1)*mw+3*bw+3.8*sp)};   // room for a repeat sign after the last note
 }
 function staffLayout(beats,sp){return rowLayout([beats],sp);}
 // One staff with one or more measures side by side, barlines between them.
-function engraveRow(c,ms,x0,top,sp,col){
+function engraveRow(c,ms,x0,top,sp,col,endBar){
   const L=rowLayout(ms,sp);
   c.save();c.fillStyle=c.strokeStyle=col;
   const lw=Math.max(1,0.085*sp);
@@ -2261,6 +2268,15 @@ function engraveRow(c,ms,x0,top,sp,col){
       drawGroup(c,b,bx(i),L.bw,top,sp);
     }
   });
+  // end of the line: repeat sign if the phrase repeats, two thin lines if it plays once, a plain barline mid-phrase
+  const X=x0+L.end,thin=Math.max(1.2,0.12*sp);
+  if(endBar==='single')c.fillRect(X-thin,top,thin,4*sp);
+  if(endBar==='double'){c.fillRect(X-thin,top,thin,4*sp);c.fillRect(X-thin-0.55*sp,top,thin,4*sp);}
+  if(endBar==='repeat'){
+    const thick=0.5*sp,tx=X-thick-0.4*sp-thin;
+    c.fillRect(X-thick,top,thick,4*sp);c.fillRect(tx,top,thin,4*sp);
+    for(const y of [1.5,2.5]){c.beginPath();c.arc(tx-0.55*sp,top+y*sp,0.22*sp,0,Math.PI*2);c.fill();}
+  }
   c.restore();
   return L.end;
 }
@@ -2328,12 +2344,12 @@ function drawGroup(c,b,x,bw,top,sp){
 // A video is a list of parts (one per song in the clip). Each part has its own tempo and downbeat,
 // and a list of sections: rhythms to drum, or listening bars with nothing on screen.
 const DEFAULT_SECTIONS=[{type:'rhythm',code:'Q0,R,R,R',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q0,Q0,Q0',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q1,Q0,Q1',reps:8,show:2,count:'off'},{type:'rhythm',code:'E00,E10,E00,E10',reps:8,show:2,count:'off'}];
-const S={fallBeats:2.5,fps:30,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
+const S={fallBeats:2.5,fps:30,cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
 const song={buf:null,name:'',peaks:null};
 const ui={t:0,playing:false,drums:true,click:false,exporting:false};
 const STORE='bdvm-project-v1';
 function save(){try{localStorage.setItem(STORE,JSON.stringify(projectData()));}catch(e){}}
-function projectData(){return{app:'bucket-drumming-video-maker',version:2,fallBeats:S.fallBeats,fps:S.fps,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
+function projectData(){return{app:'bucket-drumming-video-maker',version:2,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
 function cleanSection(s){
   if(s&&s.type==='rest')return{type:'rest',bars:clampInt(s.bars,1,256,4)};
   const b=s&&parsePhrase(s.code);if(!b)return null;
@@ -2357,6 +2373,8 @@ function applyProject(p){
   if(+p.fallBeats>0)S.fallBeats=+p.fallBeats;
   if(p.fps==30||p.fps==60)S.fps=+p.fps;
   if(typeof p.drummer==='boolean')S.drummer=p.drummer;
+  if(typeof p.cueNext==='boolean')S.cueNext=p.cueNext;
+  if(typeof p.cueLast==='boolean')S.cueLast=p.cueLast;
   if(p.inst==='mallet'||p.inst==='stick')S.inst=p.inst;
   if(typeof p.countClick==='boolean')S.countClick=p.countClick;
   if(typeof p.expDrums==='boolean')S.expDrums=p.expDrums;
@@ -2406,6 +2424,8 @@ function buildTimeline(){
     else if(!prev){o.visFrom=0;o.fadeIn=false;}
     else{const lead=Math.max(o.start-o.countFrom,o.bar);o.visFrom=Math.min(o.start,Math.max(prevVis?prevVis.end+prevVis.bd:0,o.start-lead));o.fadeIn=true;}
     o.fadeOut=!(next&&next.type==='rhythm'&&Math.abs(o.end-next.start)<1e-3);
+    o.next=o.fadeOut?null:next;   // the rhythm it segues straight into, if any
+    o.lastStart=o.end-o.ms.length*o.bar;
     prevVis=o;
   });
   const rh=secs.filter(o=>o.type==='rhythm');
@@ -2417,19 +2437,60 @@ function buildTimeline(){
 function duration(){return song.buf?TL.pad+song.buf.duration:Math.max(4,TL.end+2);}
 function secAt(t){for(const o of TL.secs)if(t>=o.start&&t<o.end)return o;return null;}
 function partAt(t){let p=TL.parts[0];for(const q of TL.parts)if(t>=q.b1-1e-6)p=q;return p;}
-function staffCanvas(code,ms){
-  if(staffCache.has(code))return staffCache.get(code);
+function staffCanvas(code,ms,reps){
+  const end=reps>1?'repeat':'double',key=code+'|'+end;
+  if(staffCache.has(key))return staffCache.get(key);
   const cv=document.createElement('canvas');cv.width=W;cv.height=520;const c=cv.getContext('2d');
   const rows=phraseRows(ms);
   const sp=Math.min(STAFF.sp,STAFF.maxW/Math.max(...rows.map(r=>rowLayout(r,1).end)));
-  let labelY=LABEL.y;
-  if(rows.length===1)engraveRow(c,rows[0],STAFF.x,STAFF.mid-2*sp,sp,'#111');
+  if(rows.length===1)engraveRow(c,rows[0],STAFF.x,STAFF.mid-2*sp,sp,'#111',end);
   else{
     const mid1=STAFF.mid-40,mid2=mid1+8.5*sp;
-    engraveRow(c,rows[0],STAFF.x,mid1-2*sp,sp,'#111');engraveRow(c,rows[1],STAFF.x,mid2-2*sp,sp,'#111');
-    labelY=Math.max(LABEL.y,mid2+6*sp+60);   // keep the repeat count clear of the second staff
+    engraveRow(c,rows[0],STAFF.x,mid1-2*sp,sp,'#111','single');engraveRow(c,rows[1],STAFF.x,mid2-2*sp,sp,'#111',end);
   }
-  const out={cv,labelY};staffCache.set(code,out);return out;
+  // repeat count sits a set distance below the lowest ink (notes, stems or beams)
+  const px=c.getImageData(0,0,cv.width,cv.height).data;let low=0,high=cv.height,right=0;
+  for(let y=0;y<cv.height;y++){const row=y*cv.width*4;for(let x=0;x<1000;x++)if(px[row+x*4+3]>40){if(y<high)high=y;low=y;if(x>right)right=x;}}
+  const out={cv,labelY:low+LABEL.gap,box:[STAFF.x-6,high-6,right-STAFF.x+12,low-high+12]};staffCache.set(key,out);return out;
+}
+// "Last time!" in the repeat count's spot during the final repetition
+let lastCv=null;
+function lastCanvas(){
+  if(lastCv)return lastCv;
+  const cv=document.createElement('canvas');cv.width=760;cv.height=220;const c=cv.getContext('2d');
+  c.font=`800 ${Math.round(LABEL.size*0.72)}px Nunito, sans-serif`;c.textAlign='center';c.textBaseline='middle';
+  c.shadowColor='rgba(20,22,40,.6)';c.shadowBlur=14;c.shadowOffsetY=5;c.fillStyle='#FFC928';
+  c.fillText('Last time!',380,110);
+  return lastCv=cv;
+}
+// smaller, lighter copy of the next rhythm under the current one, so students can read ahead.
+// It is engraved fresh to fit the open space, one measure per line when that makes it bigger.
+const NEXT={gap:64,tag:34,maxSp:18};
+const nextCache=new Map();
+function nextCanvas(nx,w,h){
+  const key=nx.code+'|'+nx.reps+'|'+w+'x'+h;
+  if(nextCache.has(key))return nextCache.get(key);
+  const fin=nx.reps>1?'repeat':'double';
+  const layouts=[phraseRows(nx.ms),nx.ms.map(m=>[m])];
+  let best=null;
+  for(const rows of layouts){
+    const wide=Math.max(...rows.map(r=>rowLayout(r,1).end));
+    const sp=Math.min(NEXT.maxSp,(w-4)/wide,h/(rows.length*8.5));
+    if(!best||sp>best.sp+0.5)best={rows,sp};
+  }
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;const c=cv.getContext('2d');
+  if(best.sp>=4)best.rows.forEach((r,i)=>engraveRow(c,r,2,2.6*best.sp+i*8.5*best.sp,best.sp,'#1B1E33',i<best.rows.length-1?'single':fin));
+  const out={cv,sp:best.sp};nextCache.set(key,out);return out;
+}
+function drawNext(c,nx,cur,a){
+  const x=S.drummer?400:STAFF.x,right=725,top=cur.labelY+NEXT.gap,bodyTop=top+NEXT.tag+4,h=Math.min(1060-bodyTop,320);
+  if(h<40)return;
+  const nc=nextCanvas(nx,right-x,Math.round(h));if(nc.sp<4)return;
+  c.save();c.globalAlpha=a;
+  c.font=`600 ${NEXT.tag}px Fredoka, Nunito, sans-serif`;c.textBaseline='top';c.fillStyle='rgba(27,30,51,.8)';
+  c.fillText('Next:',x,top);
+  c.globalAlpha=a*0.75;c.drawImage(nc.cv,x,bodyTop);
+  c.restore();
 }
 function labelCanvas(n){
   if(labelCache.has(n))return labelCache.get(n);
@@ -2452,10 +2513,17 @@ function drawFrame(c,t){
     let a=o.fadeIn?clamp01((t-o.visFrom)/o.bd):1;
     if(t>=o.end)a*=o.fadeOut?clamp01(1-(t-o.end)/o.bd):0;
     if(a<=0)continue;
-    const st=staffCanvas(o.code,o.ms);c.globalAlpha=a;c.drawImage(st.cv,0,0);
+    const st=staffCanvas(o.code,o.ms,o.reps);c.globalAlpha=a;c.drawImage(st.cv,0,0);
     let la=a;
     if(o.show<=0)la=0;else if(o.show<o.reps){const fadeAt=o.start+o.show*o.ms.length*o.bar;la*=clamp01(1-(t-fadeAt)/o.bd);}
+    const inLast=o.reps>1&&t>=o.lastStart&&t<o.end;
+    if(inLast&&S.cueLast)la=0;   // the last-time cue takes the repeat count's spot
     if(la>0){c.globalAlpha=la;const lc=labelCanvas(o.reps);c.drawImage(lc,LABEL.x-lc.width/2,st.labelY-lc.height/2);}
+    if(inLast&&S.cueLast){
+      const k=clamp01((t-o.lastStart)/(o.bd*0.5)),ph=((t-o.lastStart)/o.bd)%1,pulse=1+0.07*Math.exp(-7*ph);
+      const lc=lastCanvas();c.save();c.globalAlpha=a*k;c.translate(LABEL.x,st.labelY);c.scale(pulse,pulse);c.drawImage(lc,-lc.width/2,-lc.height/2);c.restore();
+    }
+    if(S.cueNext&&o.next&&o.next.code!==o.code&&t>=o.lastStart&&t<o.end)drawNext(c,o.next,st,clamp01((t-o.lastStart)/o.bd));
     c.globalAlpha=1;
   }
   if(S.drummer)drawDrummer(c,t);
@@ -2538,8 +2606,18 @@ function drawDrummer(c,t){
     const hold=Math.min(DRUMMER.hold,(next-e.t)*0.75);
     if(t-e.t<hold)pose=({'0':'center','1':'rim','2':'click'})[e.s]+'_'+e.hand;
   }
-  const img=IMG['d_'+S.inst+'_'+pose],s=DRUMMER.scale,b=DRUMMER.box;
-  c.drawImage(img,DRUMMER.cx-(b[0]+b[2])/2*s,DRUMMER.bottom-b[3]*s,img.width*s,img.height*s);
+  const s=DRUMMER.scale,b=DRUMMER.box,sh=drummerShadowed(S.inst+'_'+pose);
+  c.drawImage(sh.cv,DRUMMER.cx-(b[0]+b[2])/2*s-sh.pad,DRUMMER.bottom-b[3]*s-sh.pad);
+}
+// soft drop shadow so the drummer stands off the pastel background (rendered once per pose)
+const shadowCache=new Map();
+function drummerShadowed(k){
+  if(shadowCache.has(k))return shadowCache.get(k);
+  const img=IMG['d_'+k],s=DRUMMER.scale,pad=60,w=Math.ceil(img.width*s),h=Math.ceil(img.height*s);
+  const cv=document.createElement('canvas');cv.width=w+pad*2;cv.height=h+pad*2;const c=cv.getContext('2d');
+  c.shadowColor='rgba(18,20,40,.62)';c.shadowBlur=30;c.shadowOffsetX=8;c.shadowOffsetY=10;
+  c.drawImage(img,pad,pad,w,h);
+  const out={cv,pad};shadowCache.set(k,out);return out;
 }
 
 /* ================= Preview ================= */
@@ -2703,7 +2781,10 @@ function syncInputs(){fallIn.value=S.fallBeats;fpsIn.value=S.fps;
   document.getElementById('drumOn').checked=S.drummer;
   document.querySelectorAll('[data-inst]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.inst===S.inst));
   document.getElementById('instSeg').classList.toggle('off',!S.drummer);}
+document.getElementById('cueLast').addEventListener('change',e=>{S.cueLast=e.target.checked;save();redraw();});
+document.getElementById('cueNext').addEventListener('change',e=>{S.cueNext=e.target.checked;save();redraw();});
 function syncSound(){
+  document.getElementById('cueLast').checked=S.cueLast;document.getElementById('cueNext').checked=S.cueNext;
   document.getElementById('countClk').checked=S.countClick;
   document.getElementById('expDrums').checked=S.expDrums;
   document.getElementById('drumVol').value=Math.round(S.drumVol*100);
@@ -2812,12 +2893,12 @@ function rhythmCard(pt,sec,si){
   });
   el.querySelectorAll('[data-m]').forEach(b=>b.addEventListener('click',()=>setMeasures(sec,+b.dataset.m)));
   const cv=el.querySelector('canvas');
-  requestAnimationFrame(()=>drawThumb(cv,ms));
+  requestAnimationFrame(()=>drawThumb(cv,ms,sec.reps));
   cv.addEventListener('click',()=>{const o=TL.secs.find(x=>x.ref===sec);if(o)seek(Math.max(0,Math.min(o.countFrom,o.start-TL.fallT)-0.3));});
   wireActs(el,pt,si);
   el.querySelectorAll('input[data-f]').forEach(inp=>{
     inp.addEventListener('input',()=>{const v=parseInt(inp.value);if(isNaN(v))return;
-      if(inp.dataset.f==='reps'){sec.reps=Math.max(1,Math.min(99,v));el.querySelector('[data-f=show]').max=sec.reps;el.querySelector('.showlab').textContent=`Show x${sec.reps} for`;}
+      if(inp.dataset.f==='reps'){const was=sec.reps>1;sec.reps=Math.max(1,Math.min(99,v));if(was!==(sec.reps>1))drawThumb(cv,parsePhrase(sec.code),sec.reps);el.querySelector('[data-f=show]').max=sec.reps;el.querySelector('.showlab').textContent=`Show x${sec.reps} for`;}
       else sec.show=Math.max(0,Math.min(99,v));
       refreshAll(false);});
     inp.addEventListener('change',()=>{inp.value=inp.dataset.f==='reps'?sec.reps:Math.min(sec.show,sec.reps);});
@@ -2828,12 +2909,13 @@ function rhythmCard(pt,sec,si){
   codeIn.addEventListener('input',()=>codeIn.classList.toggle('bad',!parsePhrase(codeIn.value)));
   return el;
 }
-function drawThumb(cv,ms){
+function drawThumb(cv,ms,reps){
   const rows=phraseRows(ms),dpr=window.devicePixelRatio||1,w=cv.clientWidth||380;
   const end=Math.max(...rows.map(r=>rowLayout(r,1).end)),sp=Math.min(9,(w-16)/end),rowH=8.5*sp,h=Math.round(rows.length*rowH+1.6*sp);
   cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.height=h+'px';
   const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);
-  rows.forEach((r,i)=>engraveRow(c,r,8,0.8*sp+i*rowH+2.6*sp,sp,'#1B1E33'));
+  const fin=reps>1?'repeat':'double';
+  rows.forEach((r,i)=>engraveRow(c,r,8,0.8*sp+i*rowH+2.6*sp,sp,'#1B1E33',i<rows.length-1?'single':fin));
 }
 function editPhrase(sec,fn){const ms=parsePhrase(sec.code);fn(ms);sec.code=phraseCode(ms);refreshAll();}
 function setMeasures(sec,n){
@@ -3167,7 +3249,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();seek(songTime()+partAt(songTime()).bar);}
   if(e.key==='Home'){e.preventDefault();seek(0);}
 });
-let rsT=null;window.addEventListener('resize',()=>{redraw();clearTimeout(rsT);rsT=setTimeout(()=>{plist.querySelectorAll('.sec:not(.rest)').forEach(el=>{const[pi,si]=el.dataset.key.split('-').map(Number);const sec=S.parts[pi]?.sections[si];if(sec)drawThumb(el.querySelector('canvas'),parsePhrase(sec.code));});},150);});
+let rsT=null;window.addEventListener('resize',()=>{redraw();clearTimeout(rsT);rsT=setTimeout(()=>{plist.querySelectorAll('.sec:not(.rest)').forEach(el=>{const[pi,si]=el.dataset.key.split('-').map(Number);const sec=S.parts[pi]?.sections[si];if(sec)drawThumb(el.querySelector('canvas'),parsePhrase(sec.code),sec.reps);});},150);});
 
 (async function init(){
   try{const p=JSON.parse(localStorage.getItem(STORE)||'null');if(p)applyProject(p);}catch(e){}
