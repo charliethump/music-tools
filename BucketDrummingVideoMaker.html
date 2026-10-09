@@ -245,7 +245,7 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
         <label class="switch"><input type="checkbox" id="drumOn"><span class="track"></span>Show the drummer in the bottom left corner</label>
         <div class="seg" id="instSeg" role="group" aria-label="Drummer plays with"><button data-inst="mallet">Mallets</button><button data-inst="stick">Sticks</button></div>
       </div>
-      <div class="field" style="margin-top:12px"><label for="endExit">After the last rhythm</label><select id="endExit"><option value="none">Stays</option><option value="blast">Blasts off</option><option value="drill">Drills into the floor</option></select></div>
+      <div class="field" style="margin-top:12px"><label for="endExit">After the last rhythm</label><select id="endExit"></select></div>
       <div class="help" style="font-size:12.5px;color:var(--muted);margin-top:6px">Exits for listening bars are set on each listening section.</div>
     </section>
 
@@ -2649,7 +2649,7 @@ function drummerShadowed(k){
 
 /* ================= Drummer exits ================= */
 // Silly exits during listening bars and at the end. He comes back with the same effect played in reverse.
-const EXITS={none:'Stays',blast:'Blasts off',drill:'Drills into the floor'};
+const EXITS={none:'Stays',blast:'Blasts off',drill:'Drills into the floor',poof:'Poofs away',hook:'Gets yanked off stage',jet:'Jetpacks away'};
 function exitDur(bd){return Math.max(1.2,Math.min(2.4,4*bd));}
 function buildDrummerMoves(secs,rh){
   const moves=[],order=secs.slice().sort((a,b)=>a.start-b.start);
@@ -2703,6 +2703,53 @@ function drawMoving(c,sh,base,mv){
     if(sc>0.02){c.save();c.translate(x,y);c.rotate(rot);c.scale(sx*sc,sc);c.drawImage(sh.cv,-w/2,-h/2);c.restore();}
     // twinkle where he disappears
     if(p>0.93){const after=mv.after||0,k=p<1?(p-0.93)/0.07:Math.max(0,1-after/0.6);if(k>0)twinkle(c,sky[0],sky[1],18+30*k,k,p+after);}
+  }else if(m.fx==='poof'){
+    // squish down, stretch tall, then pop into sparkles
+    let sxs=1,sys=1;
+    if(p<0.35){const k=ease(p/0.35);sxs=1+0.22*k;sys=1-0.3*k;}
+    else if(p<0.58){const k=ease((p-0.35)/0.23);sxs=1.22-0.5*k;sys=0.7+0.68*k;}
+    const bodyY=feet-(DRUMMER.box[3]-DRUMMER.box[1])*DRUMMER.scale*0.5;
+    if(p<0.6){c.save();c.translate(cx,feet);c.scale(sxs,sys);c.drawImage(sh.cv,-w/2,-(feet-base.y));c.restore();}
+    if(p>=0.56){
+      const q=(p-0.56)/0.44,cols=['#FFC928','#ffffff','#E33059','#1E88E5','#7A4BC2','#2E9A86'];
+      c.save();
+      // soft puff ring
+      c.strokeStyle='rgba(150,140,190,.45)';c.lineWidth=3;
+      for(let i=0;i<12;i++){const a=i/12*Math.PI*2+RND[i],r=30+150*easeOut(q)*(0.7+0.5*RND[i+3]);c.globalAlpha=(1-q)*0.95;c.fillStyle=i%2?'#F6F2FF':'#DCD3F2';
+        c.beginPath();c.arc(cx+Math.cos(a)*r,bodyY+Math.sin(a)*r*0.9,50+60*q*RND[i+5],0,Math.PI*2);c.fill();c.stroke();}
+      // sparkles flying out
+      for(let i=0;i<18;i++){const a=i/18*Math.PI*2+RND[i+2]*0.6,r=60+300*easeOut(q)*(0.5+0.7*RND[i]);
+        twinkle(c,cx+Math.cos(a)*r,bodyY+Math.sin(a)*r+120*q*q,(26+30*RND[i+4])*(1-q*0.5),Math.min(1,(1-q)*1.4),i+q*4,cols[i%cols.length]);}
+      c.restore();
+    }
+  }else if(m.fx==='hook'){
+    // a vaudeville hook reaches in from the left, catches him at the waist and drags him off
+    const waist=feet-(DRUMMER.box[3]-DRUMMER.box[1])*DRUMMER.scale*0.47;
+    let hookX,dx=0,rot=0;
+    const grab=cx+128;   // the curl wraps around his far side
+    if(p<0.3){hookX=-260+(grab+260)*ease(p/0.3);}
+    else if(p<0.42){hookX=grab;const k=(p-0.3)/0.12;rot=0.12*Math.sin(k*Math.PI);dx=-14*Math.sin(k*Math.PI);}
+    else{const k=((p-0.42)/0.58)**1.25;dx=-(cx+w)*k-14*(1-k);hookX=grab+dx;rot=-0.28*Math.min(1,k*3);}
+    if(p>=0.42&&p<0.8){const q=(p-0.42)/0.38;c.save();c.globalAlpha=(1-q)*0.8;c.fillStyle='#E4E1DA';
+      for(let i=0;i<6;i++){c.beginPath();c.arc(cx+40+70*q*(1+RND[i]),feet-20-50*q*RND[i+3],22+30*q,0,Math.PI*2);c.fill();}c.restore();}
+    c.save();c.translate(cx+dx,feet);c.rotate(rot);c.drawImage(sh.cv,-w/2,-(feet-base.y));c.restore();
+    if(p>=0.42){c.save();c.strokeStyle='rgba(255,255,255,.8)';c.lineCap='round';c.lineWidth=4;
+      for(let i=0;i<5;i++){const y=waist-160+i*80+RND[i]*30,x=cx+dx+w*0.22+20*i;c.globalAlpha=0.55;c.beginPath();c.moveTo(x,y);c.lineTo(x+90+60*RND[i+4],y);c.stroke();}c.restore();}
+    drawHook(c,hookX,waist+(p>=0.3&&p<0.42?-6*Math.sin((p-0.3)/0.12*Math.PI):0));
+  }else if(m.fx==='jet'){
+    // flames light under the bucket, a shaky warm-up, then lift-off out the top
+    const ign=0.25,hover=70*ease(Math.min(1,p/ign)),rise=hover+(p<ign?0:((p-ign)/(1-ign))**2*(feet+80));   // hovers up first so the flames show
+    const shake=p<ign?Math.sin(p*260)*4*(p/ign):Math.sin(p*90)*2;
+    const wob=p<ign?0:0.06*Math.sin((p-ign)*24);
+    const fy=feet-rise,fl=p<ign?0.35+0.65*(p/ign):1;
+    // smoke left on the ground and along the way
+    if(p>ign*0.7){const q=Math.min(1,(p-ign*0.7)/0.75);c.save();
+      for(let i=0;i<10;i++){const life=Math.min(1,q*1.6-RND[i]*0.5);if(life<=0)continue;c.globalAlpha=(1-life)*0.8;c.fillStyle=i%2?'#E6E7EE':'#D2D5E0';
+        c.beginPath();c.arc(cx+(RND[i+2]-0.5)*220*life,feet-10-(rise*RND[i+6]*0.8)*(i%3===0?1:0)-30*life,28+50*life,0,Math.PI*2);c.fill();}
+      c.restore();}
+    c.save();c.translate(cx+shake,fy);c.rotate(wob);
+    c.save();c.shadowColor='rgba(255,170,40,.9)';c.shadowBlur=30;flame(c,-24,4,fl,p*40);flame(c,24,4,fl,p*40+1.7);c.restore();
+    c.drawImage(sh.cv,-w/2,-(feet-base.y));c.restore();
   }else{ // drill
     const wind=0.3,floor=feet-4;
     const theta=p<wind?2*Math.PI*2*(p/wind)**2:2*Math.PI*(2+12*(p-wind));
@@ -2720,11 +2767,29 @@ function drawMoving(c,sh,base,mv){
       c.restore();}
   }
 }
-function twinkle(c,x,y,r,a,seed){
+function drawHook(c,x,y){
+  // long wooden pole from off-screen left, ending in a J that curls around in front of him
+  c.save();c.lineCap='round';
+  const path=()=>{c.beginPath();c.moveTo(-400,y+30);c.lineTo(x-30,y+30);c.bezierCurveTo(x+60,y+30,x+70,y-70,x+10,y-80);c.bezierCurveTo(x-30,y-85,x-45,y-55,x-30,y-40);};
+  c.strokeStyle='#5E3A1C';c.lineWidth=30;path();c.stroke();
+  c.strokeStyle='#A0682F';c.lineWidth=22;path();c.stroke();
+  c.strokeStyle='rgba(255,226,170,.55)';c.lineWidth=5;c.translate(0,-6);path();c.stroke();
+  c.restore();
+}
+function flame(c,x,y,k,ph){
+  // flickering teardrop of fire pointing down from the bucket
+  const len=(130+40*Math.sin(ph*1.7)+20*Math.sin(ph*3.1))*k,wd=30*(0.7+0.3*k);
+  if(len<4)return;
+  c.save();c.translate(x,y);
+  const g=c.createLinearGradient(0,0,0,len);g.addColorStop(0,'rgba(255,255,220,.95)');g.addColorStop(0.3,'rgba(255,201,40,.95)');g.addColorStop(0.7,'rgba(255,110,30,.8)');g.addColorStop(1,'rgba(227,48,89,0)');
+  c.fillStyle=g;c.beginPath();c.moveTo(-wd,0);c.quadraticCurveTo(-wd*0.9,len*0.55,0,len);c.quadraticCurveTo(wd*0.9,len*0.55,wd,0);c.closePath();c.fill();
+  c.restore();
+}
+function twinkle(c,x,y,r,a,seed,col){
   c.save();c.globalAlpha=a;c.translate(x,y);c.rotate(seed*3);
   c.shadowColor='rgba(255,201,40,.9)';c.shadowBlur=24;c.fillStyle='#fff';
   c.beginPath();for(let i=0;i<8;i++){const rr=i%2?r*0.22:r,an=i*Math.PI/4;c.lineTo(Math.cos(an)*rr,Math.sin(an)*rr);}c.closePath();c.fill();
-  c.fillStyle='#FFC928';c.beginPath();c.arc(0,0,r*0.18,0,Math.PI*2);c.fill();
+  c.fillStyle=col||'#FFC928';c.beginPath();c.arc(0,0,r*0.18,0,Math.PI*2);c.fill();
   c.restore();
 }
 
@@ -2901,6 +2966,7 @@ function syncSound(){
 document.getElementById('countClk').addEventListener('change',e=>{S.countClick=e.target.checked;save();if(ui.playing)schedUntil=songTime();});
 document.getElementById('expDrums').addEventListener('change',e=>{S.expDrums=e.target.checked;save();});
 document.getElementById('drumVol').addEventListener('input',e=>{S.drumVol=+e.target.value/100;document.getElementById('drumVolTxt').textContent=e.target.value;if(drumGain)drumGain.gain.value=S.drumVol;save();});
+document.getElementById('endExit').innerHTML=Object.entries(EXITS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
 document.getElementById('endExit').addEventListener('change',e=>{S.endExit=e.target.value;refreshAll(false);});
 document.getElementById('drumOn').addEventListener('change',e=>{S.drummer=e.target.checked;syncInputs();save();redraw();});
 document.querySelectorAll('[data-inst]').forEach(b=>b.addEventListener('click',()=>{S.inst=b.dataset.inst;syncInputs();save();redraw();}));
