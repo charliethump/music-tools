@@ -245,6 +245,8 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
         <label class="switch"><input type="checkbox" id="drumOn"><span class="track"></span>Show the drummer in the bottom left corner</label>
         <div class="seg" id="instSeg" role="group" aria-label="Drummer plays with"><button data-inst="mallet">Mallets</button><button data-inst="stick">Sticks</button></div>
       </div>
+      <div class="field" style="margin-top:12px"><label for="endExit">After the last rhythm</label><select id="endExit"><option value="none">Stays</option><option value="blast">Blasts off</option><option value="drill">Drills into the floor</option></select></div>
+      <div class="help" style="font-size:12.5px;color:var(--muted);margin-top:6px">Exits for listening bars are set on each listening section.</div>
     </section>
 
     <section class="card">
@@ -2344,14 +2346,14 @@ function drawGroup(c,b,x,bw,top,sp){
 // A video is a list of parts (one per song in the clip). Each part has its own tempo and downbeat,
 // and a list of sections: rhythms to drum, or listening bars with nothing on screen.
 const DEFAULT_SECTIONS=[{type:'rhythm',code:'Q0,R,R,R',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q0,Q0,Q0',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q1,Q0,Q1',reps:8,show:2,count:'off'},{type:'rhythm',code:'E00,E10,E00,E10',reps:8,show:2,count:'off'}];
-const S={fallBeats:2.5,fps:30,cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
+const S={fallBeats:2.5,fps:30,endExit:'none',cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
 const song={buf:null,name:'',peaks:null};
 const ui={t:0,playing:false,drums:true,click:false,exporting:false};
 const STORE='bdvm-project-v1';
 function save(){try{localStorage.setItem(STORE,JSON.stringify(projectData()));}catch(e){}}
-function projectData(){return{app:'bucket-drumming-video-maker',version:2,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
+function projectData(){return{app:'bucket-drumming-video-maker',version:2,endExit:S.endExit,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
 function cleanSection(s){
-  if(s&&s.type==='rest')return{type:'rest',bars:clampInt(s.bars,1,256,4)};
+  if(s&&s.type==='rest')return{type:'rest',bars:clampInt(s.bars,1,256,4),exit:EXITS[s.exit]?s.exit:'none'};
   const b=s&&parsePhrase(s.code);if(!b)return null;
   return{type:'rhythm',code:phraseCode(b),reps:clampInt(s.reps,1,99,8),show:clampInt(s.show,0,99,2),count:['off','short','long'].includes(s.count)?s.count:'off'};
 }
@@ -2373,6 +2375,7 @@ function applyProject(p){
   if(+p.fallBeats>0)S.fallBeats=+p.fallBeats;
   if(p.fps==30||p.fps==60)S.fps=+p.fps;
   if(typeof p.drummer==='boolean')S.drummer=p.drummer;
+  if(EXITS[p.endExit])S.endExit=p.endExit;
   if(typeof p.cueNext==='boolean')S.cueNext=p.cueNext;
   if(typeof p.cueLast==='boolean')S.cueLast=p.cueLast;
   if(p.inst==='mallet'||p.inst==='stick')S.inst=p.inst;
@@ -2429,10 +2432,11 @@ function buildTimeline(){
     prevVis=o;
   });
   const rh=secs.filter(o=>o.type==='rhythm');
+  const moves=buildDrummerMoves(secs,rh);
   const lanes={'0':[],'1':[],'2':[]};ev.forEach(e=>lanes[e.s].push(e.t));
   const end=Math.max(0,...secs.map(o=>o.end));
   const bd0=parts[0].bd,fallT=S.fallBeats*bd0;   // one fall speed for the whole video so notes never pass each other at a tempo change
-  TL={secs,rh,ev,evT:ev.map(e=>e.t),lanes,count,parts,pad,end,fallT,speed:FALL_PX/fallT};
+  TL={moves,secs,rh,ev,evT:ev.map(e=>e.t),lanes,count,parts,pad,end,fallT,speed:FALL_PX/fallT};
 }
 function duration(){return song.buf?TL.pad+song.buf.duration:Math.max(4,TL.end+2);}
 function secAt(t){for(const o of TL.secs)if(t>=o.start&&t<o.end)return o;return null;}
@@ -2501,6 +2505,15 @@ function labelCanvas(n){
   labelCache.set(n,cv);return cv;
 }
 function lowerBound(a,x){let lo=0,hi=a.length;while(lo<hi){const m=(lo+hi)>>1;if(a[m]<x)lo=m+1;else hi=m;}return lo;}
+// bucket layer with its bottom row stretched 40 px past the frame edge, so the blur and shake
+// never pull its base up off the bottom of the video
+const bucketExts=new Map();
+function bucketExt(n){
+  if(bucketExts.has(n))return bucketExts.get(n);
+  const img=IMG['b_'+n],cv=document.createElement('canvas');cv.width=img.width;cv.height=img.height+40;
+  const c=cv.getContext('2d');c.drawImage(img,0,0);c.drawImage(img,0,img.height-2,img.width,2,0,img.height-1,img.width,41);
+  bucketExts.set(n,cv);return cv;
+}
 // background cut to one bucket's soft-edged area, used to cover the sharp bucket while it wobbles
 const bgPatches=new Map();
 function bgPatch(n){
@@ -2547,7 +2560,7 @@ function drawFrame(c,t){
     const q=1-dt/FX.wobble;
     c.drawImage(bgPatch(L.bucket),L.bpos[0],L.bpos[1]);
     c.save();c.filter=`blur(${(FX.blur*q).toFixed(2)}px)`;
-    c.drawImage(IMG['b_'+L.bucket],L.bpos[0]+Math.sin(dt*110)*FX.shake*q,L.bpos[1]+Math.cos(dt*90)*FX.shake*0.5*q);
+    c.drawImage(bucketExt(L.bucket),L.bpos[0]+Math.sin(dt*110)*FX.shake*q,L.bpos[1]+Math.cos(dt*90)*FX.shake*0.5*q);
     c.restore();
   }
   // bursts
@@ -2616,8 +2629,12 @@ function drawDrummer(c,t){
     const hold=Math.min(DRUMMER.hold,(next-e.t)*0.75);
     if(t-e.t<hold)pose=({'0':'center','1':'rim','2':'click'})[e.s]+'_'+e.hand;
   }
-  const s=DRUMMER.scale,b=DRUMMER.box,sh=drummerShadowed(S.inst+'_'+pose);
-  c.drawImage(sh.cv,DRUMMER.cx-(b[0]+b[2])/2*s-sh.pad,DRUMMER.bottom-b[3]*s-sh.pad);
+  const mv=drummerMove(t);
+  if(mv&&mv.p>=1&&!(mv.m.fx==='blast'&&mv.after<0.6))return;   // gone (after the twinkle fades)
+  const s=DRUMMER.scale,b=DRUMMER.box,sh=drummerShadowed(S.inst+'_'+(mv?'neutral':pose));
+  const base={x:DRUMMER.cx-(b[0]+b[2])/2*s-sh.pad,y:DRUMMER.bottom-b[3]*s-sh.pad};
+  if(mv){drawMoving(c,sh,base,mv);return;}
+  c.drawImage(sh.cv,base.x,base.y);
 }
 // soft drop shadow so the drummer stands off the pastel background (rendered once per pose)
 const shadowCache=new Map();
@@ -2628,6 +2645,87 @@ function drummerShadowed(k){
   c.shadowColor='rgba(18,20,40,.62)';c.shadowBlur=30;c.shadowOffsetX=8;c.shadowOffsetY=10;
   c.drawImage(img,pad,pad,w,h);
   const out={cv,pad};shadowCache.set(k,out);return out;
+}
+
+/* ================= Drummer exits ================= */
+// Silly exits during listening bars and at the end. He comes back with the same effect played in reverse.
+const EXITS={none:'Stays',blast:'Blasts off',drill:'Drills into the floor'};
+function exitDur(bd){return Math.max(1.2,Math.min(2.4,4*bd));}
+function buildDrummerMoves(secs,rh){
+  const moves=[],order=secs.slice().sort((a,b)=>a.start-b.start);
+  order.forEach((o,i)=>{
+    if(o.type!=='rest'||!EXITS[o.ref.exit]||o.ref.exit==='none')return;
+    const nextR=order.slice(i+1).find(x=>x.type==='rhythm');
+    const back=nextR?Math.min(nextR.countFrom,nextR.start)-0.1:Infinity;
+    let D=exitDur(o.bd);
+    if(nextR){const room=back-o.start;if(room<1)return;if(room<2*D+0.6)D=(room-0.3)/2.3;}
+    moves.push({fx:o.ref.exit,dir:'out',t0:o.start,D});
+    if(nextR)moves.push({fx:o.ref.exit,dir:'in',t0:back-D,D});
+  });
+  const lastR=rh.length?rh.reduce((a,b)=>b.end>a.end?b:a):null;
+  if(lastR&&S.endExit!=='none'&&!moves.some(m=>m.t0>=lastR.end-1e-3))moves.push({fx:S.endExit,dir:'out',t0:lastR.end,D:exitDur(lastR.bd)});
+  return moves.sort((a,b)=>a.t0-b.t0);
+}
+// returns null (draw normally), 'gone', or {m,p} with p running 0 to 1 through the exit
+function drummerMove(t){
+  let state=null;
+  for(const m of TL.moves){
+    if(t<m.t0)break;
+    const p=(t-m.t0)/m.D;
+    if(p<1)return{m,p:m.dir==='out'?p:1-p};
+    state=m.dir==='out'?{m,p:1,after:t-m.t0-m.D}:null;
+  }
+  return state;
+}
+const RND=[...Array(24)].map((_,i)=>{const x=Math.sin(i*12.9898+4.1)*43758.5453;return x-Math.floor(x);});
+function drawMoving(c,sh,base,mv){
+  const {m,p}=mv,w=sh.cv.width,h=sh.cv.height,cx=base.x+w/2,cy=base.y+h/2,feet=DRUMMER.bottom-4;
+  const ease=k=>k*k*(3-2*k);
+  if(m.fx==='blast'){
+    const wind=0.35,sky=[1180,150];
+    // spin like a coin, faster and faster
+    const theta=p<wind?2*Math.PI*2.2*(p/wind)**2:2*Math.PI*(2.2+9*(p-wind));
+    const sx=Math.cos(theta);
+    let x=cx,y=cy-(p<wind?40*Math.sin(Math.PI*p/wind)*0.4:0),sc=1,rot=0;
+    if(p>=wind){const k=ease((p-wind)/(1-wind));x=cx+(sky[0]-cx)*k;y=cy+(sky[1]-cy)*k-160*Math.sin(Math.PI*k);sc=1-0.97*k;rot=-0.5*k;}
+    // launch smoke
+    if(p>wind*0.8){const q=Math.min(1,(p-wind*0.8)/0.5);c.save();
+      c.strokeStyle='rgba(120,126,150,.35)';c.lineWidth=3;
+      for(let i=0;i<9;i++){const a=(i/8)*Math.PI+Math.PI,r=40+150*q*(0.6+0.6*RND[i]);c.globalAlpha=(1-q)*0.95;c.fillStyle=i%2?'#E4E7EF':'#CDD1DD';
+        c.beginPath();c.arc(cx+Math.cos(a)*r*1.1,feet-30+Math.sin(a)*r*0.45,30+46*q*RND[i+7],0,Math.PI*2);c.fill();c.stroke();}
+      c.restore();}
+    // speed lines trailing behind him
+    if(p>wind&&p<0.97){c.save();c.strokeStyle='rgba(255,255,255,.85)';c.lineCap='round';
+      const dx=sky[0]-cx,dy=sky[1]-cy,len=Math.hypot(dx,dy),ux=dx/len,uy=dy/len;
+      for(let i=0;i<5;i++){const off=(RND[i+3]-0.5)*120*sc,L=60+80*RND[i]*sc;c.lineWidth=Math.max(1.5,5*sc);
+        const bx=x-ux*(90*sc+20*i)+(-uy)*off,by=y-uy*(90*sc+20*i)+ux*off;c.globalAlpha=0.6;c.beginPath();c.moveTo(bx,by);c.lineTo(bx-ux*L,by-uy*L);c.stroke();}
+      c.restore();}
+    if(sc>0.02){c.save();c.translate(x,y);c.rotate(rot);c.scale(sx*sc,sc);c.drawImage(sh.cv,-w/2,-h/2);c.restore();}
+    // twinkle where he disappears
+    if(p>0.93){const after=mv.after||0,k=p<1?(p-0.93)/0.07:Math.max(0,1-after/0.6);if(k>0)twinkle(c,sky[0],sky[1],18+30*k,k,p+after);}
+  }else{ // drill
+    const wind=0.3,floor=feet-4;
+    const theta=p<wind?2*Math.PI*2*(p/wind)**2:2*Math.PI*(2+12*(p-wind));
+    const sx=Math.cos(theta),hop=p<wind?-30*Math.sin(Math.PI*p/wind):0;
+    const sink=p<wind?0:ease((p-wind)/(1-wind))*(h-sh.pad*2+40);
+    c.save();c.beginPath();c.rect(0,0,W,floor);c.clip();
+    c.translate(cx,cy+hop+sink);c.scale(sx,1);c.drawImage(sh.cv,-w/2,-h/2);c.restore();
+    // dust and debris at the hole
+    if(p>wind*0.6&&p<1){const q=(p-wind*0.6)/(1-wind*0.6);c.save();
+      c.fillStyle='rgba(60,48,40,.55)';c.beginPath();c.ellipse(cx,floor,100+20*Math.sin(q*30),14,0,0,Math.PI*2);c.fill();
+      for(let i=0;i<14;i++){const life=(q*3+RND[i])%1,a=Math.PI*(1.05+0.9*RND[i+5]),r=40+170*life;
+        c.globalAlpha=(1-life)*0.85;c.fillStyle=i%3?'#B9A48E':'#8C7A66';
+        c.beginPath();c.arc(cx+Math.cos(a)*r,floor+Math.sin(a)*r*0.9+90*life*life,7+9*RND[i+9],0,Math.PI*2);c.fill();}
+      for(let i=0;i<5;i++){const life=(q*2+RND[i+15])%1;c.globalAlpha=(1-life)*0.6;c.fillStyle='#D8CDBE';c.beginPath();c.arc(cx+(RND[i+2]-0.5)*200,floor-20-80*life,24+40*life,0,Math.PI*2);c.fill();}
+      c.restore();}
+  }
+}
+function twinkle(c,x,y,r,a,seed){
+  c.save();c.globalAlpha=a;c.translate(x,y);c.rotate(seed*3);
+  c.shadowColor='rgba(255,201,40,.9)';c.shadowBlur=24;c.fillStyle='#fff';
+  c.beginPath();for(let i=0;i<8;i++){const rr=i%2?r*0.22:r,an=i*Math.PI/4;c.lineTo(Math.cos(an)*rr,Math.sin(an)*rr);}c.closePath();c.fill();
+  c.fillStyle='#FFC928';c.beginPath();c.arc(0,0,r*0.18,0,Math.PI*2);c.fill();
+  c.restore();
 }
 
 /* ================= Preview ================= */
@@ -2787,7 +2885,7 @@ async function loadSong(file){
 
 /* ================= Song settings ================= */
 const fallIn=document.getElementById('fall'),fpsIn=document.getElementById('fps');
-function syncInputs(){fallIn.value=S.fallBeats;fpsIn.value=S.fps;
+function syncInputs(){fallIn.value=S.fallBeats;fpsIn.value=S.fps;document.getElementById('endExit').value=S.endExit;
   document.getElementById('drumOn').checked=S.drummer;
   document.querySelectorAll('[data-inst]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.inst===S.inst));
   document.getElementById('instSeg').classList.toggle('off',!S.drummer);}
@@ -2803,6 +2901,7 @@ function syncSound(){
 document.getElementById('countClk').addEventListener('change',e=>{S.countClick=e.target.checked;save();if(ui.playing)schedUntil=songTime();});
 document.getElementById('expDrums').addEventListener('change',e=>{S.expDrums=e.target.checked;save();});
 document.getElementById('drumVol').addEventListener('input',e=>{S.drumVol=+e.target.value/100;document.getElementById('drumVolTxt').textContent=e.target.value;if(drumGain)drumGain.gain.value=S.drumVol;save();});
+document.getElementById('endExit').addEventListener('change',e=>{S.endExit=e.target.value;refreshAll(false);});
 document.getElementById('drumOn').addEventListener('change',e=>{S.drummer=e.target.checked;syncInputs();save();redraw();});
 document.querySelectorAll('[data-inst]').forEach(b=>b.addEventListener('click',()=>{S.inst=b.dataset.inst;syncInputs();save();redraw();}));
 fallIn.addEventListener('input',()=>{const v=+fallIn.value;if(v>=0.5&&v<=8){S.fallBeats=v;refreshAll(false);}});
@@ -2868,11 +2967,13 @@ function restCard(pt,sec,si){
   const el=document.createElement('div');el.className='sec rest';el.dataset.key=S.parts.indexOf(pt)+'-'+si;
   el.innerHTML=`<div class="sec-head"><span class="num ear">${ICON.ear}</span><span class="bars"></span>${acts(pt.sections,si)}</div>
     <div class="sec-fields"><span>Listen, no drumming, for</span><label><input type="number" min="1" max="256" value="${sec.bars}" data-f="bars"> bars</label></div>
-    <div class="help">The staff and repeat count clear off the screen. Falling notes for the next rhythm still drop in on time.</div>`;
+    <div class="sec-fields"><label>Drummer <select data-f="exit">${Object.entries(EXITS).map(([k,v])=>`<option value="${k}" ${k===(sec.exit||'none')?'selected':''}>${v}</option>`).join('')}</select></label></div>
+    <div class="help">The staff and repeat count clear off the screen. Falling notes for the next rhythm still drop in on time. If the drummer leaves, he comes back the same way in time for the next rhythm.</div>`;
   wireActs(el,pt,si);
   const inp=el.querySelector('[data-f=bars]');
   inp.addEventListener('input',()=>{const v=parseInt(inp.value);if(v>=1){sec.bars=Math.min(256,v);refreshAll(false);}});
   inp.addEventListener('change',()=>{inp.value=sec.bars;});
+  el.querySelector('[data-f=exit]').addEventListener('change',e=>{sec.exit=e.target.value;refreshAll(false);});
   return el;
 }
 function rhythmCard(pt,sec,si){
