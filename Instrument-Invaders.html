@@ -74,7 +74,7 @@
   .btn.britten.locked { opacity: .35; cursor: not-allowed; }
   .btn.quiet { color: var(--dim); }
   .btn:disabled { opacity: .4; cursor: wait; }
-  .btn.gone { visibility: hidden; }
+  .btn.gone, #logo span.gone { visibility: hidden; }
   #fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 
   .scores { display: flex; gap: calc(var(--u) * 26); }
@@ -717,6 +717,7 @@
         t += 4 * step + 0.06;
       });
     },
+    pop: () => tone(700 + Math.random() * 300, 0.07, { to: 220, vol: 0.06 }),
     smash: () => { tone(220, 0.25, { to: 55, vol: 0.12 }); tone(110, 0.3, { type: 'triangle', to: 40, vol: 0.16 }); },
     // Descending diminished-7th arpeggio flourish (Britten Battle intro)
     dimFlourish: () => {
@@ -1592,14 +1593,30 @@
   }
 
   /* ===== Britten Battle intro (title screen) =====
-     Britten rises from behind his button, stands on it, knocks out the Hard, Medium
-     and Easy buttons with treble clefs, a diminished flourish plays, he flies off
-     the top and the battle loads. Any click or key skips straight to the battle. */
+     Britten rises from behind his button and stops two-thirds of the way out.
+       Regular version: he knocks out Easy, Medium and Hard (random order) one clef at a time.
+       Barrage version: he holds his baton out and rapid-fires clefs at every letter of
+       INSTRUMENT INVADERS, then the three buttons.
+     Then a diminished flourish plays, he flies off the top and the battle loads.
+     Any click or key skips straight to the battle. */
+  const INTRO_BARRAGE_CHANCE = 0.1;      // 1-in-10 chance of the barrage (set to 1 to see it every time)
+  const INTRO_SCALE = 3;                 // Britten's size in the intro compared with in the game
+  const INTRO_RISE = 2 / 3;              // how much of him rises above the button before he stops
+  const INTRO_CLEF_SCALE = 2;            // clef size in the intro compared with in the game
+  const INTRO_THROWS = [1.0, 1.7, 2.4];  // regular version: when he throws his three clefs (seconds)
+  const INTRO_RAPID_START = 1.0;         // barrage: when the wind-up starts
+  const INTRO_RAPID_EVERY = 0.12;        // barrage: seconds between clefs
+  const INTRO_CLEF_FLIGHT = 0.38;        // how long each clef takes to reach its target
+  const INTRO_FLY_TIME = 1.35;           // from the start of his exit to the battle loading
+
   const fx = $('fx'), fxc = fx.getContext('2d');
   let intro = null;
   function stageRect(el) {
     const s = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
     return { x: r.left - s.left, y: r.top - s.top, w: r.width, h: r.height };
+  }
+  function introTarget(el, kind) {
+    return { el, kind, r: stageRect(el), color: getComputedStyle(el).color, hit: false };
   }
   function startBrittenIntro() {
     if (intro || !brittenFrames[0]) { if (!intro) newGame('britten'); return; }
@@ -1609,16 +1626,24 @@
     fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
     const u = sr.width / W;                       // CSS pixels per game pixel
     const home = stageRect(screens.title.querySelector('[data-diff="britten"]'));
-    const targets = ['hard', 'medium', 'easy'].map(k => {
-      const el = screens.title.querySelector('[data-diff="' + k + '"]');
-      return { el, r: stageRect(el), color: getComputedStyle(el).color, hit: false };
-    });
+    const barrage = Math.random() < INTRO_BARRAGE_CHANCE;
+    const buttons = shuffle(['hard', 'medium', 'easy']).map(k => introTarget(screens.title.querySelector('[data-diff="' + k + '"]'), 'button'));
+    const letters = barrage ? shuffle([...$('logo').querySelectorAll('.line span')]).map(el => introTarget(el, 'letter')) : [];
+    const targets = letters.concat(buttons);     // barrage: every letter first, then the buttons as the finale
+    let lastImpact;
+    if (barrage) {
+      const fireStart = INTRO_RAPID_START + 2 * BRITTEN_FRAME_TIME;   // after winding up to sprite 3
+      lastImpact = fireStart + (targets.length - 1) * INTRO_RAPID_EVERY + INTRO_CLEF_FLIGHT;
+    } else {
+      lastImpact = INTRO_THROWS[2] + 2 * BRITTEN_FRAME_TIME + INTRO_CLEF_FLIGHT;
+    }
     screens.title.style.pointerEvents = 'none';
     intro = {
       t: 0, u, x: home.x + home.w / 2, top: home.y, y: home.y + BRITTEN_SPRITE.frameH * u * INTRO_SCALE,
-      targets, clefs: [], parts: [], throws: 0, anim: -1, released: false, flourish: false,
-      last: performance.now()
+      barrage, targets, fired: 0, clefs: [], parts: [], throws: 0, anim: -1, released: false, flourish: false,
+      flyAt: lastImpact + 0.12, last: performance.now()
     };
+    intro.endAt = intro.flyAt + INTRO_FLY_TIME;
     window.addEventListener('pointerdown', skipBrittenIntro, true);
     window.addEventListener('keydown', skipBrittenIntro, true);
     requestAnimationFrame(introFrame);
@@ -1643,51 +1668,60 @@
       intro.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40 * u, life: 0.6 + Math.random() * 0.5, color, s: (2 + Math.random() * 3) * u });
     }
   }
-  const INTRO_THROWS = [1.0, 1.7, 2.4];  // when he throws at Hard, Medium, Easy (seconds)
-  const INTRO_SCALE = 3;                 // Britten's size in the intro compared with in the game
-  const INTRO_RISE = 2 / 3;              // how much of him rises above the button before he stops
-  const INTRO_CLEF_SCALE = 2;            // clef size in the intro compared with in the game
-  const INTRO_FLOURISH = 3.15, INTRO_FLY = 3.15, INTRO_END = 4.5; // flourish and flight start once the last button is gone
+  function introFire(I, tg, su) {
+    const S = BRITTEN_SPRITE;
+    const sx = I.x + S.tipX * su, sy = I.y + S.tipY * su;
+    I.clefs.push({ sx, sy, tx: tg.r.x + tg.r.w / 2, ty: tg.r.y + tg.r.h / 2, p: 0, target: tg });
+    sfx.clef();
+  }
   function introFrame(now) {
     if (!intro) return;
     const I = intro, u = I.u, dt = Math.min(0.05, (now - I.last) / 1000);
     I.last = now; I.t += dt;
     const S = BRITTEN_SPRITE, su = u * INTRO_SCALE; // su = sprite scale
     const standY = I.top + S.frameH * su * (1 - INTRO_RISE); // feet stay hidden below the button's top edge
+    const FT = BRITTEN_FRAME_TIME;
 
-    // Rise from behind the button, then stand on it, then fly off the top
-    if (I.t < 0.8) { const p = I.t / 0.8, e = 1 - Math.pow(1 - p, 3); I.y = standY + (1 - e) * S.frameH * su * INTRO_RISE; } // starts just out of sight
-    else if (I.t < INTRO_FLY) I.y = standY;
-    else { const f = I.t - INTRO_FLY; I.y = standY - f * f * 1100 * u - f * 90 * u; } // keeps rising, then shoots off the top
+    // Rise from behind the button, then stand, then fly off the top once every target is hit
+    if (I.t < 0.8) { const p = I.t / 0.8, e = 1 - Math.pow(1 - p, 3); I.y = standY + (1 - e) * S.frameH * su * INTRO_RISE; }
+    else if (I.t < I.flyAt) I.y = standY;
+    else { const f = I.t - I.flyAt; I.y = standY - f * f * 1100 * u - f * 90 * u; }
 
-    // Throws: sprite 1 > 2 > 3 > 2 > 1, releasing a clef on sprite 3
-    if (I.throws < INTRO_THROWS.length && I.anim < 0 && I.t >= INTRO_THROWS[I.throws]) { I.anim = 0; I.released = false; }
-    if (I.anim >= 0) {
-      I.anim += dt;
-      const idx = Math.floor(I.anim / BRITTEN_FRAME_TIME);
-      if (idx >= 2 && !I.released) {
-        I.released = true;
-        const tg = I.targets[I.throws];
-        const sx = I.x + S.tipX * su, sy = I.y + S.tipY * su;
-        I.clefs.push({ sx, sy, tx: tg.r.x + tg.r.w / 2, ty: tg.r.y + tg.r.h / 2, p: 0, target: tg });
-        sfx.clef();
+    let frameIdx = I.t >= I.flyAt ? 1 : 0;
+    if (I.barrage) {
+      // Wind up (sprite 2, 3), hold sprite 3 while rapid-firing, then wind down (2, 1)
+      const fireStart = INTRO_RAPID_START + 2 * FT;
+      const lastFire = fireStart + (I.targets.length - 1) * INTRO_RAPID_EVERY;
+      while (I.fired < I.targets.length && I.t >= fireStart + I.fired * INTRO_RAPID_EVERY) introFire(I, I.targets[I.fired++], su);
+      if (I.t >= INTRO_RAPID_START && I.t < I.flyAt) {
+        if (I.t < INTRO_RAPID_START + FT) frameIdx = 1;
+        else if (I.t < lastFire + FT) frameIdx = 2;
+        else if (I.t < lastFire + 2 * FT) frameIdx = 1;
       }
-      if (idx >= BRITTEN_THROW_SEQ.length) { I.anim = -1; I.throws++; }
+    } else {
+      // One throw per button: sprite 1 > 2 > 3 > 2 > 1, releasing the clef on sprite 3
+      if (I.throws < INTRO_THROWS.length && I.anim < 0 && I.t >= INTRO_THROWS[I.throws]) { I.anim = 0; I.released = false; }
+      if (I.anim >= 0) {
+        I.anim += dt;
+        const idx = Math.floor(I.anim / FT);
+        if (idx >= 2 && !I.released) { I.released = true; introFire(I, I.targets[I.throws], su); }
+        if (idx >= BRITTEN_THROW_SEQ.length) { I.anim = -1; I.throws++; }
+        else frameIdx = BRITTEN_THROW_SEQ[idx];
+      }
     }
 
-    // Clefs arc to their buttons and knock them out
+    // Clefs arc to their targets and knock them out
     for (const c of I.clefs) {
       if (c.p >= 1) continue;
-      c.p = Math.min(1, c.p + dt / 0.38);
+      c.p = Math.min(1, c.p + dt / INTRO_CLEF_FLIGHT);
       if (c.p >= 1) {
         c.target.hit = true;
         c.target.el.classList.add('gone');
-        introBurst(c.tx, c.ty, c.target.color, 46, u);
-        introBurst(c.tx, c.ty, '#f4f1ff', 12, u);
-        sfx.smash();
+        if (c.target.kind === 'letter') { introBurst(c.tx, c.ty, c.target.color, 16, u); sfx.pop(); }
+        else { introBurst(c.tx, c.ty, c.target.color, 46, u); introBurst(c.tx, c.ty, '#f4f1ff', 12, u); sfx.smash(); }
       }
     }
-    if (!I.flourish && I.t >= INTRO_FLOURISH) { I.flourish = true; sfx.dimFlourish(); }
+    if (!I.flourish && I.t >= I.flyAt) { I.flourish = true; sfx.dimFlourish(); }
 
     // Particles
     for (const pt of I.parts) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 380 * u * dt; pt.life -= dt; }
@@ -1698,21 +1732,20 @@
     g.clearRect(0, 0, fx.width, fx.height);
     for (const pt of I.parts) { g.globalAlpha = Math.min(1, pt.life * 2); g.fillStyle = pt.color; g.fillRect(pt.x - pt.s / 2, pt.y - pt.s / 2, pt.s, pt.s); }
     g.globalAlpha = 1;
-    const frame = brittenFrames[I.anim >= 0 ? BRITTEN_THROW_SEQ[Math.min(4, Math.floor(I.anim / BRITTEN_FRAME_TIME))] : (I.t >= INTRO_FLY ? 1 : 0)];
     g.save();
     g.beginPath(); g.rect(0, 0, fx.width, I.top); g.clip(); // anything below the button's top edge stays hidden behind it
-    g.drawImage(frame, I.x - S.ax * su, I.y - S.ay * su, S.frameW * su, S.frameH * su);
+    g.drawImage(brittenFrames[frameIdx], I.x - S.ax * su, I.y - S.ay * su, S.frameW * su, S.frameH * su);
     g.restore();
+    const cs = u * INTRO_CLEF_SCALE;
     for (const c of I.clefs) {
       if (c.p >= 1) continue;
       const x = c.sx + (c.tx - c.sx) * c.p, y = c.sy + (c.ty - c.sy) * c.p - Math.sin(Math.PI * c.p) * 40 * u;
       g.save(); g.translate(x, y); g.rotate(-c.p * Math.PI * 2);
-      const cs = u * INTRO_CLEF_SCALE;
       g.drawImage(clefSprite, -8.25 * cs, -13.2 * cs, 16.5 * cs, 26.4 * cs);
       g.restore();
     }
 
-    if (I.t >= INTRO_END) { endBrittenIntro(); return; }
+    if (I.t >= I.endAt) { endBrittenIntro(); return; }
     requestAnimationFrame(introFrame);
   }
 
@@ -1947,7 +1980,7 @@
   }
 
   function showTitle() {
-    screens.title.querySelectorAll('.btn.gone').forEach(b => b.classList.remove('gone')); // rebuild after the intro
+    screens.title.querySelectorAll('.gone').forEach(b => b.classList.remove('gone')); // rebuild buttons and letters after the intro
     musicStop();
     music.paused = false;
     state = 'title';
