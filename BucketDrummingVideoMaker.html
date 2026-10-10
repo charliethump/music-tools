@@ -135,6 +135,9 @@ input[type=number]:focus,input[type=text]:focus,select:focus{border-color:var(--
 .pmeta{font-size:13px;font-weight:700;color:var(--muted)}
 .part-head .icb{margin-left:auto}
 .part .fields{margin:8px 0 12px}
+.trans{border:1.5px dashed #D9C4A0;background:#FBF6EE;border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.trans .fields{margin:10px 0 8px}
+.trans .row .help{font-size:12.5px;color:var(--muted)}
 .seclist{margin-top:4px}
 .addrow{gap:8px;flex-wrap:wrap}
 .sec.rest{background:#F4F5F9;border-style:dashed}
@@ -2360,7 +2363,8 @@ function cleanSection(s){
 function cleanPart(p){
   const secs=(p.sections||[]).map(cleanSection).filter(Boolean);
   if(!secs.length)return null;
-  return{bpm:+p.bpm>=20&&+p.bpm<=300?+p.bpm:115,beat1:+p.beat1>=0?+p.beat1:0,sections:secs};
+  const num=v=>v==null||v===''||isNaN(+v)?null:Math.max(0,+v);
+  return{bpm:+p.bpm>=20&&+p.bpm<=300?+p.bpm:115,beat1:+p.beat1>=0?+p.beat1:0,trans:p.trans==='warble'?'warble':'none',wStart:num(p.wStart),wEnd:num(p.wEnd),wPeak:+p.wPeak>=0.1&&+p.wPeak<=0.9?+p.wPeak:0.5,sections:secs};
 }
 function applyProject(p){
   if(!p)return false;
@@ -2436,7 +2440,8 @@ function buildTimeline(){
   const lanes={'0':[],'1':[],'2':[]};ev.forEach(e=>lanes[e.s].push(e.t));
   const end=Math.max(0,...secs.map(o=>o.end));
   const bd0=parts[0].bd,fallT=S.fallBeats*bd0;   // one fall speed for the whole video so notes never pass each other at a tempo change
-  TL={moves,secs,rh,ev,evT:ev.map(e=>e.t),lanes,count,parts,pad,end,fallT,speed:FALL_PX/fallT};
+  TL_padTmp=pad;const warbles=buildWarbles(parts);
+  TL={warbles,moves,secs,rh,ev,evT:ev.map(e=>e.t),lanes,count,parts,pad,end,fallT,speed:FALL_PX/fallT};
 }
 function duration(){return song.buf?TL.pad+song.buf.duration:Math.max(4,TL.end+2);}
 function secAt(t){for(const o of TL.secs)if(t>=o.start&&t<o.end)return o;return null;}
@@ -2529,25 +2534,14 @@ const easeOut=k=>1-Math.pow(1-k,3);
 /* ================= Frame renderer ================= */
 function drawFrame(c,t){
   c.globalAlpha=1;c.filter='none';
+  const wb=warbleAt(t);
+  if(wb&&wb.k>0.002){const sc=sceneCtx();drawScene(sc,t);applyWarble(c,t,wb);}
+  else drawScene(c,t);
+  drawNotation(c,t);   // notation stays crisp on top, even during a warble
+}
+function drawScene(c,t){
+  c.globalAlpha=1;c.filter='none';
   c.drawImage(IMG.bg,0,0,W,H);
-  for(const o of TL.rh){
-    if(t<o.visFrom||t>=o.end+(o.fadeOut?o.bd:0))continue;
-    let a=o.fadeIn?clamp01((t-o.visFrom)/o.bd):1;
-    if(t>=o.end)a*=o.fadeOut?clamp01(1-(t-o.end)/o.bd):0;
-    if(a<=0)continue;
-    const st=staffCanvas(o.code,o.ms,o.reps);c.globalAlpha=a;c.drawImage(st.cv,0,0);
-    let la=a;
-    if(o.show<=0)la=0;else if(o.show<o.reps){const fadeAt=o.start+o.show*o.ms.length*o.bar;la*=clamp01(1-(t-fadeAt)/o.bd);}
-    const inLast=o.reps>1&&t>=o.lastStart&&t<o.end;
-    if(inLast&&S.cueLast)la=0;   // the last-time cue takes the repeat count's spot
-    if(la>0){c.globalAlpha=la;const lc=labelCanvas(o.reps);c.drawImage(lc,LABEL.x-lc.width/2,st.labelY-lc.height/2);}
-    if(inLast&&S.cueLast){
-      const k=clamp01((t-o.lastStart)/(o.bd*0.5)),ph=((t-o.lastStart)/o.bd)%1,pulse=1+0.07*Math.exp(-7*ph);
-      const lc=lastCanvas();c.save();c.globalAlpha=a*k;c.translate(LABEL.x,st.labelY);c.scale(pulse,pulse);c.drawImage(lc,-lc.width/2,-lc.height/2);c.restore();
-    }
-    if(S.cueNext&&o.next&&o.next.code!==o.code&&t>=o.lastStart&&t<o.end)drawNext(c,o.next,st,clamp01((t-o.lastStart)/o.bd));
-    c.globalAlpha=1;
-  }
   if(S.drummer)drawDrummer(c,t);
   const fallT=TL.fallT,speed=TL.speed;
   // buckets: the untouched art is drawn whole (no seams), and only a bucket that was just hit gets
@@ -2600,6 +2594,27 @@ function drawFrame(c,t){
     else c.drawImage(IMG[L.fall],L.land[0],L.land[1]);
   }
   c.globalAlpha=1;
+  c.globalAlpha=1;
+}
+function drawNotation(c,t){
+  for(const o of TL.rh){
+    if(t<o.visFrom||t>=o.end+(o.fadeOut?o.bd:0))continue;
+    let a=o.fadeIn?clamp01((t-o.visFrom)/o.bd):1;
+    if(t>=o.end)a*=o.fadeOut?clamp01(1-(t-o.end)/o.bd):0;
+    if(a<=0)continue;
+    const st=staffCanvas(o.code,o.ms,o.reps);c.globalAlpha=a;c.drawImage(st.cv,0,0);
+    let la=a;
+    if(o.show<=0)la=0;else if(o.show<o.reps){const fadeAt=o.start+o.show*o.ms.length*o.bar;la*=clamp01(1-(t-fadeAt)/o.bd);}
+    const inLast=o.reps>1&&t>=o.lastStart&&t<o.end;
+    if(inLast&&S.cueLast)la=0;   // the last-time cue takes the repeat count's spot
+    if(la>0){c.globalAlpha=la;const lc=labelCanvas(o.reps);c.drawImage(lc,LABEL.x-lc.width/2,st.labelY-lc.height/2);}
+    if(inLast&&S.cueLast){
+      const k=clamp01((t-o.lastStart)/(o.bd*0.5)),ph=((t-o.lastStart)/o.bd)%1,pulse=1+0.07*Math.exp(-7*ph);
+      const lc=lastCanvas();c.save();c.globalAlpha=a*k;c.translate(LABEL.x,st.labelY);c.scale(pulse,pulse);c.drawImage(lc,-lc.width/2,-lc.height/2);c.restore();
+    }
+    if(S.cueNext&&o.next&&o.next.code!==o.code&&t>=o.lastStart&&t<o.end)drawNext(c,o.next,st,clamp01((t-o.lastStart)/o.bd));
+    c.globalAlpha=1;
+  }
   drawCount(c,t);
 }
 const COUNT={x:W/2,y:430,size:170};
@@ -2735,11 +2750,13 @@ function drawMoving(c,sh,base,mv){
       for(let i=0;i<6;i++){c.beginPath();c.arc(cx+40+70*q*(1+RND[i]),feet-20-50*q*RND[i+3],22+30*q,0,Math.PI*2);c.fill();}c.restore();}
     const hy=waist+(p>=0.3&&p<0.42?-6*Math.sin((p-0.3)/0.12*Math.PI):0);
     const withBody=fn=>{c.save();c.translate(cx+dx,feet);c.rotate(rot);c.translate(-(cx+dx),-feet);fn();c.restore();};   // hook tilts with him
-    withBody(()=>drawHook(c,hookX,hy,'back'));
+    // the tip only tucks behind him once the hook has finished sliding past his body
+    const tipBehind=p>=0.3;
+    if(tipBehind)withBody(()=>drawHook(c,hookX,hy,'back'));
     c.save();c.translate(cx+dx,feet);c.rotate(rot);c.drawImage(sh.cv,-w/2,-(feet-base.y));c.restore();
     if(p>=0.42){c.save();c.strokeStyle='rgba(255,255,255,.8)';c.lineCap='round';c.lineWidth=4;
       for(let i=0;i<5;i++){const y=waist-160+i*80+RND[i]*30,x=cx+dx+w*0.22+20*i;c.globalAlpha=0.55;c.beginPath();c.moveTo(x,y);c.lineTo(x+90+60*RND[i+4],y);c.stroke();}c.restore();}
-    withBody(()=>drawHook(c,hookX,hy,'front'));
+    withBody(()=>{if(!tipBehind)drawHook(c,hookX,hy,'back');drawHook(c,hookX,hy,'front');});
   }else if(m.fx==='jet'){
     // flames light under the bucket, a shaky warm-up, then lift-off out the top
     const ign=0.25,hover=70*ease(Math.min(1,p/ign)),rise=hover+(p<ign?0:((p-ign)/(1-ign))**2*(feet+80));   // hovers up first so the flames show
@@ -2799,6 +2816,90 @@ function twinkle(c,x,y,r,a,seed,col){
   c.shadowColor='rgba(255,201,40,.9)';c.shadowBlur=24;c.fillStyle='#fff';
   c.beginPath();for(let i=0;i<8;i++){const rr=i%2?r*0.22:r,an=i*Math.PI/4;c.lineTo(Math.cos(an)*rr,Math.sin(an)*rr);}c.closePath();c.fill();
   c.fillStyle=col||'#FFC928';c.beginPath();c.arc(0,0,r*0.18,0,Math.PI*2);c.fill();
+  c.restore();
+}
+
+/* ================= Tape warble transition ================= */
+// Decaying-film look over everything except the notation, timed to a tape slow-down / speed-up between songs.
+// Intensity builds to the slowest point, then eases off as the tape speeds back up.
+const smooth=k=>{k=clamp01(k);return k*k*(3-2*k);};
+function buildWarbles(parts){
+  const out=[];
+  S.parts.forEach((pt,pi)=>{
+    if(!pi||pt.trans!=='warble')return;
+    const prev=parts[pi-1],cur=parts[pi];
+    const a=pt.wStart!=null?pt.wStart+TL_padTmp:prev.end,b=pt.wEnd!=null?pt.wEnd+TL_padTmp:cur.b1;
+    if(b-a<0.3)return;
+    out.push({pi,a,b,pk:a+(b-a)*(pt.wPeak??0.5)});
+  });
+  return out;
+}
+let TL_padTmp=0;
+function warbleAt(t){
+  for(const w of TL.warbles){
+    if(t<=w.a||t>=w.b)continue;
+    const k=t<w.pk?smooth((t-w.a)/(w.pk-w.a)):smooth((w.b-t)/(w.b-w.pk));
+    const ph=t<w.pk?(t-w.a):(w.pk-w.a)+(t-w.pk)*2.2;   // wobble speeds up with the tape
+    return{k,ph,after:t>=w.pk};
+  }
+  return null;
+}
+let scnCv=null,scnC=null,fltCv=null,fltC=null,halfCv=null,halfC=null,grainCv=null,vignette=null;
+const grainPat=new WeakMap();
+function sceneCtx(){
+  if(!scnCv){
+    scnCv=document.createElement('canvas');scnCv.width=W;scnCv.height=H;scnC=scnCv.getContext('2d');
+    fltCv=document.createElement('canvas');fltCv.width=W;fltCv.height=H;fltC=fltCv.getContext('2d');
+    grainCv=document.createElement('canvas');grainCv.width=grainCv.height=256;
+    const g=grainCv.getContext('2d'),id=g.createImageData(256,256);
+    for(let i=0;i<id.data.length;i+=4){const v=hash(i*0.37)*255;id.data[i]=id.data[i+1]=id.data[i+2]=v;id.data[i+3]=255;}
+    g.putImageData(id,0,0);
+  }
+  return scnC;
+}
+function hash(n){const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x);}
+function applyWarble(c,t,info){
+  const k=info.k,fr=Math.floor(t*24),r=i=>hash(fr*13.7+i*7.3);
+  // 1. faded, warm film colour with flicker
+  const fl=1+(r(1)-0.5)*0.18*k;
+  fltC.globalCompositeOperation='source-over';fltC.globalAlpha=1;
+  fltC.filter=`sepia(${(0.8*k).toFixed(3)}) saturate(${(1-0.3*k).toFixed(3)}) contrast(${(1+0.1*k).toFixed(3)}) brightness(${fl.toFixed(3)})`;
+  fltC.drawImage(scnCv,0,0);fltC.filter='none';
+  // 2. colour fringing at the worst moments
+  if(k>0.45){
+    // tinted ghosts are made at half size (much cheaper) and stretched back up, offset left and right
+    if(!halfCv){halfCv=document.createElement('canvas');halfCv.width=W/2;halfCv.height=H/2;halfC=halfCv.getContext('2d');}
+    const o=(k-0.45)*16;fltC.globalCompositeOperation='screen';fltC.globalAlpha=0.09*k;
+    halfC.filter='sepia(1) saturate(6) hue-rotate(-35deg)';halfC.drawImage(scnCv,0,0,W/2,H/2);fltC.drawImage(halfCv,o,0,W,H);
+    halfC.filter='sepia(1) saturate(6) hue-rotate(160deg)';halfC.drawImage(scnCv,0,0,W/2,H/2);fltC.drawImage(halfCv,-o,0,W,H);
+    halfC.filter='none';fltC.globalCompositeOperation='source-over';fltC.globalAlpha=1;
+  }
+  // 3. wobble: horizontal strips swaying, a slow vertical stretch, and tears at the rolling tracking line
+  c.drawImage(fltCv,0,0);
+  const n=45,sh=H/n,A=16*k,sy=1+0.025*k*Math.sin(info.ph*1.7),ph=info.ph;
+  const roll=H+100-((ph*(info.after?520:300))%(H+200));
+  for(let i=0;i<n;i++){
+    const y=i*sh;let dx=A*Math.sin(y*0.011+ph*4.2)+A*0.45*Math.sin(y*0.037-ph*7.5);
+    if(Math.abs(y-roll)<70)dx+=60*k*(r(20+i)-0.5)*2;
+    c.drawImage(fltCv,0,y,W,sh+1,dx,H/2+(y-H/2)*sy,W,(sh+1)*sy);
+  }
+  c.save();
+  // 4. tracking band
+  c.globalAlpha=0.16*k;c.fillStyle='#fff';c.fillRect(0,roll-18,W,36);
+  c.globalAlpha=0.25*k;c.fillStyle='#2a1a0a';c.fillRect(0,roll+20,W,3);
+  // 5. grain
+  let pat=grainPat.get(c);if(!pat){pat=c.createPattern(grainCv,'repeat');grainPat.set(c,pat);}
+  c.globalCompositeOperation='overlay';c.globalAlpha=0.28*k;c.fillStyle=pat;
+  c.translate(-Math.floor(r(3)*256),-Math.floor(r(4)*256));c.fillRect(0,0,W+256,H+256);
+  c.setTransform(1,0,0,1,0,0);c.globalCompositeOperation='source-over';
+  // 6. dust and scratches
+  const specks=Math.floor(9*k);
+  for(let i=0;i<specks;i++){c.globalAlpha=0.55*k;c.fillStyle=r(30+i)>0.5?'#1c120a':'#fff6e0';c.beginPath();c.ellipse(r(40+i)*W,r(50+i)*H,2+5*r(60+i),2+3*r(70+i),r(80+i)*3,0,Math.PI*2);c.fill();}
+  const scratches=r(5)<0.6*k?1+Math.floor(r(6)*2):0;
+  for(let i=0;i<scratches;i++){const x=r(90+i)*W;c.globalAlpha=0.35*k;c.fillStyle=r(95+i)>0.5?'#fff6e0':'#2a1a0a';c.fillRect(x+(r(97+i)-0.5)*6,0,1.5+r(99+i)*1.5,H);}
+  // 7. vignette closing in
+  if(!vignette){vignette=c.createRadialGradient(W/2,H/2,H*0.35,W/2,H/2,H*1.05);vignette.addColorStop(0,'rgba(30,18,8,0)');vignette.addColorStop(1,'rgba(30,18,8,0.75)');}
+  c.globalAlpha=k;c.fillStyle=vignette;c.fillRect(0,0,W,H);
   c.restore();
 }
 
@@ -2919,6 +3020,7 @@ function drawStrip(t){
     for(let x=Math.ceil(X(TL.pad));x<w;x++){const st=x/w*D-TL.pad,v=p[Math.min(p.length-1,Math.max(0,Math.floor(st/sd*p.length)))];c.fillRect(x,mid-v*amp,1,Math.max(1,v*amp*2));}
   }else{c.fillStyle='#8E95C4';c.font='700 13px Nunito, sans-serif';c.fillText('No song loaded. Timing preview only.',10,58);}
   TL.rh.forEach(o=>{if(o.countFrom<o.start){c.fillStyle='rgba(255,201,40,.35)';c.fillRect(X(o.countFrom),20,X(o.start)-X(o.countFrom),h-20);}});
+  TL.warbles.forEach(w=>{c.fillStyle='rgba(186,117,23,.45)';c.fillRect(X(w.a),20,X(w.b)-X(w.a),h-20);c.fillStyle='rgba(255,201,40,.8)';c.fillRect(Math.round(X(w.pk)),20,1,h-20);});
   TL.parts.forEach(p=>{c.fillStyle='#fff';c.fillRect(Math.round(X(p.b1)),20,2,h-20);if(TL.parts.length>1){c.font='800 11px Nunito, sans-serif';c.fillText('Part '+(p.pi+1),X(p.b1)+5,h-6);}});
   c.fillStyle='#FFC928';c.fillRect(Math.round(X(t))-1,0,3,h);
 }
@@ -3022,6 +3124,26 @@ function renderParts(){
       pt.sections.push(b.dataset.add==='rest'?{type:'rest',bars:4}:{type:'rhythm',code:'Q0,Q0,Q0,Q0',reps:last?last.reps:8,show:last?last.show:2,count:'off'});
       refreshAll();
     }));
+    if(pi){
+      const tr=document.createElement('div');tr.className='trans';
+      tr.innerHTML=`<div class="field"><label>Transition into part ${pi+1}</label><select data-t="trans"><option value="none">None</option><option value="warble">Tape warble (old film look)</option></select></div>
+        <div data-wopts ${pt.trans==='warble'?'':'hidden'}>
+          <div class="fields">
+            <div class="field"><label>Warble starts (s in audio)</label><input type="number" min="0" step="0.01" data-t="wStart"><div class="row"><button class="mini" data-wp="wStart">Use playhead</button></div></div>
+            <div class="field"><label>Warble ends (s in audio)</label><input type="number" min="0" step="0.01" data-t="wEnd"><div class="row"><button class="mini" data-wp="wEnd">Use playhead</button></div></div>
+            <div class="field wide"><label>Slowest point <span data-wpk></span></label><input type="range" min="10" max="90" step="1" data-t="wPeak" value="${Math.round((pt.wPeak??0.5)*100)}"></div>
+          </div>
+          <div class="row"><button class="mini" data-wauto>Fit to the gap between parts</button><span class="help" data-wnote></span></div>
+        </div>`;
+      tr.querySelector('[data-t=trans]').value=pt.trans||'none';
+      tr.querySelector('[data-t=trans]').addEventListener('change',e=>{pt.trans=e.target.value;tr.querySelector('[data-wopts]').hidden=pt.trans!=='warble';refreshAll(false);});
+      ['wStart','wEnd'].forEach(f=>{const inp=tr.querySelector(`[data-t=${f}]`);
+        inp.addEventListener('change',()=>{pt[f]=inp.value===''?null:Math.max(0,+inp.value);refreshAll(false);});
+        tr.querySelector(`[data-wp=${f}]`).addEventListener('click',()=>{pt[f]=Math.max(0,+(songTime()-TL.pad).toFixed(2));refreshAll(false);});});
+      tr.querySelector('[data-t=wPeak]').addEventListener('input',e=>{pt.wPeak=+e.target.value/100;refreshAll(false);});
+      tr.querySelector('[data-wauto]').addEventListener('click',()=>{pt.wStart=pt.wEnd=null;refreshAll(false);});
+      pe.querySelector('.fields').after(tr);
+    }
     const sl=pe.querySelector('.seclist');
     pt.sections.forEach((sec,si)=>sl.appendChild(sec.type==='rest'?restCard(pt,sec,si):rhythmCard(pt,sec,si)));
     plist.appendChild(pe);
@@ -3145,7 +3267,16 @@ document.getElementById('addPart').addEventListener('click',()=>{
 function updateMeta(){
   const cards=new Map([...plist.querySelectorAll('.sec')].map(el=>[el.dataset.key,el]));
   TL.secs.forEach(o=>{const el=cards.get(o.pi+'-'+o.si);if(!el)return;el.querySelector('.bars').textContent=`${o.startBar===o.endBar?'Bar '+o.startBar:'Bars '+o.startBar+'-'+o.endBar}, starts ${fmt(o.start)}`;});
-  plist.querySelectorAll('.part').forEach((pe,i)=>{const p=TL.parts[i];if(p)pe.querySelector('.pmeta').textContent=`${p.bars} bars, ${fmt(p.b1)} to ${fmt(p.end)}`;});
+  plist.querySelectorAll('.part').forEach((pe,i)=>{const p=TL.parts[i];if(p)pe.querySelector('.pmeta').textContent=`${p.bars} bars, ${fmt(p.b1)} to ${fmt(p.end)}`;
+    const tr=pe.querySelector('.trans');if(!tr)return;
+    const pt=S.parts[i],w=TL.warbles.find(x=>x.pi===i);
+    const autoA=TL.parts[i-1].end-TL.pad,autoB=p.b1-TL.pad;
+    const sI=tr.querySelector('[data-t=wStart]'),eI=tr.querySelector('[data-t=wEnd]');
+    if(document.activeElement!==sI)sI.value=(pt.wStart??autoA).toFixed(2);
+    if(document.activeElement!==eI)eI.value=(pt.wEnd??autoB).toFixed(2);
+    tr.querySelector('[data-wpk]').textContent=Math.round((pt.wPeak??0.5)*100)+'% of the way through';
+    tr.querySelector('[data-wnote]').textContent=pt.trans!=='warble'?'':!w?'The warble needs at least 0.3 s. Set a start and end with room between them.':(pt.wStart==null&&pt.wEnd==null?'Using the gap between parts.':'');
+  });
   const nR=TL.rh.length;
   document.getElementById('secCount').textContent=`${S.parts.length} part${S.parts.length>1?'s':''}, ${nR} rhythm${nR===1?'':'s'}`;
   const warns=[],notes=[];
