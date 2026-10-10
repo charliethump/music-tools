@@ -2727,18 +2727,19 @@ function drawMoving(c,sh,base,mv){
     // a vaudeville hook reaches in from the left, catches him at the waist and drags him off
     const waist=feet-(DRUMMER.box[3]-DRUMMER.box[1])*DRUMMER.scale*0.47;
     let hookX,dx=0,rot=0;
-    const grab=cx+128;   // the curl wraps around his far side
+    const grab=cx+110;   // the bend hugs his far side
     if(p<0.3){hookX=-260+(grab+260)*ease(p/0.3);}
     else if(p<0.42){hookX=grab;const k=(p-0.3)/0.12;rot=0.12*Math.sin(k*Math.PI);dx=-14*Math.sin(k*Math.PI);}
     else{const k=((p-0.42)/0.58)**1.25;dx=-(cx+w)*k-14*(1-k);hookX=grab+dx;rot=-0.28*Math.min(1,k*3);}
     if(p>=0.42&&p<0.8){const q=(p-0.42)/0.38;c.save();c.globalAlpha=(1-q)*0.8;c.fillStyle='#E4E1DA';
       for(let i=0;i<6;i++){c.beginPath();c.arc(cx+40+70*q*(1+RND[i]),feet-20-50*q*RND[i+3],22+30*q,0,Math.PI*2);c.fill();}c.restore();}
     const hy=waist+(p>=0.3&&p<0.42?-6*Math.sin((p-0.3)/0.12*Math.PI):0);
-    drawHook(c,hookX,hy,'back');
+    const withBody=fn=>{c.save();c.translate(cx+dx,feet);c.rotate(rot);c.translate(-(cx+dx),-feet);fn();c.restore();};   // hook tilts with him
+    withBody(()=>drawHook(c,hookX,hy,'back'));
     c.save();c.translate(cx+dx,feet);c.rotate(rot);c.drawImage(sh.cv,-w/2,-(feet-base.y));c.restore();
     if(p>=0.42){c.save();c.strokeStyle='rgba(255,255,255,.8)';c.lineCap='round';c.lineWidth=4;
       for(let i=0;i<5;i++){const y=waist-160+i*80+RND[i]*30,x=cx+dx+w*0.22+20*i;c.globalAlpha=0.55;c.beginPath();c.moveTo(x,y);c.lineTo(x+90+60*RND[i+4],y);c.stroke();}c.restore();}
-    drawHook(c,hookX,hy,'front');
+    withBody(()=>drawHook(c,hookX,hy,'front'));
   }else if(m.fx==='jet'){
     // flames light under the bucket, a shaky warm-up, then lift-off out the top
     const ign=0.25,hover=70*ease(Math.min(1,p/ign)),rise=hover+(p<ign?0:((p-ign)/(1-ign))**2*(feet+80));   // hovers up first so the flames show
@@ -2774,8 +2775,10 @@ function drawHook(c,x,y,part){
   // long wooden pole from off-screen left, curling up around his far side. The pole and the start of the
   // curve go in front of him; the tip of the curl goes behind him so the hook looks like it wraps around.
   c.save();c.lineCap='round';
-  const front=()=>{c.beginPath();c.moveTo(-400,y+30);c.lineTo(x-30,y+30);c.bezierCurveTo(x+60,y+30,x+70,y-70,x+10,y-80);};
-  const back=()=>{c.beginPath();c.moveTo(x+10,y-80);c.bezierCurveTo(x-30,y-85,x-45,y-55,x-30,y-40);};
+  // x is the centre of the bend. A tight U around his side, then a straight tip pointing back behind him.
+  const r=36,ay=y+30-r;
+  const front=()=>{c.beginPath();c.moveTo(-400,y+30);c.lineTo(x,y+30);c.arc(x,ay,r,Math.PI/2,-Math.PI/4,true);};
+  const back=()=>{c.beginPath();c.arc(x,ay,r,-Math.PI/4,-Math.PI/2,true);c.lineTo(x-75,ay-r);};
   const path=part==='back'?back:front;
   c.strokeStyle='#5E3A1C';c.lineWidth=30;path();c.stroke();
   c.strokeStyle=part==='back'?'#8A5826':'#A0682F';c.lineWidth=22;path();c.stroke();
