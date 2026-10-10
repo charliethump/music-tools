@@ -249,6 +249,7 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
         <div class="seg" id="instSeg" role="group" aria-label="Drummer plays with"><button data-inst="mallet">Mallets</button><button data-inst="stick">Sticks</button></div>
       </div>
       <div class="field" style="margin-top:12px"><label for="endExit">After the last rhythm</label><select id="endExit"></select></div>
+      <div class="field" id="endWaitRow" style="margin-top:8px"><label for="endWait">Start the exit this many beats after the last rhythm ends</label><input type="number" id="endWait" min="0" max="64" step="0.5" value="0"></div>
       <div class="help" style="font-size:12.5px;color:var(--muted);margin-top:6px">Exits for listening bars are set on each listening section.</div>
     </section>
 
@@ -2324,12 +2325,12 @@ function drawGroup(c,b,x,bw,top,sp){
   });
   if(b.k==='W'||!real.length)return;
   if(real.length===1){
-    const n=real[0],up=n.s==='0',end=n.y+(up?-3.5:3.5)*sp;
+    const n=real[0],up=true,end=n.y-3.5*sp;   // every stem points up: the usual layout for bucket drumming parts
     drawStem(c,n,up,end,sp);
     if(n.d<4)drawFlag(c,n,up,end,sp);
     return;
   }
-  const up=real.some(n=>n.s==='0');
+  const up=true;
   const ys=real.map(n=>n.y),mn=Math.min(...ys),mx=Math.max(...ys);
   const outer=up?Math.min(mn-3.0*sp,mx-3.5*sp):Math.max(mx+3.0*sp,mn+3.5*sp);
   real.forEach(n=>drawStem(c,n,up,outer,sp));
@@ -2349,14 +2350,14 @@ function drawGroup(c,b,x,bw,top,sp){
 // A video is a list of parts (one per song in the clip). Each part has its own tempo and downbeat,
 // and a list of sections: rhythms to drum, or listening bars with nothing on screen.
 const DEFAULT_SECTIONS=[{type:'rhythm',code:'Q0,R,R,R',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q0,Q0,Q0',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q1,Q0,Q1',reps:8,show:2,count:'off'},{type:'rhythm',code:'E00,E10,E00,E10',reps:8,show:2,count:'off'}];
-const S={fallBeats:2.5,fps:30,endExit:'none',cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
+const S={fallBeats:2.5,fps:30,endExit:'none',endWait:0,cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
 const song={buf:null,name:'',peaks:null};
 const ui={t:0,playing:false,drums:true,click:false,exporting:false};
 const STORE='bdvm-project-v1';
 function save(){try{localStorage.setItem(STORE,JSON.stringify(projectData()));}catch(e){}}
-function projectData(){return{app:'bucket-drumming-video-maker',version:2,endExit:S.endExit,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
+function projectData(){return{app:'bucket-drumming-video-maker',version:2,endExit:S.endExit,endWait:S.endWait,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
 function cleanSection(s){
-  if(s&&s.type==='rest'){const exit=EXITS[s.exit]?s.exit:'none';return{type:'rest',bars:clampInt(s.bars,1,256,4),exit,enter:ENTRANCES[s.enter]?s.enter:(ENTRANCES[exit]?exit:'blast')};}
+  if(s&&s.type==='rest'){const exit=EXITS[s.exit]?s.exit:'none';const nb=v=>v==null||v===''||isNaN(+v)?null:Math.max(0,Math.min(64,+v));return{type:'rest',bars:clampInt(s.bars,1,256,4),waitBeats:nb(s.waitBeats)||0,backBeats:nb(s.backBeats),exit,enter:ENTRANCES[s.enter]?s.enter:(ENTRANCES[exit]?exit:'blast')};}
   const b=s&&parsePhrase(s.code);if(!b)return null;
   return{type:'rhythm',code:phraseCode(b),reps:clampInt(s.reps,1,99,8),show:clampInt(s.show,0,99,2),count:['off','short','long'].includes(s.count)?s.count:'off'};
 }
@@ -2364,7 +2365,7 @@ function cleanPart(p){
   const secs=(p.sections||[]).map(cleanSection).filter(Boolean);
   if(!secs.length)return null;
   const num=v=>v==null||v===''||isNaN(+v)?null:Math.max(0,+v);
-  return{bpm:+p.bpm>=20&&+p.bpm<=300?+p.bpm:115,beat1:+p.beat1>=0?+p.beat1:0,trans:p.trans==='warble'?'warble':'none',wStart:num(p.wStart),wEnd:num(p.wEnd),wPeak:+p.wPeak>=0.1&&+p.wPeak<=0.9?+p.wPeak:0.5,sections:secs};
+  return{bpm:+p.bpm>=20&&+p.bpm<=300?+p.bpm:115,beat1:+p.beat1>=0?+p.beat1:0,trans:TRANS[p.trans]?p.trans:'none',wStart:num(p.wStart),wEnd:num(p.wEnd),wPeak:+p.wPeak>=0.1&&+p.wPeak<=0.9?+p.wPeak:0.5,sections:secs};
 }
 function applyProject(p){
   if(!p)return false;
@@ -2380,6 +2381,7 @@ function applyProject(p){
   if(p.fps==30||p.fps==60)S.fps=+p.fps;
   if(typeof p.drummer==='boolean')S.drummer=p.drummer;
   if(EXITS[p.endExit])S.endExit=p.endExit;
+  if(+p.endWait>=0)S.endWait=Math.min(64,+p.endWait);
   if(typeof p.cueNext==='boolean')S.cueNext=p.cueNext;
   if(typeof p.cueLast==='boolean')S.cueLast=p.cueLast;
   if(p.inst==='mallet'||p.inst==='stick')S.inst=p.inst;
@@ -2535,7 +2537,7 @@ const easeOut=k=>1-Math.pow(1-k,3);
 function drawFrame(c,t){
   c.globalAlpha=1;c.filter='none';
   const wb=warbleAt(t);
-  if(wb&&wb.k>0.002){const sc=sceneCtx();drawScene(sc,t);applyWarble(c,t,wb);}
+  if(wb&&wb.k>0.002){const sc=sceneCtx();drawScene(sc,t);(wb.type==='drain'?applyDrain:wb.type==='glitch'?applyGlitch:applyWarble)(c,t,wb);}
   else drawScene(c,t);
   drawNotation(c,t);   // notation stays crisp on top, even during a warble
 }
@@ -2666,20 +2668,25 @@ function drummerShadowed(k){
 // Silly exits during listening bars and at the end. He comes back with the same effect played in reverse.
 const EXITS={none:'Stays',blast:'Blasts off',drill:'Drills into the floor',poof:'Poofs away',hook:'Gets yanked off stage',jet:'Jetpacks away'};
 const ENTRANCES={blast:'Spins down from the sky',drill:'Drills up from the floor',poof:'Poofs back in',hook:'Gets dragged back on',jet:'Jetpacks back in'};
+// default: back in his seat before the count-off starts (or 1 beat early if there's no count-off)
+function autoBack(nextR){return nextR.countFrom<nextR.start?(nextR.start-nextR.countFrom)/nextR.bd:1;}
+function backBeats(ref,nextR){return ref.backBeats!=null?ref.backBeats:autoBack(nextR);}
 function exitDur(bd){return Math.max(1.2,Math.min(2.4,4*bd));}
 function buildDrummerMoves(secs,rh){
   const moves=[],order=secs.slice().sort((a,b)=>a.start-b.start);
   order.forEach((o,i)=>{
     if(o.type!=='rest'||!EXITS[o.ref.exit]||o.ref.exit==='none')return;
     const nextR=order.slice(i+1).find(x=>x.type==='rhythm');
-    const back=nextR?Math.min(nextR.countFrom,nextR.start)-0.1:Infinity;
+    // leave a set number of beats after the last pattern ends; be back a set number of beats before the next one starts
+    const go=o.start+(o.ref.waitBeats||0)*o.bd;
+    const back=nextR?nextR.start-backBeats(o.ref,nextR)*nextR.bd:Infinity;
     let D=exitDur(o.bd);
-    if(nextR){const room=back-o.start;if(room<1)return;if(room<2*D+0.6)D=(room-0.3)/2.3;}
-    moves.push({fx:o.ref.exit,dir:'out',t0:o.start,D});
+    if(nextR){const room=back-go;if(room<1)return;if(room<2*D+0.6)D=(room-0.3)/2.3;}
+    moves.push({fx:o.ref.exit,dir:'out',t0:go,D});
     if(nextR)moves.push({fx:ENTRANCES[o.ref.enter]?o.ref.enter:o.ref.exit,dir:'in',t0:back-D,D});
   });
   const lastR=rh.length?rh.reduce((a,b)=>b.end>a.end?b:a):null;
-  if(lastR&&S.endExit!=='none'&&!moves.some(m=>m.t0>=lastR.end-1e-3))moves.push({fx:S.endExit,dir:'out',t0:lastR.end,D:exitDur(lastR.bd)});
+  if(lastR&&S.endExit!=='none'&&!moves.some(m=>m.t0>=lastR.end-1e-3))moves.push({fx:S.endExit,dir:'out',t0:lastR.end+(S.endWait||0)*lastR.bd,D:exitDur(lastR.bd)});
   return moves.sort((a,b)=>a.t0-b.t0);
 }
 // returns null (draw normally), 'gone', or {m,p} with p running 0 to 1 through the exit
@@ -2822,15 +2829,16 @@ function twinkle(c,x,y,r,a,seed,col){
 /* ================= Tape warble transition ================= */
 // Decaying-film look over everything except the notation, timed to a tape slow-down / speed-up between songs.
 // Intensity builds to the slowest point, then eases off as the tape speeds back up.
+const TRANS={none:'None',warble:'Tape warble (old film look)',drain:'Color drain (to black and white and back)',glitch:'Glitch (digital breakup)'};
 const smooth=k=>{k=clamp01(k);return k*k*(3-2*k);};
 function buildWarbles(parts){
   const out=[];
   S.parts.forEach((pt,pi)=>{
-    if(!pi||pt.trans!=='warble')return;
+    if(!pi||!TRANS[pt.trans]||pt.trans==='none')return;
     const prev=parts[pi-1],cur=parts[pi];
     const a=pt.wStart!=null?pt.wStart+TL_padTmp:prev.end,b=pt.wEnd!=null?pt.wEnd+TL_padTmp:cur.b1;
     if(b-a<0.3)return;
-    out.push({pi,a,b,pk:a+(b-a)*(pt.wPeak??0.5)});
+    out.push({pi,a,b,pk:a+(b-a)*(pt.wPeak??0.5),type:pt.trans});
   });
   return out;
 }
@@ -2838,9 +2846,10 @@ let TL_padTmp=0;
 function warbleAt(t){
   for(const w of TL.warbles){
     if(t<=w.a||t>=w.b)continue;
+    const type=w.type;
     const k=t<w.pk?smooth((t-w.a)/(w.pk-w.a)):smooth((w.b-t)/(w.b-w.pk));
     const ph=t<w.pk?(t-w.a):(w.pk-w.a)+(t-w.pk)*2.2;   // wobble speeds up with the tape
-    return{k,ph,after:t>=w.pk};
+    return{k,ph,after:t>=w.pk,type};
   }
   return null;
 }
@@ -2901,6 +2910,51 @@ function applyWarble(c,t,info){
   if(!vignette){vignette=c.createRadialGradient(W/2,H/2,H*0.35,W/2,H/2,H*1.05);vignette.addColorStop(0,'rgba(30,18,8,0)');vignette.addColorStop(1,'rgba(30,18,8,0.75)');}
   c.globalAlpha=k;c.fillStyle=vignette;c.fillRect(0,0,W,H);
   c.restore();
+}
+
+// Colour drain: colour fades out to black-and-white as the tape slows, then floods back in from the centre.
+function applyDrain(c,t,info){
+  const k=info.k;
+  if(!info.after){
+    c.save();c.filter=`grayscale(${k.toFixed(3)}) contrast(${(1+0.08*k).toFixed(3)}) brightness(${(1-0.06*k).toFixed(3)})`;c.drawImage(scnCv,0,0);c.restore();
+    return;
+  }
+  // gray underneath, colour on top through a soft circle that grows from the middle
+  c.save();c.filter='grayscale(1) contrast(1.08) brightness(0.94)';c.drawImage(scnCv,0,0);c.restore();
+  const q=1-k,R=q*Math.hypot(W,H)*0.62,fe=220;
+  fltC.globalCompositeOperation='source-over';fltC.globalAlpha=1;fltC.filter='none';
+  fltC.clearRect(0,0,W,H);fltC.drawImage(scnCv,0,0);
+  const g=fltC.createRadialGradient(W/2,H/2,Math.max(0,R-fe),W/2,H/2,R+1);
+  g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');
+  fltC.globalCompositeOperation='destination-in';fltC.fillStyle=g;fltC.fillRect(0,0,W,H);fltC.globalCompositeOperation='source-over';
+  c.drawImage(fltCv,0,0);
+}
+// Glitch: blocks jump out of place, colours split and slices repeat, worst at the slowest point.
+function applyGlitch(c,t,info){
+  const k=info.k,fr=Math.floor(t*14),r=i=>hash(fr*31.3+i*5.7);   // glitches hold for a few frames, like real ones
+  const jump=r(1)<0.25*k?(r(2)-0.5)*40*k:0;
+  c.drawImage(scnCv,0,jump);
+  if(jump){c.drawImage(scnCv,0,jump>0?0:H-1,W,1,0,jump>0?0:H+jump,W,Math.abs(jump));}
+  // colour split
+  if(!halfCv){halfCv=document.createElement('canvas');halfCv.width=W/2;halfCv.height=H/2;halfC=halfCv.getContext('2d');}
+  const o=6+30*k*r(3);
+  c.save();c.globalCompositeOperation='screen';c.globalAlpha=0.35*k;
+  halfC.filter='sepia(1) saturate(8) hue-rotate(-50deg)';halfC.drawImage(scnCv,0,0,W/2,H/2);c.drawImage(halfCv,o,jump,W,H);
+  halfC.filter='sepia(1) saturate(8) hue-rotate(150deg)';halfC.drawImage(scnCv,0,0,W/2,H/2);c.drawImage(halfCv,-o,jump,W,H);
+  halfC.filter='none';c.restore();
+  // displaced blocks
+  const blocks=Math.floor(4+16*k);
+  for(let i=0;i<blocks;i++){
+    if(r(10+i)>0.35+0.6*k)continue;
+    const bw=40+r(30+i)*420*k,bh=10+r(50+i)*90,sx=r(70+i)*(W-bw),sy=r(90+i)*(H-bh),dx=(r(110+i)-0.5)*220*k;
+    if(r(130+i)<0.2*k){c.save();c.filter=r(150+i)<0.5?'invert(1)':'hue-rotate(120deg) saturate(3)';c.drawImage(scnCv,sx,sy,bw,bh,sx+dx,sy,bw,bh);c.restore();}
+    else c.drawImage(scnCv,sx,sy,bw,bh,sx+dx,sy,bw,bh);
+  }
+  // repeated slices smeared sideways
+  const slices=Math.floor(6*k);
+  for(let i=0;i<slices;i++){const sy=r(170+i)*H,sh=2+r(190+i)*18,dx=(r(210+i)-0.5)*400*k;c.drawImage(scnCv,0,sy,W,sh,dx,sy,W,sh);}
+  // thin scanlines
+  c.save();c.globalAlpha=0.12*k;c.fillStyle='#000';for(let y=(fr%3);y<H;y+=4)c.fillRect(0,y,W,1);c.restore();
 }
 
 /* ================= Preview ================= */
@@ -3020,7 +3074,7 @@ function drawStrip(t){
     for(let x=Math.ceil(X(TL.pad));x<w;x++){const st=x/w*D-TL.pad,v=p[Math.min(p.length-1,Math.max(0,Math.floor(st/sd*p.length)))];c.fillRect(x,mid-v*amp,1,Math.max(1,v*amp*2));}
   }else{c.fillStyle='#8E95C4';c.font='700 13px Nunito, sans-serif';c.fillText('No song loaded. Timing preview only.',10,58);}
   TL.rh.forEach(o=>{if(o.countFrom<o.start){c.fillStyle='rgba(255,201,40,.35)';c.fillRect(X(o.countFrom),20,X(o.start)-X(o.countFrom),h-20);}});
-  TL.warbles.forEach(w=>{c.fillStyle='rgba(186,117,23,.45)';c.fillRect(X(w.a),20,X(w.b)-X(w.a),h-20);c.fillStyle='rgba(255,201,40,.8)';c.fillRect(Math.round(X(w.pk)),20,1,h-20);});
+  TL.warbles.forEach(w=>{c.fillStyle=({warble:'rgba(186,117,23,.45)',drain:'rgba(200,200,210,.4)',glitch:'rgba(122,75,194,.5)'})[w.type];c.fillRect(X(w.a),20,X(w.b)-X(w.a),h-20);c.fillStyle='rgba(255,201,40,.8)';c.fillRect(Math.round(X(w.pk)),20,1,h-20);});
   TL.parts.forEach(p=>{c.fillStyle='#fff';c.fillRect(Math.round(X(p.b1)),20,2,h-20);if(TL.parts.length>1){c.font='800 11px Nunito, sans-serif';c.fillText('Part '+(p.pi+1),X(p.b1)+5,h-6);}});
   c.fillStyle='#FFC928';c.fillRect(Math.round(X(t))-1,0,3,h);
 }
@@ -3061,7 +3115,7 @@ async function loadSong(file){
 
 /* ================= Song settings ================= */
 const fallIn=document.getElementById('fall'),fpsIn=document.getElementById('fps');
-function syncInputs(){fallIn.value=S.fallBeats;fpsIn.value=S.fps;document.getElementById('endExit').value=S.endExit;
+function syncInputs(){fallIn.value=S.fallBeats;fpsIn.value=S.fps;document.getElementById('endExit').value=S.endExit;document.getElementById('endWait').value=S.endWait;document.getElementById('endWaitRow').hidden=S.endExit==='none';
   document.getElementById('drumOn').checked=S.drummer;
   document.querySelectorAll('[data-inst]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.inst===S.inst));
   document.getElementById('instSeg').classList.toggle('off',!S.drummer);}
@@ -3078,7 +3132,8 @@ document.getElementById('countClk').addEventListener('change',e=>{S.countClick=e
 document.getElementById('expDrums').addEventListener('change',e=>{S.expDrums=e.target.checked;save();});
 document.getElementById('drumVol').addEventListener('input',e=>{S.drumVol=+e.target.value/100;document.getElementById('drumVolTxt').textContent=e.target.value;if(drumGain)drumGain.gain.value=S.drumVol;save();});
 document.getElementById('endExit').innerHTML=Object.entries(EXITS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
-document.getElementById('endExit').addEventListener('change',e=>{S.endExit=e.target.value;refreshAll(false);});
+document.getElementById('endExit').addEventListener('change',e=>{S.endExit=e.target.value;syncInputs();refreshAll(false);});
+document.getElementById('endWait').addEventListener('input',e=>{const v=+e.target.value;if(e.target.value!==''&&v>=0){S.endWait=Math.min(64,v);refreshAll(false);}});
 document.getElementById('drumOn').addEventListener('change',e=>{S.drummer=e.target.checked;syncInputs();save();redraw();});
 document.querySelectorAll('[data-inst]').forEach(b=>b.addEventListener('click',()=>{S.inst=b.dataset.inst;syncInputs();save();redraw();}));
 fallIn.addEventListener('input',()=>{const v=+fallIn.value;if(v>=0.5&&v<=8){S.fallBeats=v;refreshAll(false);}});
@@ -3126,17 +3181,17 @@ function renderParts(){
     }));
     if(pi){
       const tr=document.createElement('div');tr.className='trans';
-      tr.innerHTML=`<div class="field"><label>Transition into part ${pi+1}</label><select data-t="trans"><option value="none">None</option><option value="warble">Tape warble (old film look)</option></select></div>
-        <div data-wopts ${pt.trans==='warble'?'':'hidden'}>
+      tr.innerHTML=`<div class="field"><label>Transition into part ${pi+1}</label><select data-t="trans">${Object.entries(TRANS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+        <div data-wopts ${pt.trans&&pt.trans!=='none'?'':'hidden'}>
           <div class="fields">
-            <div class="field"><label>Warble starts (s in audio)</label><input type="number" min="0" step="0.01" data-t="wStart"><div class="row"><button class="mini" data-wp="wStart">Use playhead</button></div></div>
-            <div class="field"><label>Warble ends (s in audio)</label><input type="number" min="0" step="0.01" data-t="wEnd"><div class="row"><button class="mini" data-wp="wEnd">Use playhead</button></div></div>
-            <div class="field wide"><label>Slowest point <span data-wpk></span></label><input type="range" min="10" max="90" step="1" data-t="wPeak" value="${Math.round((pt.wPeak??0.5)*100)}"></div>
+            <div class="field"><label>Starts (s in audio)</label><input type="number" min="0" step="0.01" data-t="wStart"><div class="row"><button class="mini" data-wp="wStart">Use playhead</button></div></div>
+            <div class="field"><label>Ends (s in audio)</label><input type="number" min="0" step="0.01" data-t="wEnd"><div class="row"><button class="mini" data-wp="wEnd">Use playhead</button></div></div>
+            <div class="field wide"><label>Strongest at <span data-wpk></span></label><input type="range" min="10" max="90" step="1" data-t="wPeak" value="${Math.round((pt.wPeak??0.5)*100)}"></div>
           </div>
           <div class="row"><button class="mini" data-wauto>Fit to the gap between parts</button><span class="help" data-wnote></span></div>
         </div>`;
       tr.querySelector('[data-t=trans]').value=pt.trans||'none';
-      tr.querySelector('[data-t=trans]').addEventListener('change',e=>{pt.trans=e.target.value;tr.querySelector('[data-wopts]').hidden=pt.trans!=='warble';refreshAll(false);});
+      tr.querySelector('[data-t=trans]').addEventListener('change',e=>{pt.trans=e.target.value;tr.querySelector('[data-wopts]').hidden=pt.trans==='none';refreshAll(false);});
       ['wStart','wEnd'].forEach(f=>{const inp=tr.querySelector(`[data-t=${f}]`);
         inp.addEventListener('change',()=>{pt[f]=inp.value===''?null:Math.max(0,+inp.value);refreshAll(false);});
         tr.querySelector(`[data-wp=${f}]`).addEventListener('click',()=>{pt[f]=Math.max(0,+(songTime()-TL.pad).toFixed(2));refreshAll(false);});});
@@ -3165,7 +3220,9 @@ function restCard(pt,sec,si){
   el.innerHTML=`<div class="sec-head"><span class="num ear">${ICON.ear}</span><span class="bars"></span>${acts(pt.sections,si)}</div>
     <div class="sec-fields"><span>Listen, no drumming, for</span><label><input type="number" min="1" max="256" value="${sec.bars}" data-f="bars"> bars</label></div>
     <div class="sec-fields"><label>Drummer leaves <select data-f="exit">${Object.entries(EXITS).map(([k,v])=>`<option value="${k}" ${k===(sec.exit||'none')?'selected':''}>${k==='none'?'No, he stays':v}</option>`).join('')}</select></label></div>
+    <div class="sec-fields" data-enter ${(sec.exit||'none')==='none'?'hidden':''}><label>Starts <input type="number" min="0" max="64" step="0.5" value="${sec.waitBeats||0}" data-f="wait"> beats after the last rhythm ends</label></div>
     <div class="sec-fields" data-enter ${(sec.exit||'none')==='none'?'hidden':''}><label>Comes back <select data-f="enter">${Object.entries(ENTRANCES).map(([k,v])=>`<option value="${k}" ${k===(sec.enter||sec.exit)?'selected':''}>${v}</option>`).join('')}</select></label></div>
+    <div class="sec-fields" data-enter ${(sec.exit||'none')==='none'?'hidden':''}><label>Back in his seat <input type="number" min="0" max="64" step="0.5" value="${sec.backBeats??''}" placeholder="auto" data-f="back"> beats before the next rhythm starts</label></div>
     <div class="help">The staff and repeat count clear off the screen. Falling notes for the next rhythm still drop in on time. If the drummer leaves, he's back in his seat in time for the next rhythm.</div>`;
   wireActs(el,pt,si);
   const inp=el.querySelector('[data-f=bars]');
@@ -3175,7 +3232,11 @@ function restCard(pt,sec,si){
     const was=sec.exit;sec.exit=e.target.value;
     // new exits default to coming back the same way, unless a different return was already picked
     if(sec.exit!=='none'&&(!sec.enter||sec.enter===was)){sec.enter=sec.exit;el.querySelector('[data-f=enter]').value=sec.enter;}
-    el.querySelector('[data-enter]').hidden=sec.exit==='none';refreshAll(false);});
+    el.querySelectorAll('[data-enter]').forEach(x=>x.hidden=sec.exit==='none');refreshAll(false);});
+  const wI=el.querySelector('[data-f=wait]'),bI=el.querySelector('[data-f=back]');
+  wI.addEventListener('input',()=>{const v=+wI.value;if(wI.value!==''&&v>=0){sec.waitBeats=Math.min(64,v);refreshAll(false);}});
+  wI.addEventListener('change',()=>{wI.value=sec.waitBeats||0;});
+  bI.addEventListener('input',()=>{sec.backBeats=bI.value===''?null:Math.max(0,Math.min(64,+bI.value));refreshAll(false);});
   el.querySelector('[data-f=enter]').addEventListener('change',e=>{sec.enter=e.target.value;refreshAll(false);});
   return el;
 }
@@ -3275,7 +3336,16 @@ function updateMeta(){
     if(document.activeElement!==sI)sI.value=(pt.wStart??autoA).toFixed(2);
     if(document.activeElement!==eI)eI.value=(pt.wEnd??autoB).toFixed(2);
     tr.querySelector('[data-wpk]').textContent=Math.round((pt.wPeak??0.5)*100)+'% of the way through';
-    tr.querySelector('[data-wnote]').textContent=pt.trans!=='warble'?'':!w?'The warble needs at least 0.3 s. Set a start and end with room between them.':(pt.wStart==null&&pt.wEnd==null?'Using the gap between parts.':'');
+    tr.querySelector('[data-wnote]').textContent=!pt.trans||pt.trans==='none'?'':!w?'The transition needs at least 0.3 s. Set a start and end with room between them.':(pt.wStart==null&&pt.wEnd==null?'Using the gap between parts.':'');
+  });
+  plist.querySelectorAll('.sec.rest').forEach(el=>{
+    const [pi,si]=el.dataset.key.split('-').map(Number),o=TL.secs.find(x=>x.pi===pi&&x.si===si);if(!o)return;
+    const nextR=TL.secs.filter(x=>x.type==='rhythm'&&x.start>=o.end-1e-3).sort((a,b)=>a.start-b.start)[0];
+    const bI=el.querySelector('[data-f=back]');if(bI)bI.placeholder=nextR?`auto (${+autoBack(nextR).toFixed(2)})`:'none';
+    let note=el.querySelector('.fitnote');if(!note){note=document.createElement('div');note.className='help fitnote';el.appendChild(note);}
+    const out=TL.moves.find(m=>m.dir==='out'&&Math.abs(m.t0-(o.start+(o.ref.waitBeats||0)*o.bd))<1e-3);
+    note.textContent=o.ref.exit&&o.ref.exit!=='none'&&!out&&nextR?'Not enough room between leaving and coming back. Lower the wait or the return beats, or add listening bars.':'';
+    note.style.color='var(--danger)';
   });
   const nR=TL.rh.length;
   document.getElementById('secCount').textContent=`${S.parts.length} part${S.parts.length>1?'s':''}, ${nR} rhythm${nR===1?'':'s'}`;
