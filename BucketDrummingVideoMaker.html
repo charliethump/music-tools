@@ -169,6 +169,9 @@ input[type=number]:focus,input[type=text]:focus,select:focus{border-color:var(--
 .seg.wide{display:flex}.seg.wide button{flex:1}
 .card>.help{font-size:13px;color:var(--muted);margin-top:8px}
 input[type=range]{width:100%;accent-color:var(--bucket)}
+.trimbox{margin-top:14px;border-top:1px solid var(--line);padding-top:4px}
+.trimbox .fields{margin-top:10px}
+.trimbox .help{font-size:12.5px;color:var(--muted)}
 .exprow{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 .exprow .field{flex:1;min-width:120px}
 .stage:has(.finder:not([hidden])) .hint{display:none}
@@ -264,6 +267,15 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
         <label class="switch"><input type="checkbox" id="expDrums"><span class="track"></span>Include drum sounds in the video</label>
       </div>
       <div class="field" style="margin-top:12px"><label for="drumVol">Drum volume <span id="drumVolTxt"></span></label><input type="range" id="drumVol" min="0" max="100" step="1"></div>
+      <div class="trimbox">
+        <div class="fields">
+          <div class="field"><label for="trimA">Start at (s)</label><input type="number" id="trimA" min="0" step="0.01"><div class="row"><button class="mini" data-trim="trimA">Use playhead</button></div></div>
+          <div class="field"><label for="trimB">End at (s)</label><input type="number" id="trimB" min="0" step="0.01"><div class="row"><button class="mini" data-trim="trimB">Use playhead</button></div></div>
+          <div class="field"><label for="fadeIn">Fade in from black (s)</label><input type="number" id="fadeIn" min="0" max="20" step="0.25"></div>
+          <div class="field"><label for="fadeOut">Fade out to black (s)</label><input type="number" id="fadeOut" min="0" max="20" step="0.25"></div>
+        </div>
+        <div class="row"><button class="mini" id="trimReset">Use the whole video</button><span class="help" id="trimNote"></span></div>
+      </div>
       <div class="prog" id="prog"><div></div></div>
       <div class="status" id="expStatus">Renders frame by frame, so sync is exact. Keep this tab in front while it works. Needs Chrome or Edge.</div>
     </section>
@@ -2362,12 +2374,12 @@ function drawGroup(c,b,cx,slotW,top,sp){
 // A video is a list of parts (one per song in the clip). Each part has its own tempo and downbeat,
 // and a list of sections: rhythms to drum, or listening bars with nothing on screen.
 const DEFAULT_SECTIONS=[{type:'rhythm',code:'Q0,R,R,R',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q0,Q0,Q0',reps:8,show:2,count:'off'},{type:'rhythm',code:'Q0,Q1,Q0,Q1',reps:8,show:2,count:'off'},{type:'rhythm',code:'E00,E10,E00,E10',reps:8,show:2,count:'off'}];
-const S={fallBeats:2.5,fps:30,endExit:'none',endWait:0,cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:false,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
+const S={trimA:null,trimB:null,fadeIn:0,fadeOut:0,fallBeats:2.5,fps:30,endExit:'none',endWait:0,cueNext:true,cueLast:true,drummer:false,inst:'mallet',countClick:true,expDrums:true,drumVol:0.8,parts:[{bpm:115,beat1:0,sections:DEFAULT_SECTIONS.map(s=>({...s}))}]};
 const song={buf:null,name:'',peaks:null};
 const ui={t:0,playing:false,drums:true,click:false,exporting:false};
 const STORE='bdvm-project-v1';
 function save(){try{localStorage.setItem(STORE,JSON.stringify(projectData()));}catch(e){}}
-function projectData(){return{app:'bucket-drumming-video-maker',version:2,endExit:S.endExit,endWait:S.endWait,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
+function projectData(){return{app:'bucket-drumming-video-maker',version:2,trimA:S.trimA,trimB:S.trimB,fadeIn:S.fadeIn,fadeOut:S.fadeOut,endExit:S.endExit,endWait:S.endWait,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
 function cleanSection(s){
   if(s&&s.type==='rest'){const exit=EXITS[s.exit]?s.exit:'none';const nb=v=>v==null||v===''||isNaN(+v)?null:Math.max(0,Math.min(64,+v));return{type:'rest',bars:clampInt(s.bars,1,256,4),waitBeats:nb(s.waitBeats)||0,backBeats:nb(s.backBeats),exit,enter:ENTRANCES[s.enter]?s.enter:(ENTRANCES[exit]?exit:'blast')};}
   const b=s&&parsePhrase(s.code);if(!b)return null;
@@ -2393,6 +2405,8 @@ function applyProject(p){
   if(p.fps==30||p.fps==60)S.fps=+p.fps;
   if(typeof p.drummer==='boolean')S.drummer=p.drummer;
   if(EXITS[p.endExit])S.endExit=p.endExit;
+  S.trimA=p.trimA==null||isNaN(+p.trimA)?null:Math.max(0,+p.trimA);S.trimB=p.trimB==null||isNaN(+p.trimB)?null:Math.max(0,+p.trimB);
+  S.fadeIn=Math.max(0,Math.min(20,+p.fadeIn||0));S.fadeOut=Math.max(0,Math.min(20,+p.fadeOut||0));
   if(+p.endWait>=0)S.endWait=Math.min(64,+p.endWait);
   if(typeof p.cueNext==='boolean')S.cueNext=p.cueNext;
   if(typeof p.cueLast==='boolean')S.cueLast=p.cueLast;
@@ -2546,12 +2560,31 @@ const clamp01=v=>v<0?0:v>1?1:v;
 const easeOut=k=>1-Math.pow(1-k,3);
 
 /* ================= Frame renderer ================= */
+// the part of the video that gets exported, in video time
+function trimRange(){
+  const D=duration(),a=Math.max(0,Math.min(D-0.5,S.trimA??0)),b=Math.max(a+0.5,Math.min(D,S.trimB??D));
+  const fi=Math.min(S.fadeIn,(b-a)/2),fo=Math.min(S.fadeOut,(b-a)/2);
+  return{a,b,fi,fo};
+}
+// 0 = fully visible, 1 = black (fades), plus a dim outside the trim in preview
+function fadeLevel(t){
+  const r=trimRange();
+  if(t<r.a-1e-6||t>r.b+1e-6)return 1;
+  let v=0;
+  if(r.fi>0&&t<r.a+r.fi)v=Math.max(v,1-(t-r.a)/r.fi);
+  if(r.fo>0&&t>r.b-r.fo)v=Math.max(v,1-(r.b-t)/r.fo);
+  return clamp01(v);
+}
 function drawFrame(c,t){
   c.globalAlpha=1;c.filter='none';
   const wb=warbleAt(t);
   if(wb&&wb.k>0.002){const sc=sceneCtx();drawScene(sc,t);(wb.type==='drain'?applyDrain:wb.type==='glitch'?applyGlitch:applyWarble)(c,t,wb);}
   else drawScene(c,t);
   drawNotation(c,t);   // notation stays crisp on top, even during a warble
+  const r=trimRange(),outside=t<r.a-1e-6||t>r.b+1e-6,fv=fadeLevel(t);
+  if(fv>0){c.save();c.globalAlpha=outside&&!ui.exporting?0.7:fv;c.fillStyle='#000';c.fillRect(0,0,W,H);
+    if(outside&&!ui.exporting){c.globalAlpha=0.9;c.fillStyle='#fff';c.font='700 46px Nunito, sans-serif';c.textAlign='center';c.fillText('Cut from the export',W/2,H/2);}
+    c.restore();}
 }
 function drawScene(c,t){
   c.globalAlpha=1;c.filter='none';
@@ -2986,6 +3019,7 @@ function play(){
   schedUntil=ui.t;ui.playing=true;setPlayIcon();requestAnimationFrame(tick);
 }
 function pause(){
+  if(master)master.gain.value=1;
   if(!ui.playing)return;
   ui.t=Math.max(0,Math.min(duration(),songTime()));ui.playing=false;
   if(songSrc){try{songSrc.stop();}catch(e){}songSrc=null;}
@@ -3029,6 +3063,7 @@ function tick(){
   const t=songTime();
   if(t>=duration()){ui.t=duration();pause();return;}
   schedule(t+(actx.outputLatency||0));
+  if(master)master.gain.value=1-fadeLevel(t);   // hear the fades in preview too
   if(F.listenUntil!==null&&t>=F.listenUntil){pause();endListen();return;}
   drawFrame(vctx,Math.max(0,t));
   updateClock(Math.max(0,t));
@@ -3082,6 +3117,11 @@ function drawStrip(t){
   TL.rh.forEach(o=>{if(o.countFrom<o.start){c.fillStyle='rgba(255,201,40,.35)';c.fillRect(X(o.countFrom),20,X(o.start)-X(o.countFrom),h-20);}});
   TL.warbles.forEach(w=>{c.fillStyle=({warble:'rgba(186,117,23,.45)',drain:'rgba(200,200,210,.4)',glitch:'rgba(122,75,194,.5)'})[w.type];c.fillRect(X(w.a),20,X(w.b)-X(w.a),h-20);c.fillStyle='rgba(255,201,40,.8)';c.fillRect(Math.round(X(w.pk)),20,1,h-20);});
   TL.parts.forEach(p=>{c.fillStyle='#fff';c.fillRect(Math.round(X(p.b1)),20,2,h-20);if(TL.parts.length>1){c.font='800 11px Nunito, sans-serif';c.fillText('Part '+(p.pi+1),X(p.b1)+5,h-6);}});
+  {const r=trimRange();c.fillStyle='rgba(0,0,0,.6)';c.fillRect(0,0,X(r.a),h);c.fillRect(X(r.b),0,w-X(r.b),h);
+    c.fillStyle='rgba(255,255,255,.18)';
+    if(r.fi>0){c.beginPath();c.moveTo(X(r.a),h);c.lineTo(X(r.a+r.fi),20);c.lineTo(X(r.a),20);c.fill();}
+    if(r.fo>0){c.beginPath();c.moveTo(X(r.b),h);c.lineTo(X(r.b-r.fo),20);c.lineTo(X(r.b),20);c.fill();}
+    if(S.trimA!=null||S.trimB!=null){c.fillStyle='#7FE3D0';c.fillRect(Math.round(X(r.a)),0,2,h);c.fillRect(Math.round(X(r.b))-2,0,2,h);}}
   c.fillStyle='#FFC928';c.fillRect(Math.round(X(t))-1,0,3,h);
 }
 let scrub=false;
@@ -3127,6 +3167,20 @@ function syncInputs(){fallIn.value=S.fallBeats;fpsIn.value=S.fps;document.getEle
   document.getElementById('instSeg').classList.toggle('off',!S.drummer);}
 document.getElementById('cueLast').addEventListener('change',e=>{S.cueLast=e.target.checked;save();redraw();});
 document.getElementById('cueNext').addEventListener('change',e=>{S.cueNext=e.target.checked;save();redraw();});
+function syncTrim(){
+  const r=trimRange(),aI=document.getElementById('trimA'),bI=document.getElementById('trimB');
+  if(document.activeElement!==aI)aI.value=r.a.toFixed(2);
+  if(document.activeElement!==bI)bI.value=r.b.toFixed(2);
+  document.getElementById('fadeIn').value=S.fadeIn;document.getElementById('fadeOut').value=S.fadeOut;
+  document.getElementById('trimNote').textContent=`Exports ${fmt(r.b-r.a)}${S.trimA!=null||S.trimB!=null?` of ${fmt(duration())}`:''}. Times match the clock under the preview.`;
+}
+['trimA','trimB'].forEach(f=>{
+  const inp=document.getElementById(f);
+  inp.addEventListener('change',()=>{const v=inp.value===''?null:Math.max(0,+inp.value);S[f]=f==='trimB'&&v!=null&&v>=duration()-0.005?null:f==='trimA'&&v===0?null:v;save();syncTrim();redraw();});
+  document.querySelector(`[data-trim=${f}]`).addEventListener('click',()=>{S[f]=+songTime().toFixed(2);save();syncTrim();redraw();});
+});
+['fadeIn','fadeOut'].forEach(f=>document.getElementById(f).addEventListener('input',e=>{const v=+e.target.value;if(e.target.value!==''&&v>=0){S[f]=Math.min(20,v);save();syncTrim();redraw();}}));
+document.getElementById('trimReset').addEventListener('click',()=>{S.trimA=S.trimB=null;save();syncTrim();redraw();});
 function syncSound(){
   document.getElementById('cueLast').checked=S.cueLast;document.getElementById('cueNext').checked=S.cueNext;
   document.getElementById('countClk').checked=S.countClick;
@@ -3372,7 +3426,7 @@ function refreshAll(rebuild=true){
   if(rebuild)renderParts();else updateMeta();
   if(ui.playing){schedUntil=songTime();}
   if(ui.t>duration())ui.t=duration();
-  save();redraw();
+  save();redraw();if(typeof syncTrim==='function')syncTrim();
 }
 
 /* ================= Project files ================= */
@@ -3419,22 +3473,28 @@ async function resample(buf,rate,ch){
   const s=oc.createBufferSource();s.buffer=buf;s.connect(oc.destination);s.start();
   return oc.startRendering();
 }
-async function mixAudio(rate,ch,dur){
-  // song (after any lead-in) + optional drum hits + optional count-off clicks, rendered offline so it is sample-exact
+async function mixAudio(rate,ch,from,dur,fi,fo){
+  // song (after any lead-in) + optional drum hits + optional count-off clicks, for the trimmed range,
+  // with the fades, rendered offline so it is sample-exact
   const oc=new OfflineAudioContext(ch,Math.ceil(dur*rate),rate);
-  if(song.buf){const s=oc.createBufferSource();s.buffer=song.buf;s.connect(oc.destination);s.start(TL.pad);}
+  const out=oc.createGain();out.connect(oc.destination);
+  out.gain.setValueAtTime(fi>0?0:1,0);
+  if(fi>0)out.gain.linearRampToValueAtTime(1,fi);
+  if(fo>0){out.gain.setValueAtTime(1,Math.max(fi,dur-fo));out.gain.linearRampToValueAtTime(0,dur);}
+  if(song.buf){const s=oc.createBufferSource();s.buffer=song.buf;s.connect(out);
+    const songAt=TL.pad-from;if(songAt>=0)s.start(songAt);else if(-songAt<song.buf.duration)s.start(0,-songAt);}
   if(S.expDrums){
     audio();await drumReady;
-    const g=oc.createGain();g.gain.value=S.drumVol;g.connect(oc.destination);
-    for(const e of TL.ev){if(e.t>=dur||!drumBuf[e.s])continue;const s=oc.createBufferSource();s.buffer=drumBuf[e.s];s.connect(g);s.start(e.t);}
+    const g=oc.createGain();g.gain.value=S.drumVol;g.connect(out);
+    for(const e of TL.ev){const at=e.t-from;if(at<0||at>=dur||!drumBuf[e.s])continue;const s=oc.createBufferSource();s.buffer=drumBuf[e.s];s.connect(g);s.start(at);}
   }
-  if(S.countClick)for(const k of TL.count)if(k.t>=0&&k.t<dur)countClick(oc,oc.destination,k.t);
+  if(S.countClick)for(const k of TL.count){const at=k.t-from;if(at>=0&&at<dur)countClick(oc,out,at);}
   return oc.startRendering();
 }
 async function exportVideo(){
   if(ui.exporting)return;
   pause();
-  const fps=S.fps,dur=duration(),nFrames=Math.round(dur*fps);
+  const fps=S.fps,TR=trimRange(),dur=TR.b-TR.a,nFrames=Math.round(dur*fps);
   const hasAudio=!!song.buf||S.expDrums||(S.countClick&&TL.count.length>0);
   const ch=song.buf?Math.min(2,song.buf.numberOfChannels):hasAudio?2:0;
   const codecs=await pickCodecs(fps,hasAudio,song.buf?song.buf.sampleRate:48000,ch);
@@ -3455,7 +3515,7 @@ async function exportVideo(){
     // audio first (fast)
     if(codecs.a){
       setStatus('Encoding audio...');
-      const buf=await mixAudio(codecs.a.cfg.sampleRate,ch,nFrames/fps);
+      const buf=await mixAudio(codecs.a.cfg.sampleRate,ch,TR.a,nFrames/fps,TR.fi,TR.fo);
       const aenc=new AudioEncoder({output:(c,m)=>muxer.addAudioChunk(c,m),error:e=>{failure=e;}});
       aenc.configure(codecs.a.cfg);
       const sr=buf.sampleRate,total=Math.min(buf.length,Math.round(nFrames/fps*sr)),block=4096;
@@ -3476,7 +3536,7 @@ async function exportVideo(){
     for(let i=0;i<nFrames;i++){
       if(cancelReq)throw new Error('cancel');
       if(failure)throw failure;
-      drawFrame(vctx,i/fps);
+      drawFrame(vctx,TR.a+i/fps);
       const vf=new VideoFrame(view,{timestamp:Math.round(i*1e6/fps),duration:fdur});
       venc.encode(vf,{keyFrame:i%gop===0});vf.close();
       while(venc.encodeQueueSize>6){await new Promise(r=>{venc.addEventListener('dequeue',r,{once:true});setTimeout(r,20);});}
@@ -3484,7 +3544,7 @@ async function exportVideo(){
         const p=(i+1)/nFrames,el=(performance.now()-started)/1000,left=p>0.02?el/p-el:0;
         prog.firstElementChild.style.width=(p*100).toFixed(1)+'%';
         setStatus(`Rendering frame ${i+1} of ${nFrames}${left?`, about ${Math.ceil(left)} s left`:''}`);
-        updateClock(i/fps);
+        updateClock(TR.a+i/fps);
         await new Promise(r=>setTimeout(r,0));
       }
     }
