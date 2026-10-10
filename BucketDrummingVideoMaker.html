@@ -2353,7 +2353,7 @@ const STORE='bdvm-project-v1';
 function save(){try{localStorage.setItem(STORE,JSON.stringify(projectData()));}catch(e){}}
 function projectData(){return{app:'bucket-drumming-video-maker',version:2,endExit:S.endExit,fallBeats:S.fallBeats,fps:S.fps,cueNext:S.cueNext,cueLast:S.cueLast,drummer:S.drummer,inst:S.inst,countClick:S.countClick,expDrums:S.expDrums,drumVol:S.drumVol,songName:song.name,parts:S.parts};}
 function cleanSection(s){
-  if(s&&s.type==='rest')return{type:'rest',bars:clampInt(s.bars,1,256,4),exit:EXITS[s.exit]?s.exit:'none'};
+  if(s&&s.type==='rest'){const exit=EXITS[s.exit]?s.exit:'none';return{type:'rest',bars:clampInt(s.bars,1,256,4),exit,enter:ENTRANCES[s.enter]?s.enter:(ENTRANCES[exit]?exit:'blast')};}
   const b=s&&parsePhrase(s.code);if(!b)return null;
   return{type:'rhythm',code:phraseCode(b),reps:clampInt(s.reps,1,99,8),show:clampInt(s.show,0,99,2),count:['off','short','long'].includes(s.count)?s.count:'off'};
 }
@@ -2650,6 +2650,7 @@ function drummerShadowed(k){
 /* ================= Drummer exits ================= */
 // Silly exits during listening bars and at the end. He comes back with the same effect played in reverse.
 const EXITS={none:'Stays',blast:'Blasts off',drill:'Drills into the floor',poof:'Poofs away',hook:'Gets yanked off stage',jet:'Jetpacks away'};
+const ENTRANCES={blast:'Spins down from the sky',drill:'Drills up from the floor',poof:'Poofs back in',hook:'Gets dragged back on',jet:'Jetpacks back in'};
 function exitDur(bd){return Math.max(1.2,Math.min(2.4,4*bd));}
 function buildDrummerMoves(secs,rh){
   const moves=[],order=secs.slice().sort((a,b)=>a.start-b.start);
@@ -2660,7 +2661,7 @@ function buildDrummerMoves(secs,rh){
     let D=exitDur(o.bd);
     if(nextR){const room=back-o.start;if(room<1)return;if(room<2*D+0.6)D=(room-0.3)/2.3;}
     moves.push({fx:o.ref.exit,dir:'out',t0:o.start,D});
-    if(nextR)moves.push({fx:o.ref.exit,dir:'in',t0:back-D,D});
+    if(nextR)moves.push({fx:ENTRANCES[o.ref.enter]?o.ref.enter:o.ref.exit,dir:'in',t0:back-D,D});
   });
   const lastR=rh.length?rh.reduce((a,b)=>b.end>a.end?b:a):null;
   if(lastR&&S.endExit!=='none'&&!moves.some(m=>m.t0>=lastR.end-1e-3))moves.push({fx:S.endExit,dir:'out',t0:lastR.end,D:exitDur(lastR.bd)});
@@ -2732,10 +2733,12 @@ function drawMoving(c,sh,base,mv){
     else{const k=((p-0.42)/0.58)**1.25;dx=-(cx+w)*k-14*(1-k);hookX=grab+dx;rot=-0.28*Math.min(1,k*3);}
     if(p>=0.42&&p<0.8){const q=(p-0.42)/0.38;c.save();c.globalAlpha=(1-q)*0.8;c.fillStyle='#E4E1DA';
       for(let i=0;i<6;i++){c.beginPath();c.arc(cx+40+70*q*(1+RND[i]),feet-20-50*q*RND[i+3],22+30*q,0,Math.PI*2);c.fill();}c.restore();}
+    const hy=waist+(p>=0.3&&p<0.42?-6*Math.sin((p-0.3)/0.12*Math.PI):0);
+    drawHook(c,hookX,hy,'back');
     c.save();c.translate(cx+dx,feet);c.rotate(rot);c.drawImage(sh.cv,-w/2,-(feet-base.y));c.restore();
     if(p>=0.42){c.save();c.strokeStyle='rgba(255,255,255,.8)';c.lineCap='round';c.lineWidth=4;
       for(let i=0;i<5;i++){const y=waist-160+i*80+RND[i]*30,x=cx+dx+w*0.22+20*i;c.globalAlpha=0.55;c.beginPath();c.moveTo(x,y);c.lineTo(x+90+60*RND[i+4],y);c.stroke();}c.restore();}
-    drawHook(c,hookX,waist+(p>=0.3&&p<0.42?-6*Math.sin((p-0.3)/0.12*Math.PI):0));
+    drawHook(c,hookX,hy,'front');
   }else if(m.fx==='jet'){
     // flames light under the bucket, a shaky warm-up, then lift-off out the top
     const ign=0.25,hover=70*ease(Math.min(1,p/ign)),rise=hover+(p<ign?0:((p-ign)/(1-ign))**2*(feet+80));   // hovers up first so the flames show
@@ -2767,12 +2770,15 @@ function drawMoving(c,sh,base,mv){
       c.restore();}
   }
 }
-function drawHook(c,x,y){
-  // long wooden pole from off-screen left, ending in a J that curls around in front of him
+function drawHook(c,x,y,part){
+  // long wooden pole from off-screen left, curling up around his far side. The pole and the start of the
+  // curve go in front of him; the tip of the curl goes behind him so the hook looks like it wraps around.
   c.save();c.lineCap='round';
-  const path=()=>{c.beginPath();c.moveTo(-400,y+30);c.lineTo(x-30,y+30);c.bezierCurveTo(x+60,y+30,x+70,y-70,x+10,y-80);c.bezierCurveTo(x-30,y-85,x-45,y-55,x-30,y-40);};
+  const front=()=>{c.beginPath();c.moveTo(-400,y+30);c.lineTo(x-30,y+30);c.bezierCurveTo(x+60,y+30,x+70,y-70,x+10,y-80);};
+  const back=()=>{c.beginPath();c.moveTo(x+10,y-80);c.bezierCurveTo(x-30,y-85,x-45,y-55,x-30,y-40);};
+  const path=part==='back'?back:front;
   c.strokeStyle='#5E3A1C';c.lineWidth=30;path();c.stroke();
-  c.strokeStyle='#A0682F';c.lineWidth=22;path();c.stroke();
+  c.strokeStyle=part==='back'?'#8A5826':'#A0682F';c.lineWidth=22;path();c.stroke();
   c.strokeStyle='rgba(255,226,170,.55)';c.lineWidth=5;c.translate(0,-6);path();c.stroke();
   c.restore();
 }
@@ -3033,13 +3039,19 @@ function restCard(pt,sec,si){
   const el=document.createElement('div');el.className='sec rest';el.dataset.key=S.parts.indexOf(pt)+'-'+si;
   el.innerHTML=`<div class="sec-head"><span class="num ear">${ICON.ear}</span><span class="bars"></span>${acts(pt.sections,si)}</div>
     <div class="sec-fields"><span>Listen, no drumming, for</span><label><input type="number" min="1" max="256" value="${sec.bars}" data-f="bars"> bars</label></div>
-    <div class="sec-fields"><label>Drummer <select data-f="exit">${Object.entries(EXITS).map(([k,v])=>`<option value="${k}" ${k===(sec.exit||'none')?'selected':''}>${v}</option>`).join('')}</select></label></div>
-    <div class="help">The staff and repeat count clear off the screen. Falling notes for the next rhythm still drop in on time. If the drummer leaves, he comes back the same way in time for the next rhythm.</div>`;
+    <div class="sec-fields"><label>Drummer leaves <select data-f="exit">${Object.entries(EXITS).map(([k,v])=>`<option value="${k}" ${k===(sec.exit||'none')?'selected':''}>${k==='none'?'No, he stays':v}</option>`).join('')}</select></label></div>
+    <div class="sec-fields" data-enter ${(sec.exit||'none')==='none'?'hidden':''}><label>Comes back <select data-f="enter">${Object.entries(ENTRANCES).map(([k,v])=>`<option value="${k}" ${k===(sec.enter||sec.exit)?'selected':''}>${v}</option>`).join('')}</select></label></div>
+    <div class="help">The staff and repeat count clear off the screen. Falling notes for the next rhythm still drop in on time. If the drummer leaves, he's back in his seat in time for the next rhythm.</div>`;
   wireActs(el,pt,si);
   const inp=el.querySelector('[data-f=bars]');
   inp.addEventListener('input',()=>{const v=parseInt(inp.value);if(v>=1){sec.bars=Math.min(256,v);refreshAll(false);}});
   inp.addEventListener('change',()=>{inp.value=sec.bars;});
-  el.querySelector('[data-f=exit]').addEventListener('change',e=>{sec.exit=e.target.value;refreshAll(false);});
+  el.querySelector('[data-f=exit]').addEventListener('change',e=>{
+    const was=sec.exit;sec.exit=e.target.value;
+    // new exits default to coming back the same way, unless a different return was already picked
+    if(sec.exit!=='none'&&(!sec.enter||sec.enter===was)){sec.enter=sec.exit;el.querySelector('[data-f=enter]').value=sec.enter;}
+    el.querySelector('[data-enter]').hidden=sec.exit==='none';refreshAll(false);});
+  el.querySelector('[data-f=enter]').addEventListener('change',e=>{sec.enter=e.target.value;refreshAll(false);});
   return el;
 }
 function rhythmCard(pt,sec,si){
