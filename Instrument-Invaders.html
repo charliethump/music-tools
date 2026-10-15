@@ -114,7 +114,7 @@
 
   #corner {
     position: absolute; top: calc(var(--u) * 5); right: calc(var(--u) * 5); z-index: 5;
-    display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * 3);
+    display: grid; grid-template-columns: auto auto; justify-items: end; gap: calc(var(--u) * 3);
   }
   .mini {
     font-family: var(--pixel); font-size: calc(var(--u) * 5);
@@ -178,6 +178,7 @@
   <div id="corner">
     <button id="pause-btn" class="mini" hidden>Pause</button>
     <button id="mute" class="mini">Sound on</button>
+    <button id="voice" class="mini">Voice off</button>
     <button id="fs" class="mini" hidden>Full screen</button>
   </div>
 </div>
@@ -367,6 +368,8 @@
   const INK = '#f4f1ff', DIM = '#8f89b8', GOLD = '#ffcc3d', BOMB = '#ff8a5b';
   const SCORE_KEY = 'instrument-invaders-scores-v3';
   const MUTE_KEY = 'instrument-invaders-muted';
+  const VOICE_KEY = 'instrument-invaders-voice';
+  const PROMPT_PULSE = 0.45; // seconds the instruction pulses when it changes
 
   /* ===== Elements ===== */
 
@@ -1254,6 +1257,7 @@
   function updateEffects(dt) {
     const g = game;
     g.starY = (g.starY + dt * 6) % H;
+    if (g.promptPulse > 0) g.promptPulse -= dt;
     g.time += dt;
     for (let i = g.particles.length - 1; i >= 0; i--) {
       const p = g.particles[i];
@@ -1569,19 +1573,19 @@
   }
 
   // Bottom bar: "Britten" plus one pip per hit he has left
-  function drawBrittenHealth(y) {
+  function drawBrittenHealth(y, cx = W / 2) {
     const b = game.britten;
     setFont(8);
     ctx.textBaseline = 'middle';
     if (b.phase === 'front') {
       ctx.textAlign = 'center';
       ctx.fillStyle = DIM;
-      ctx.fillText('Benjamin Britten', W / 2, y);
+      ctx.fillText('Benjamin Britten', cx, y + 1);
       return;
     }
     const label = 'Britten', lw = ctx.measureText(label).width, pip = 7, gap = 2;
     const total = lw + 8 + BRITTEN_HP * (pip + gap);
-    let x = W / 2 - total / 2;
+    let x = cx - total / 2;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#c9d1e8';
     ctx.fillText(label, x, y);
@@ -1815,6 +1819,7 @@
 
   function setFont(size) { ctx.font = size + 'px ' + FONT; }
 
+  // Top bar: wave number (or Britten's health), power-up timers, the boss clock and the progress line
   function drawPrompt() {
     const g = game;
     ctx.fillStyle = '#120b2e';
@@ -1827,12 +1832,62 @@
     const y = (TOP_BAND - 3) / 2;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
+    setFont(8);
     if (g.britten) { // battle clock in the top-left corner
-      setFont(8);
       ctx.fillStyle = DIM;
       ctx.fillText('Time ' + clockText(g.britten.finalTime ?? g.britten.time), 10, y + 1);
+      drawBrittenHealth(y, 366);
+    } else {
+      setFont(10);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = DIM;
+      ctx.fillText('Wave ' + g.wave, W / 2, y + 1);
     }
+    // Power-up countdowns
+    const timers = [];
+    if (g.restT > 0) timers.push([REST, g.restT, REST_SECONDS, REST_COLOR]);
+    if (g.holdT > 0) timers.push([FERMATA, g.holdT, FERMATA_SECONDS, FERMATA_COLOR]);
+    setFont(8);
+    ctx.textAlign = 'left';
+    timers.forEach(([item, left, total, color], i) => {
+      const x0 = i === 0 ? 112 : 206, barW = 50;
+      if (item.sprite) ctx.drawImage(item.sprite, x0 - 9, y - 9, 18, 18);
+      ctx.fillStyle = '#2a2152';
+      ctx.fillRect(x0 + 6, y - 3, barW, 6);
+      ctx.fillStyle = color;
+      ctx.fillRect(x0 + 6, y - 3, barW * left / total, 6);
+      ctx.fillText(Math.ceil(left) + 's', x0 + barW + 11, y + 1);
+    });
+  }
+
+  // What the voice says for a prompt
+  function promptWords(t) {
+    if (!t) return '';
+    if (t.type === 'britten') return 'Benjamin Britten';
+    if (t.type === 'family') return 'Any ' + FAMILIES[t.family].label.toLowerCase() + ' instrument';
+    return t.inst.name.replace('-', ' ');
+  }
+
+  // Bottom bar: score on the left, the instruction in the middle, lives on the right
+  function drawHud() {
+    const g = game;
+    const y = (GROUND_Y + H) / 2 + 1;
+    ctx.fillStyle = '#3d3270';
+    ctx.fillRect(0, GROUND_Y, W, 2);
+    setFont(8);
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = INK;
+    ctx.textAlign = 'left';
+    if (!g.britten) ctx.fillText('Score ' + g.score, 10, y);
+    for (let i = 0; i < g.lives; i++) drawConductor(W - 12 - i * 13, H - 3, 0.3, 1, false);
+
+    // A new prompt pulses (and is spoken if the voice is on)
     const t = g.target;
+    const key = t ? t.type + ':' + (t.inst ? t.inst.name : t.family || '') : '';
+    if (key !== g.promptKey) {
+      g.promptKey = key;
+      if (t) { g.promptPulse = PROMPT_PULSE; sayPrompt(promptWords(t)); }
+    }
     if (!t) {
       setFont(10);
       ctx.fillStyle = DIM;
@@ -1857,51 +1912,37 @@
       segs.push({ text: FAMILIES[t.family].label, size: 14, color: FAMILIES[t.family].color });
       segs.push({ text: 'instrument', size: 8, color: DIM });
     }
-    const GAP = 10, IMG = 34;
+    const GAP = 8, IMG = 24;
     let total = 0;
-    for (const s of segs) {
-      if (s.img) s.w = IMG;
-      else { setFont(s.size); s.w = ctx.measureText(s.text).width; }
-      total += s.w;
+    for (const sg of segs) {
+      if (sg.img) sg.w = IMG;
+      else { setFont(sg.size); sg.w = ctx.measureText(sg.text).width; }
+      total += sg.w;
     }
     total += GAP * (segs.length - 1);
-    let x = (W - total) / 2;
-    for (const s of segs) {
-      if (s.img) ctx.drawImage(s.img, x, y - IMG / 2, IMG, IMG);
-      else { setFont(s.size); ctx.fillStyle = s.color; ctx.fillText(s.text, x, y + 1); }
-      x += s.w + GAP;
-    }
-  }
 
-  function drawHud() {
-    const g = game;
-    const y = (GROUND_Y + H) / 2 + 1;
-    ctx.fillStyle = '#3d3270';
-    ctx.fillRect(0, GROUND_Y, W, 2);
-    setFont(8);
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = INK;
+    // Pulse: grows, then settles back, with a gold glow behind it
+    const k = Math.max(0, (g.promptPulse || 0) / PROMPT_PULSE);
+    ctx.save();
+    ctx.translate(W / 2, y);
+    if (k > 0) {
+      ctx.globalAlpha = 0.35 * k;
+      ctx.fillStyle = GOLD;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-total / 2 - 8, -11, total + 16, 22, 6) : ctx.rect(-total / 2 - 8, -11, total + 16, 22);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      const sc = 1 + 0.3 * k;
+      ctx.scale(sc, sc);
+    }
+    let x = -total / 2;
     ctx.textAlign = 'left';
-    if (!g.britten) ctx.fillText('Score ' + g.score, 10, y);
-    // Power-up countdowns: first one left of the wave label, second one to its right
-    const timers = [];
-    if (g.restT > 0) timers.push([REST, g.restT, REST_SECONDS, REST_COLOR]);
-    if (g.holdT > 0) timers.push([FERMATA, g.holdT, FERMATA_SECONDS, FERMATA_COLOR]);
-    timers.forEach(([item, left, total, color], i) => {
-      const x0 = i === 0 ? 132 : 400, barW = 56;
-      if (item.sprite) ctx.drawImage(item.sprite, x0 - 9, y - 9, 18, 18);
-      ctx.fillStyle = '#2a2152';
-      ctx.fillRect(x0 + 6, y - 3, barW, 6);
-      ctx.fillStyle = color;
-      ctx.fillRect(x0 + 6, y - 3, barW * left / total, 6);
-      ctx.fillText(Math.ceil(left) + 's', x0 + barW + 12, y);
-    });
-    ctx.fillStyle = INK;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = DIM;
-    if (g.britten) drawBrittenHealth(y);
-    else ctx.fillText('Wave ' + g.wave, W / 2, y);
-    for (let i = 0; i < g.lives; i++) drawConductor(W - 12 - i * 13, H - 3, 0.3, 1, false);
+    for (const sg of segs) {
+      if (sg.img) ctx.drawImage(sg.img, x, -IMG / 2, IMG, IMG);
+      else { setFont(sg.size); ctx.fillStyle = sg.color; ctx.fillText(sg.text, x, 1); }
+      x += sg.w + GAP;
+    }
+    ctx.restore();
   }
 
   function render() {
@@ -1998,6 +2039,7 @@
     pausedFrom = state;
     state = 'paused';
     musicPause();
+    if (window.speechSynthesis) speechSynthesis.cancel();
     keys.left = keys.right = false;
     pendingFire = false;
     setScreen('pause');
@@ -2192,6 +2234,30 @@
   pauseBtn.addEventListener('click', () => {
     if (state === 'paused') resume();
     else pause();
+  });
+
+  // Voice: reads each new instrument name aloud using the Chromebook's built-in voice.
+  // Separate from Sound on/off and off by default; the choice is remembered on this device.
+  let voiceOn = storeGet(VOICE_KEY) === '1';
+  function updateVoiceLabel() { $('voice').textContent = voiceOn ? 'Voice on' : 'Voice off'; }
+  function sayPrompt(words) {
+    if (!voiceOn || !words || !window.speechSynthesis || (state !== 'playing' && state !== 'wavebreak')) return;
+    speechSynthesis.cancel(); // never stack up old names
+    const u = new SpeechSynthesisUtterance(words);
+    u.rate = 0.95;
+    speechSynthesis.speak(u);
+  }
+  updateVoiceLabel();
+  if (!window.speechSynthesis) $('voice').hidden = true; // no built-in voice available
+  $('voice').addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    storeSet(VOICE_KEY, voiceOn ? '1' : '0');
+    updateVoiceLabel();
+    if (!voiceOn && window.speechSynthesis) speechSynthesis.cancel();
+    if (state === 'playing' || state === 'wavebreak') {
+      if (voiceOn && game) sayPrompt(promptWords(game.target)); // say the current one right away
+      stage.focus({ preventScroll: true });
+    }
   });
 
   $('mute').addEventListener('click', () => {
