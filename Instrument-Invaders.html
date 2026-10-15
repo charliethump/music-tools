@@ -113,16 +113,20 @@
     padding: calc(var(--u) * 4);
   }
 
+  /* One row, right-aligned. Pause is first (leftmost), so the others never move when it hides. */
   #corner {
     position: absolute; top: calc(var(--u) * 5); right: calc(var(--u) * 5); z-index: 5;
-    display: grid; grid-template-columns: auto auto; justify-items: end; gap: calc(var(--u) * 3);
+    display: flex; flex-direction: row; align-items: center; gap: calc(var(--u) * 3);
   }
   .mini {
     font-family: var(--pixel); font-size: calc(var(--u) * 5);
     color: var(--dim); background: rgba(7, 4, 24, .7);
-    border: 1px solid #3d3270; padding: calc(var(--u) * 3) calc(var(--u) * 5);
-    cursor: pointer;
+    border: 1px solid #3d3270; padding: calc(var(--u) * 3) calc(var(--u) * 4);
+    cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: calc(var(--u) * 2.5);
   }
+  .mini svg { width: calc(var(--u) * 7); height: calc(var(--u) * 7); flex: none; }
+  .mini { justify-content: center; }
   .mini[hidden] { display: none; }
 </style>
 </head>
@@ -372,6 +376,9 @@
   const MUTE_KEY = 'instrument-invaders-muted';
   const VOICE_KEY = 'instrument-invaders-voice';
   const PROMPT_PULSE = 0.45; // seconds the instruction pulses when it changes
+  const VOICE_VOLUME = 0.65; // spoken instrument names (1 = full volume)
+  // Family names in prompts read "any string instrument", not "any strings instrument"
+  const FAMILY_SINGULAR = { strings: 'String', woodwinds: 'Woodwind', brass: 'Brass', percussion: 'Percussion' };
 
   /* ===== Elements ===== */
 
@@ -648,9 +655,45 @@
     canvas.height = Math.round(H * k);
     ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
     stage.style.setProperty('--u', (rect.width / W) + 'px');
+    if (typeof lockButtonWidths === 'function' && document.fonts) document.fonts.ready.then(lockButtonWidths);
     buildStarfield();
     if (typeof sizeFront === 'function') sizeFront();
     needsRender = true;
+  }
+
+  /* ===== Corner button icons (simple pixel-style drawings, no image files) ===== */
+  const ICONS = {
+    pause:  '<rect x="3" y="2" width="3.5" height="12"/><rect x="9.5" y="2" width="3.5" height="12"/>',
+    play:   '<polygon points="4,2 14,8 4,14"/>',
+    soundOn:  '<polygon points="1,6 4,6 8,2 8,14 4,10 1,10"/><path d="M10.5 5.5 Q12.5 8 10.5 10.5 M12.5 3.5 Q16 8 12.5 12.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+    soundOff: '<polygon points="1,6 4,6 8,2 8,14 4,10 1,10"/><path d="M10.5 5.5 L15 10.5 M15 5.5 L10.5 10.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+    voiceOn:  '<circle cx="5.5" cy="5" r="3"/><path d="M0.5 15 Q0.5 9 5.5 9 Q10.5 9 10.5 15 Z"/><path d="M11.5 3 Q13.5 5 11.5 7 M13.5 1 Q16.5 5 13.5 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    voiceOff: '<circle cx="5.5" cy="5" r="3"/><path d="M0.5 15 Q0.5 9 5.5 9 Q10.5 9 10.5 15 Z"/><path d="M11.5 2.5 L15.5 6.5 M15.5 2.5 L11.5 6.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+    fullscreen: '<path d="M1.5 6 V1.5 H6 M10 1.5 H14.5 V6 M14.5 10 V14.5 H10 M6 14.5 H1.5 V10" fill="none" stroke="currentColor" stroke-width="2"/>',
+    exitFull:   '<path d="M6 1.5 V6 H1.5 M14.5 6 H10 V1.5 M10 14.5 V10 H14.5 M1.5 10 H6 V14.5" fill="none" stroke="currentColor" stroke-width="2"/>'
+  };
+  function setButton(el, icon, text) {
+    el.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">' + ICONS[icon] + '</svg><span></span>';
+    el.lastChild.textContent = text;
+  }
+  // Each corner button is sized for its longest label, so toggling never nudges the others
+  const BUTTON_STATES = {
+    'pause-btn': [['pause', 'Pause'], ['play', 'Resume']],
+    mute: [['soundOn', 'Sound on'], ['soundOff', 'Sound off']],
+    voice: [['voiceOn', 'Voice on'], ['voiceOff', 'Voice off']],
+    fs: [['fullscreen', 'Full screen'], ['exitFull', 'Exit full screen']]
+  };
+  function lockButtonWidths() {
+    for (const id in BUTTON_STATES) {
+      const el = $(id), html = el.innerHTML, wasHidden = el.hidden;
+      el.style.minWidth = '';
+      el.hidden = false;
+      let widest = 0;
+      for (const [icon, text] of BUTTON_STATES[id]) { setButton(el, icon, text); widest = Math.max(widest, el.getBoundingClientRect().width); }
+      el.innerHTML = html;
+      el.hidden = wasHidden;
+      el.style.minWidth = Math.ceil(widest) + 'px';
+    }
   }
 
   /* ===== Sound (tiny synth, no files) ===== */
@@ -881,7 +924,7 @@
     }
   }
 
-  function updateMuteLabel() { $('mute').textContent = muted ? 'Sound off' : 'Sound on'; }
+  function updateMuteLabel() { setButton($('mute'), muted ? 'soundOff' : 'soundOn', muted ? 'Sound off' : 'Sound on'); }
   function toggleMute() {
     muted = !muted;
     storeSet(MUTE_KEY, muted ? '1' : '0');
@@ -2010,8 +2053,8 @@
     setFont(8);
     ctx.textAlign = 'left';
     timers.forEach(([item, left, total, color], i) => {
-      // Boss battle: Britten's health is centered, so the second timer sits to its right
-      const x0 = i === 0 ? 112 : (g.britten ? 404 : 206), barW = 50;
+      // Both timers sit left of center, clear of Britten's health and the corner buttons
+      const x0 = i === 0 ? 100 : 180, barW = 36;
       if (item.sprite) ctx.drawImage(item.sprite, x0 - 9, y - 9, 18, 18);
       ctx.fillStyle = '#2a2152';
       ctx.fillRect(x0 + 6, y - 3, barW, 6);
@@ -2025,7 +2068,7 @@
   function promptWords(t) {
     if (!t) return '';
     if (t.type === 'britten') return 'Benjamin Britten';
-    if (t.type === 'family') return 'Any ' + FAMILIES[t.family].label.toLowerCase() + ' instrument';
+    if (t.type === 'family') return 'Any ' + FAMILY_SINGULAR[t.family].toLowerCase() + ' instrument';
     return t.inst.name.replace('-', ' ');
   }
 
@@ -2070,7 +2113,7 @@
       if (LEVELS[difficulty].pictureClue) segs.push({ img: t.inst.sprite });
     } else {
       segs.push({ text: 'Blast any', size: 8, color: DIM });
-      segs.push({ text: FAMILIES[t.family].label, size: 14, color: FAMILIES[t.family].color });
+      segs.push({ text: FAMILY_SINGULAR[t.family], size: 14, color: FAMILIES[t.family].color });
       segs.push({ text: 'instrument', size: 8, color: DIM });
     }
     const GAP = 8, IMG = 24;
@@ -2392,7 +2435,7 @@
     if (key === pauseBtnState) return;
     pauseBtnState = key;
     pauseBtn.hidden = !show;
-    pauseBtn.textContent = label;
+    setButton(pauseBtn, state === 'paused' ? 'play' : 'pause', label);
   }
   pauseBtn.addEventListener('click', () => {
     if (state === 'paused') resume();
@@ -2402,12 +2445,13 @@
   // Voice: reads each new instrument name aloud using the Chromebook's built-in voice.
   // Separate from Sound on/off and off by default; the choice is remembered on this device.
   let voiceOn = storeGet(VOICE_KEY) === '1';
-  function updateVoiceLabel() { $('voice').textContent = voiceOn ? 'Voice on' : 'Voice off'; }
+  function updateVoiceLabel() { setButton($('voice'), voiceOn ? 'voiceOn' : 'voiceOff', voiceOn ? 'Voice on' : 'Voice off'); }
   function sayPrompt(words) {
     if (!voiceOn || !words || !window.speechSynthesis || (state !== 'playing' && state !== 'wavebreak')) return;
     speechSynthesis.cancel(); // never stack up old names
     const u = new SpeechSynthesisUtterance(words);
     u.rate = 0.95;
+    u.volume = VOICE_VOLUME;
     speechSynthesis.speak(u);
   }
   updateVoiceLabel();
@@ -2431,12 +2475,13 @@
   const fsBtn = $('fs');
   if (document.fullscreenEnabled) {
     fsBtn.hidden = false;
+    setButton(fsBtn, 'fullscreen', 'Full screen');
     fsBtn.addEventListener('click', () => {
       if (document.fullscreenElement) document.exitFullscreen();
       else stage.requestFullscreen().catch(() => {});
     });
     document.addEventListener('fullscreenchange', () => {
-      fsBtn.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+      setButton(fsBtn, document.fullscreenElement ? 'exitFull' : 'fullscreen', document.fullscreenElement ? 'Exit full screen' : 'Full screen');
       if (state === 'playing' || state === 'wavebreak') stage.focus({ preventScroll: true });
     });
   }
