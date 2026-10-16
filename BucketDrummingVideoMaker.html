@@ -176,6 +176,11 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
 #bgThumb{display:block;width:100%;height:auto}
 .sw{position:absolute;width:30px;height:30px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);overflow:hidden;cursor:pointer}
 .sw input{position:absolute;inset:-8px;width:46px;height:46px;border:none;padding:0;cursor:pointer}
+.stillbox{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stillbox .lab{font-size:13px;font-weight:800;color:var(--muted)}
+.stillbox .seg.wide{align-self:stretch}
+.stillbox .lab2{font-size:13px;font-weight:800;color:var(--muted)}
+.stillbox .help{font-size:12.5px;color:var(--muted)}
 .exprow{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 .exprow .field{flex:1;min-width:120px}
 .stage:has(.finder:not([hidden])) .hint{display:none}
@@ -295,6 +300,18 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
           <div class="field"><label for="fadeOut">Fade out to black (s)</label><input type="number" id="fadeOut" min="0" max="20" step="0.25"></div>
         </div>
         <div class="row"><button class="mini" id="trimReset">Use the whole video</button><span class="help" id="trimNote"></span></div>
+      </div>
+      <div class="stillbox">
+        <div class="lab">Save a still image (PNG, 1920 x 1080)</div>
+        <div class="seg wide" id="stillSeg" role="group" aria-label="Still image source"><button data-still="playhead" aria-pressed="true">At the playhead</button><button data-still="time" aria-pressed="false">At a time</button><button data-still="plain" aria-pressed="false">Background only</button></div>
+        <div class="row" id="stillTimeRow" hidden><label for="stillTime" class="lab2">Time (s)</label><input type="number" id="stillTime" min="0" step="0.01" value="0" style="width:110px"></div>
+        <div class="help" id="stillHelp"></div>
+        <button class="btn" id="stillBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 8"/></svg>Save PNG</button>
+      </div>
+      <div class="stillbox">
+        <div class="lab">Save the rhythms as images</div>
+        <div class="help">One transparent PNG of the notation for every rhythm, all at the same staff size, with their repeat signs or double bars. Handy for slides and worksheets. They download together as a ZIP.</div>
+        <button class="btn" id="rhythmPngBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/><path d="M9 4v16"/></svg>Save rhythm PNGs</button>
       </div>
       <div class="prog" id="prog"><div></div></div>
       <div class="status" id="expStatus">Renders frame by frame, so sync is exact. Keep this tab in front while it works. Needs Chrome or Edge.</div>
@@ -2598,12 +2615,13 @@ function fadeLevel(t){
   if(r.fo>0&&t>r.b-r.fo)v=Math.max(v,1-(r.b-t)/r.fo);
   return clamp01(v);
 }
-function drawFrame(c,t){
+function drawFrame(c,t,still){
   c.globalAlpha=1;c.filter='none';
   const wb=warbleAt(t);
   if(wb&&wb.k>0.002){const sc=sceneCtx();drawScene(sc,t);(wb.type==='drain'?applyDrain:wb.type==='glitch'?applyGlitch:applyWarble)(c,t,wb);}
   else drawScene(c,t);
   drawNotation(c,t);   // notation stays crisp on top, even during a warble
+  if(still)return;   // stills are the plain frame: no trim dimming or fades
   const r=trimRange(),outside=t<r.a-1e-6||t>r.b+1e-6,fv=fadeLevel(t);
   if(fv>0){c.save();c.globalAlpha=outside&&!ui.exporting?0.7:fv;c.fillStyle='#000';c.fillRect(0,0,W,H);
     if(outside&&!ui.exporting){c.globalAlpha=0.9;c.fillStyle='#fff';c.font='700 46px Nunito, sans-serif';c.textAlign='center';c.fillText('Cut from the export',W/2,H/2);}
@@ -3291,7 +3309,7 @@ document.getElementById('drumVol').addEventListener('input',e=>{S.drumVol=+e.tar
 document.getElementById('endExit').innerHTML=Object.entries(EXITS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
 document.getElementById('endExit').addEventListener('change',e=>{S.endExit=e.target.value;syncInputs();refreshAll(false);});
 document.getElementById('endWait').addEventListener('input',e=>{const v=+e.target.value;if(e.target.value!==''&&v>=0){S.endWait=Math.min(64,v);refreshAll(false);}});
-document.getElementById('drumOn').addEventListener('change',e=>{S.drummer=e.target.checked;syncInputs();save();redraw();});
+document.getElementById('drumOn').addEventListener('change',e=>{S.drummer=e.target.checked;syncInputs();save();redraw();if(typeof stillHelp==='function')stillHelp();});
 document.querySelectorAll('[data-inst]').forEach(b=>b.addEventListener('click',()=>{S.inst=b.dataset.inst;syncInputs();save();redraw();}));
 fallIn.addEventListener('input',()=>{const v=+fallIn.value;if(v>=0.5&&v<=8){S.fallBeats=v;refreshAll(false);}});
 fpsIn.addEventListener('change',()=>{S.fps=+fpsIn.value;save();});
@@ -3788,6 +3806,80 @@ function stopTapping(){
     pt.bpm=F.suggest.bpm;const inp=plist.querySelectorAll('.part')[F.pi]?.querySelector('[data-pf=bpm]');if(inp)inp.value=pt.bpm;
     const b1=F.suggest.b1;F.suggest=null;setTargetSong(b1,true);fMsg.textContent='Tempo and beat 1 updated. Press Listen to check it with the click.';});fMsg.append(' ',b);}
 }
+
+/* ================= Still images ================= */
+let stillMode='playhead';
+function stillHelp(){
+  document.getElementById('stillTimeRow').hidden=stillMode!=='time';
+  document.getElementById('stillHelp').textContent=stillMode==='plain'?(S.drummer?'Your background, the buckets and the drummer, with nothing else on screen.':'Your background and the buckets, with nothing else on screen. Turn the drummer on to include him.'):
+    stillMode==='time'?'The frame at this time, using the clock under the preview.':'Exactly what the preview shows now, without the trim dimming.';
+}
+document.querySelectorAll('[data-still]').forEach(b=>b.addEventListener('click',()=>{stillMode=b.dataset.still;document.querySelectorAll('[data-still]').forEach(x=>x.setAttribute('aria-pressed',x===b));stillHelp();}));
+document.getElementById('stillBtn').addEventListener('click',()=>{
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+  const base=(song.name||'bucket-warmup').replace(/\.[^.]+$/,'');let name;
+  if(stillMode==='plain'){
+    c.drawImage(bgImage(),0,0,W,H);
+    if(S.drummer){const s=DRUMMER.scale,b=DRUMMER.box,sh=drummerShadowed(S.inst+'_neutral');c.drawImage(sh.cv,DRUMMER.cx-(b[0]+b[2])/2*s-sh.pad,DRUMMER.bottom-b[3]*s-sh.pad);}
+    c.drawImage(IMG.b_all,676,476);
+    name=`${base} background.png`;
+  }else{
+    const t=stillMode==='time'?Math.max(0,Math.min(duration(),+document.getElementById('stillTime').value||0)):songTime();
+    drawFrame(c,t,true);
+    name=`${base} frame ${fmt(t).replace(':','m')}s.png`;
+  }
+  cv.toBlob(b=>download(b,name),'image/png');
+  redraw();   // shared effect buffers may have been used
+});
+stillHelp();
+
+/* ================= Rhythm images ================= */
+// Each rhythm engraved large (same staff size for all) on a transparent background, cropped to the ink.
+function rhythmImage(ms,reps){
+  const sp=60,rows=phraseRows(ms),fin=reps>1?'repeat':'double',rowH=8.5*sp;
+  const wide=Math.max(...rows.map(r=>rowLayout(r,sp).end));
+  const cv=document.createElement('canvas');cv.width=Math.ceil(wide+2*sp);cv.height=Math.ceil(rows.length*rowH+3*sp);const c=cv.getContext('2d');
+  rows.forEach((r,i)=>engraveRow(c,r,sp*0.5,3*sp+i*rowH,sp,'#000',i<rows.length-1?'single':fin));
+  const px=c.getImageData(0,0,cv.width,cv.height).data;let x0=cv.width,y0=cv.height,x1=0,y1=0;
+  for(let y=0;y<cv.height;y++)for(let x=0;x<cv.width;x++)if(px[(y*cv.width+x)*4+3]>8){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+  const pad=Math.round(sp*0.4),out=document.createElement('canvas');out.width=x1-x0+1+2*pad;out.height=y1-y0+1+2*pad;
+  out.getContext('2d').drawImage(cv,x0,y0,x1-x0+1,y1-y0+1,pad,pad,x1-x0+1,y1-y0+1);
+  return out;
+}
+// minimal ZIP writer (files stored as-is; PNGs are already compressed)
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRC_T[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0;}
+function makeZip(files){
+  const enc=new TextEncoder(),parts=[],central=[];let off=0;
+  const d=new Date(),dt=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),dd=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  for(const f of files){
+    const name=enc.encode(f.name),crc=crc32(f.data),n=f.data.length;
+    const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(8,0,true);h.setUint16(10,dt,true);h.setUint16(12,dd,true);
+    h.setUint32(14,crc,true);h.setUint32(18,n,true);h.setUint32(22,n,true);h.setUint16(26,name.length,true);
+    parts.push(new Uint8Array(h.buffer),name,f.data);
+    const cd=new DataView(new ArrayBuffer(46));
+    cd.setUint32(0,0x02014b50,true);cd.setUint16(4,20,true);cd.setUint16(6,20,true);cd.setUint16(8,0x0800,true);cd.setUint16(12,dt,true);cd.setUint16(14,dd,true);
+    cd.setUint32(16,crc,true);cd.setUint32(20,n,true);cd.setUint32(24,n,true);cd.setUint16(28,name.length,true);cd.setUint32(42,off,true);
+    central.push(new Uint8Array(cd.buffer),name);
+    off+=30+name.length+n;
+  }
+  const cdSize=central.reduce((a,b)=>a+b.length,0),e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cdSize,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...central,new Uint8Array(e.buffer)],{type:'application/zip'});
+}
+document.getElementById('rhythmPngBtn').addEventListener('click',async()=>{
+  const base=(song.name||'bucket-warmup').replace(/\.[^.]+$/,''),multi=S.parts.length>1,files=[];
+  for(const o of TL.rh){
+    const cv=rhythmImage(o.ms,o.reps);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const name=`${multi?`Part ${o.pi+1} `:''}Rhythm ${o.num} (x${o.reps}).png`;
+    files.push({name,data:new Uint8Array(await blob.arrayBuffer()),blob});
+  }
+  if(!files.length)return;
+  if(files.length===1)download(files[0].blob,`${base} ${files[0].name}`);
+  else download(makeZip(files),`${base} rhythms.zip`);
+});
 
 /* ================= Wiring ================= */
 document.getElementById('playBtn').addEventListener('click',()=>{if(F.tapping){stopTapping();return;}if(ui.playing){pause();endListen();}else play();});
