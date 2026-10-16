@@ -310,7 +310,7 @@ input[type=range]{width:100%;accent-color:var(--bucket)}
       </div>
       <div class="stillbox">
         <div class="lab">Save the rhythms as images</div>
-        <div class="help">One transparent PNG of the notation for every rhythm, all at the same staff size, with their repeat signs or double bars. Handy for slides and worksheets. They download together as a ZIP.</div>
+        <div class="help">One transparent 1920 x 1080 PNG for every rhythm, centered and at the same staff size, ready to drop onto a slide. They download together as a ZIP.</div>
         <button class="btn" id="rhythmPngBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/><path d="M9 4v16"/></svg>Save rhythm PNGs</button>
       </div>
       <div class="prog" id="prog"><div></div></div>
@@ -3834,17 +3834,18 @@ document.getElementById('stillBtn').addEventListener('click',()=>{
 stillHelp();
 
 /* ================= Rhythm images ================= */
-// Each rhythm engraved large (same staff size for all) on a transparent background, cropped to the ink.
+// Each rhythm on a transparent 16:9 card, staff centred both ways, at one consistent staff size
+// (matching Charlie's slide layout: one measure spans about 73% of the width). Longer phrases shrink only as
+// much as they need to fit.
+const RIMG={w:1920,h:1080,sp:46.5,maxW:0.9};
 function rhythmImage(ms,reps){
-  const sp=60,rows=phraseRows(ms),fin=reps>1?'repeat':'double',rowH=8.5*sp;
-  const wide=Math.max(...rows.map(r=>rowLayout(r,sp).end));
-  const cv=document.createElement('canvas');cv.width=Math.ceil(wide+2*sp);cv.height=Math.ceil(rows.length*rowH+3*sp);const c=cv.getContext('2d');
-  rows.forEach((r,i)=>engraveRow(c,r,sp*0.5,3*sp+i*rowH,sp,'#000',i<rows.length-1?'single':fin));
-  const px=c.getImageData(0,0,cv.width,cv.height).data;let x0=cv.width,y0=cv.height,x1=0,y1=0;
-  for(let y=0;y<cv.height;y++)for(let x=0;x<cv.width;x++)if(px[(y*cv.width+x)*4+3]>8){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
-  const pad=Math.round(sp*0.4),out=document.createElement('canvas');out.width=x1-x0+1+2*pad;out.height=y1-y0+1+2*pad;
-  out.getContext('2d').drawImage(cv,x0,y0,x1-x0+1,y1-y0+1,pad,pad,x1-x0+1,y1-y0+1);
-  return out;
+  const rows=phraseRows(ms),fin=reps>1?'repeat':'double';
+  const wide=Math.max(...rows.map(r=>rowLayout(r,1).end));
+  const sp=Math.min(RIMG.sp,RIMG.w*RIMG.maxW/wide,RIMG.h*0.8/(rows.length*8.5));
+  const gap=8.5*sp,blockH=(rows.length-1)*gap+4*sp,top=RIMG.h/2-blockH/2,x0=(RIMG.w-wide*sp)/2;
+  const cv=document.createElement('canvas');cv.width=RIMG.w;cv.height=RIMG.h;const c=cv.getContext('2d');
+  rows.forEach((r,i)=>engraveRow(c,r,x0,top+i*gap,sp,'#000',i<rows.length-1?'single':fin));
+  return cv;
 }
 // minimal ZIP writer (files stored as-is; PNGs are already compressed)
 const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
