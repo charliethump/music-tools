@@ -3871,10 +3871,12 @@ function makeZip(files){
 }
 document.getElementById('rhythmPngBtn').addEventListener('click',async()=>{
   const base=(song.name||'bucket-warmup').replace(/\.[^.]+$/,''),multi=S.parts.length>1,files=[];
-  for(const o of TL.rh){
+  // numbered straight through the whole video so the files sort in playing order
+  const order=TL.rh.slice().sort((a,b)=>a.start-b.start),digits=String(order.length).length;
+  for(const [k,o] of order.entries()){
     const cv=rhythmImage(o.ms,o.reps);
     const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
-    const name=`${multi?`Part ${o.pi+1} `:''}Rhythm ${o.num} (x${o.reps}).png`;
+    const name=`Rhythm ${String(k+1).padStart(digits,'0')} - Part ${o.pi+1} (x${o.reps}).png`;
     files.push({name,data:new Uint8Array(await blob.arrayBuffer()),blob});
   }
   if(!files.length)return;
