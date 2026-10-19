@@ -1137,7 +1137,7 @@ function wireScoring(fromQuestion) {
     playSfx("incorrect");
     persistGame();
     if (game.dd && fromQuestion) { game.screen = "answer"; render(); showMark(false); return; }
-    if (fromQuestion && bridge.on) clearAndUnlock();
+    if (fromQuestion && bridge.on) { bridge.holdUntil = 0; sendBridge("unlock"); }
     renderScores(); renderToolbar();
     b.closest(".tgroup").classList.add("tried");
     showMark(false);
@@ -1305,11 +1305,6 @@ function renderEnd(stage) {
 /* ===================== Buzzin Bridge (optional extension) ===================== */
 const bridge = { on: false, locked: null, holdUntil: 0 };
 // Clearing in buzzin can unlock the buzzers, so clear first, then keep them locked for a moment
-function clearAndUnlock() {
-  bridge.holdUntil = 0;
-  sendBridge("clear");
-  setTimeout(() => sendBridge("unlock"), 150);
-}
 function lockAndClear() {
   bridge.holdUntil = Date.now() + 2000;
   sendBridge("clear");
