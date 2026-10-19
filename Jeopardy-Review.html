@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jeopardy Review</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='10' fill='%230a1f9e' stroke='%23000a5c' stroke-width='4'/%3E%3Ctext x='32' y='49' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23000' %3E$%3C/text%3E%3Ctext x='30' y='47' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23ffcc33'%3E$%3C/text%3E%3C/svg%3E">
 <style>
 :root{
   --navy:#04104a;
@@ -977,8 +978,6 @@ function setCue(open) {
     cue.textContent = open ? "Buzzers open - buzz in!" : "Buzzers locked - listen to the whole question";
   }
   if (card) card.classList.toggle("ring", open);
-  const tb = $("cueBtn");
-  if (tb) tb.textContent = open ? "Lock buzz cue" : "Open buzz cue (Space)";
 }
 // Option 2: first click into the buzzin panel while a question is up turns the cue on
 window.addEventListener("blur", () => {
@@ -1073,15 +1072,12 @@ function renderQuestion(stage) {
       </div>
       <div class="controls">
         ${teamButtons(dd ? dd.team : null)}
-        ${dd ? "" : `<button class="ctl" id="cueBtn">${game.cue ? "Lock buzz cue" : "Open buzz cue (Space)"}</button>`}
         <button class="ctl gold" id="toAnswer">Show answer</button>
         <button class="ctl" id="toBoard">Back to board</button>
       </div>
     </div>`;
   wireMedia(t);
   wireScoring(true);
-  const cb = $("cueBtn");
-  if (cb) cb.onclick = () => setCue(!game.cue);
   $("toAnswer").onclick = showAnswer;
   $("toBoard").onclick = backToBoard;
 }
