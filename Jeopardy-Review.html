@@ -190,6 +190,9 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .panel-head{display:flex;gap:4px;align-items:center;padding:6px;background:#020a33;color:#cdd6ff;font-size:13px}
 .panel-head .spacer{flex:1}
 .panel iframe{flex:1;width:100%;border:0;background:#fff}
+.bridge-off{opacity:.55;margin-left:6px}
+.bridge-on{margin-left:6px;color:#4ade80;font-weight:700}
+.space-hint{font-size:13px;opacity:.8}
 .show-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:12px 6px;border-radius:8px 0 0 8px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;z-index:20}
 </style>
 </head>
@@ -265,6 +268,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
   <aside class="panel">
     <div class="panel-head">
       <span>buzzin.live</span>
+      <span id="bridgeStat" class="bridge-off" title="Buzzin Bridge extension">Bridge: off</span>
       <span class="spacer"></span>
       <button class="tb" data-pw="300">Narrow</button>
       <button class="tb" data-pw="420">Wide</button>
@@ -786,7 +790,7 @@ function enterPlay() {
   show("play");
   $("pTitle").textContent = game.board.title;
   const fr = $("buzzFrame");
-  if (!fr.src) fr.src = "https://buzzin.live/";
+  if (!fr.src) { fr.src = "https://buzzin.live/"; fr.addEventListener("load", helloBridge); }
   render();
 }
 
@@ -817,7 +821,7 @@ $("pRevealAll").onclick = () => { snapshot(); game.revealed = game.revealed.map(
 $("pFinal").onclick = () => { stopAllSound(); game.screen = "finalWager"; playSfx("finalJeopardy"); render(); };
 $("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
 document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
-$("pReload").onclick = () => { if (confirm("Reload buzzin.live? You may need to rejoin or recreate your game.")) $("buzzFrame").src = "https://buzzin.live/"; };
+$("pReload").onclick = () => { if (confirm("Reload buzzin.live? You may need to rejoin or recreate your game.")) { bridge.on = false; bridge.locked = null; setBridgeStat(); $("buzzFrame").src = "https://buzzin.live/"; } };
 $("pHide").onclick = () => { $("play").classList.add("panel-hidden"); $("pShow").classList.remove("hidden"); };
 $("pShow").onclick = () => { $("play").classList.remove("panel-hidden"); $("pShow").classList.add("hidden"); };
 
@@ -948,6 +952,7 @@ function openTile(c, r) {
   game.tried = [];
   game.dd = null;
   persistGame();
+  if (bridge.on) { sendBridge("lock"); sendBridge("clear"); }
   if (t.dd) {
     game.dd = { team: game.active, wager: "" };
     game.screen = "ddWager";
@@ -982,6 +987,7 @@ function setCue(open) {
 // Option 2: first click into the buzzin panel while a question is up turns the cue on
 window.addEventListener("blur", () => {
   setTimeout(() => {
+    if (bridge.on) return;
     if (document.activeElement === $("buzzFrame") && game && game.screen === "question" && !game.dd && !game.cue) setCue(true);
   }, 0);
 });
@@ -991,7 +997,8 @@ document.addEventListener("keydown", e => {
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
   if (e.code === "Space" && game.screen === "question" && !game.dd) {
     e.preventDefault();
-    setCue(!game.cue);
+    if (bridge.on) sendBridge(bridge.locked === false ? "lock" : "unlock");
+    else setCue(!game.cue);
   }
 });
 
@@ -1072,6 +1079,7 @@ function renderQuestion(stage) {
       </div>
       <div class="controls">
         ${teamButtons(dd ? dd.team : null)}
+        ${!dd && bridge.on ? `<span class="space-hint">Space: unlock / lock buzzers</span>` : ""}
         <button class="ctl gold" id="toAnswer">Show answer</button>
         <button class="ctl" id="toBoard">Back to board</button>
       </div>
@@ -1085,6 +1093,9 @@ function renderQuestion(stage) {
 function wireScoring(fromQuestion) {
   document.querySelectorAll("[data-ok]").forEach(b => b.onclick = () => {
     const i = +b.dataset.ok;
+    setCue(false);
+    game.cue = false;
+    if (bridge.on) sendBridge("lock");
     snapshot();
     applyDelta(i, pointsNow());
     game.active = i;
@@ -1096,6 +1107,7 @@ function wireScoring(fromQuestion) {
   });
   document.querySelectorAll("[data-no]").forEach(b => b.onclick = () => {
     const i = +b.dataset.no;
+    setCue(false);
     snapshot();
     applyDelta(i, -pointsNow());
     if (!game.tried.includes(i)) game.tried.push(i);
@@ -1265,6 +1277,37 @@ function renderEnd(stage) {
     show("home");
   };
 }
+
+/* ===================== Buzzin Bridge (optional extension) ===================== */
+const bridge = { on: false, locked: null };
+function sendBridge(cmd) {
+  const w = $("buzzFrame").contentWindow;
+  if (w) w.postMessage({ source: "jeopardy-board", cmd }, "https://buzzin.live");
+}
+function helloBridge() {
+  let n = 0;
+  const t = setInterval(() => { if (bridge.on || ++n > 10) return clearInterval(t); sendBridge("hello"); }, 500);
+  sendBridge("hello");
+}
+function setBridgeStat() {
+  const s = $("bridgeStat");
+  s.textContent = bridge.on ? "Bridge: connected" : "Bridge: off";
+  s.className = bridge.on ? "bridge-on" : "bridge-off";
+}
+window.addEventListener("message", e => {
+  if (e.origin !== "https://buzzin.live" || e.source !== $("buzzFrame").contentWindow) return;
+  const d = e.data;
+  if (!d || d.source !== "buzzin-bridge") return;
+  if (!bridge.on) {
+    bridge.on = true;
+    setBridgeStat();
+    if (game && game.screen === "question") render();
+  }
+  if (d.type === "state") {
+    bridge.locked = !!d.locked;
+    if (game && game.screen === "question" && !game.dd) setCue(!bridge.locked);
+  }
+});
 
 /* ===================== Start ===================== */
 (async () => {
