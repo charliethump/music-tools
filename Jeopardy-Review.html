@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jeopardy Review</title>
+<style>
+:root{
+  --navy:#04104a;
+  --board:#0a1f9e;
+  --board-edge:#000a5c;
+  --gold:#ffcc33;
+  --ink:#ffffff;
+  --open:#16a34a;
+  --wrong:#dc2626;
+  --right:#16a34a;
+  --active:#ef2b2b;
+  --paper:#f3f5fa;
+  --line:#cdd4e4;
+  --text:#18213a;
+  --muted:#5b6682;
+  --value-font: Impact, Haettenschweiler, "Arial Narrow Bold", "Franklin Gothic Bold", sans-serif;
+  --ui-font: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --panel-w: 360px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--ui-font);background:var(--navy);color:var(--ink)}
+button{font:inherit;cursor:pointer}
+input,textarea,select{font:inherit}
+.hidden{display:none !important}
+
+/* ---------- Home ---------- */
+#home{min-height:100%;display:grid;place-items:center;padding:24px}
+.home-card{width:min(560px,100%);text-align:center}
+.home-card h1{font-family:var(--value-font);font-weight:400;font-size:clamp(48px,9vw,88px);letter-spacing:1px;color:var(--gold);margin:0 0 4px;text-shadow:4px 4px 0 #000}
+.home-card p{margin:0 0 28px;opacity:.85}
+.home-btns{display:grid;gap:12px}
+.big-btn{padding:16px 20px;border-radius:10px;border:2px solid #2b3f9e;background:var(--board);color:#fff;font-size:20px;font-weight:600}
+.big-btn:hover{background:#1530c4}
+.big-btn.gold{background:var(--gold);color:#1a1a1a;border-color:#c99a00}
+.home-note{margin-top:22px;font-size:14px;opacity:.7}
+
+/* ---------- Builder ---------- */
+#builder{min-height:100%;background:var(--paper);color:var(--text)}
+.b-top{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}
+.b-top h2{margin:0 12px 0 0;font-size:18px}
+.b-top .spacer{flex:1}
+.btn{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--text)}
+.btn:hover{background:#eef1f8}
+.btn.primary{background:var(--board);color:#fff;border-color:var(--board)}
+.btn.primary:hover{background:#1530c4}
+.btn.danger{color:var(--wrong)}
+.btn.small{padding:4px 10px;font-size:14px}
+.tabs{display:flex;gap:4px;padding:12px 16px 0}
+.tab{padding:8px 16px;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:#e6eaf3;color:var(--text)}
+.tab.on{background:#fff;font-weight:600}
+.b-body{background:#fff;margin:0 16px 24px;border:1px solid var(--line);border-radius:0 8px 8px 8px;padding:16px}
+.b-settings{display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin-bottom:16px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--muted)}
+.field input[type=text],.field input[type=number],.field select,.field textarea{padding:8px 10px;border:1px solid var(--line);border-radius:6px;color:var(--text);background:#fff}
+.field textarea{min-height:90px;resize:vertical}
+.values-row{display:flex;gap:6px}
+.values-row input{width:84px}
+.b-grid{display:grid;gap:6px}
+.b-grid input.cat{width:100%;padding:10px;border-radius:6px;border:1px solid var(--line);font-weight:700;text-align:center;background:#eef1ff;color:var(--text)}
+.b-tile{min-height:78px;border-radius:6px;border:1px solid #1a2a8a;background:var(--board);color:#fff;text-align:left;padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+.b-tile:hover{background:#1530c4}
+.b-tile .v{font-family:var(--value-font);color:var(--gold);font-size:20px}
+.b-tile .s{font-size:13px;opacity:.9;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.b-tile.empty{background:#e9ecf5;color:var(--muted);border-color:var(--line)}
+.b-tile.empty .v{color:#8a93ad}
+.b-tile .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:auto}
+.tag{font-size:11px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.18)}
+.b-tile.empty .tag{background:#d5dbea}
+.tag.dd{background:var(--gold);color:#222}
+.hint{font-size:13px;color:var(--muted);margin:10px 0 0}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:800px){.two-col{grid-template-columns:1fr}}
+.media{border:1px dashed var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;color:var(--text)}
+.media .lbl{font-size:14px;color:var(--muted)}
+.media img{max-width:100%;max-height:160px;object-fit:contain;align-self:flex-start;background:#eef1f8;border-radius:4px}
+.media .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sound-list{display:grid;gap:10px;max-width:760px}
+.sound-row{display:grid;grid-template-columns:180px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:8px}
+.sound-row .st{font-size:13px;color:var(--muted)}
+
+dialog{border:none;border-radius:12px;padding:0;width:min(980px,96vw);max-height:94vh;color:var(--text)}
+dialog::backdrop{background:rgba(4,16,74,.6)}
+.d-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:2}
+.d-head h3{margin:0;font-size:18px;flex:1}
+.d-body{padding:16px;display:grid;gap:14px}
+.check{display:flex;gap:8px;align-items:center;font-size:15px;color:var(--text)}
+.vid-preview{aspect-ratio:16/9;width:100%;max-width:480px;border:0;border-radius:6px;background:#000}
+.time-row{display:flex;gap:8px}
+.time-row input{width:110px}
+
+/* ---------- Play ---------- */
+#play{height:100vh;display:grid;grid-template-columns:1fr var(--panel-w)}
+#play.panel-hidden{grid-template-columns:1fr 0}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 10px;background:#020a33}
+.tb{padding:4px 10px;border-radius:6px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;font-size:13px}
+.tb:hover{background:#13227f}
+.tb.on{background:#24409a;color:#fff}
+.toolbar .spacer{flex:1}
+.toolbar .ttl{color:#9fb0f5;font-size:13px;margin-right:6px}
+.scores{display:flex;justify-content:center;gap:clamp(8px,2vw,24px);padding:10px}
+.team{min-width:clamp(120px,16vw,220px);background:#000;border:4px solid #fff;color:#fff;text-align:center;padding:6px 10px;border-radius:2px}
+.team.active{border-color:var(--active)}
+.team .nm{display:block;width:100%;background:none;border:none;color:#fff;font-weight:700;font-size:clamp(14px,1.6vw,22px)}
+.team .sc{display:block;width:100%;background:none;border:none;color:#fff;font-weight:700;font-size:clamp(18px,2.2vw,32px)}
+.team .sc.neg{color:#ff8a8a}
+.stage{flex:1;min-height:0;position:relative;container-type:size;padding:0 10px 10px;display:flex;flex-direction:column}
+
+/* board */
+.board{flex:1;min-height:0;display:grid;gap:6px;background:#000;border:6px solid #000}
+.cat-h,.tile{background:var(--board);display:grid;place-items:center;text-align:center;border:none;color:#fff;padding:4px}
+.cat-h{font-weight:800;font-size:clamp(12px,2.4cqw,28px);line-height:1.1;text-transform:none}
+.cat-h.hid{color:transparent;background:#071680;cursor:pointer}
+.cat-h.hid::after{content:"?";color:#4057c9;font-family:var(--value-font);font-size:clamp(18px,3.5cqw,44px)}
+.tile{font-family:var(--value-font);color:var(--gold);font-size:clamp(20px,4.6cqw,64px);text-shadow:3px 3px 0 #000}
+.tile:hover{background:#1530c4}
+.tile.used{color:transparent;text-shadow:none;background:#06127a}
+.tile.used:hover{background:#0a1a8e}
+
+/* question & answer */
+.card{flex:1;min-height:0;background:var(--board);border:6px solid #000;display:flex;flex-direction:column;position:relative}
+.card.ring{box-shadow:inset 0 0 0 14px var(--open)}
+.card-label{padding:10px 18px;font-weight:700;font-size:clamp(14px,2cqw,24px)}
+.cue{margin:0 18px;padding:10px 14px;border-radius:8px;text-align:center;font-weight:800;font-size:clamp(16px,2.6cqw,34px);background:#2c3354;color:#c9cfe6;border:3px solid #444c70}
+.cue.open{background:var(--open);color:#fff;border-color:#0d6b30;font-size:clamp(22px,4cqw,52px)}
+.cue.dd{background:var(--gold);color:#1a1a1a;border-color:#a88300}
+.card-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12px 24px;text-align:center}
+.q-text{font-size:clamp(20px,var(--qs,4.6cqw),64px);line-height:1.2;font-weight:600;max-width:95%}
+.a-text{font-size:clamp(28px,6cqw,80px);font-weight:700;color:#fff}
+.q-img{max-width:90%;max-height:46cqh;object-fit:contain}
+.q-vid{width:min(80cqw,calc(46cqh * 16 / 9));aspect-ratio:16/9;border:0;background:#000}
+.media-ctrls{display:flex;gap:10px;justify-content:center}
+.play-btn{padding:10px 22px;border-radius:999px;border:3px solid #fff;background:#0d1a7a;color:#fff;font-weight:700;font-size:clamp(14px,2cqw,22px)}
+.play-btn:hover{background:#1530c4}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;padding:10px 12px;background:rgba(0,0,0,.35)}
+.tgroup{display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:8px;background:#000;border:2px solid #333}
+.tgroup.tried{opacity:.45}
+.tgroup .tn{padding:0 6px;font-weight:700}
+.ok,.no{width:44px;height:40px;border-radius:6px;border:none;color:#fff;font-size:22px;font-weight:800}
+.ok{background:var(--right)}
+.no{background:var(--wrong)}
+.ctl{padding:8px 14px;border-radius:8px;border:2px solid #fff;background:transparent;color:#fff;font-weight:600}
+.ctl:hover{background:rgba(255,255,255,.12)}
+.ctl.gold{background:var(--gold);color:#111;border-color:var(--gold)}
+
+/* splash screens */
+.splash{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(circle at 50% 40%,#2140d0,#04104a 70%);border:6px solid #000;text-align:center;padding:20px}
+.splash h1{margin:0;font-family:var(--value-font);font-weight:400;font-size:clamp(48px,11cqw,150px);color:#fff;text-shadow:5px 5px 0 #000;letter-spacing:2px;line-height:1}
+.splash h2{margin:0;font-size:clamp(20px,3.4cqw,44px)}
+.wager-row{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;align-items:end}
+.wager{display:flex;flex-direction:column;gap:6px;align-items:center;background:#000;border:3px solid #fff;padding:10px 14px}
+.wager.sel{border-color:var(--active)}
+.wager input{width:130px;padding:8px;font-size:22px;text-align:center;border-radius:6px;border:none}
+.wager .wn{font-weight:700}
+.wager .ws{opacity:.8;font-size:14px}
+.wager .rs{display:flex;gap:4px}
+.pick{padding:6px 12px;border-radius:6px;border:2px solid #fff;background:transparent;color:#fff;font-weight:700}
+.pick.on{background:var(--active);border-color:var(--active)}
+.standings{display:flex;flex-direction:column;gap:10px;min-width:min(520px,90%)}
+.stand{display:flex;justify-content:space-between;gap:20px;background:#000;border:3px solid #fff;padding:10px 18px;font-size:clamp(18px,3cqw,36px);font-weight:700}
+.stand.win{border-color:var(--gold);color:var(--gold)}
+
+/* overlay mark */
+.mark{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:5}
+.mark svg{width:min(40cqw,40cqh);height:auto;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5))}
+
+/* setup */
+.setup{flex:1;display:grid;place-items:center;overflow:auto}
+.setup-card{background:#0a1660;border:2px solid #2b3f9e;border-radius:12px;padding:22px;width:min(560px,96%);display:grid;gap:14px}
+.setup-card h2{margin:0}
+.setup-card .note{font-size:14px;opacity:.85;margin:0}
+.setup-card label{display:flex;flex-direction:column;gap:4px;font-size:14px}
+.setup-card input[type=text],.setup-card select{padding:8px 10px;border-radius:6px;border:none}
+.setup-card .chk{flex-direction:row;align-items:center;gap:8px;font-size:15px}
+.team-inputs{display:grid;gap:8px}
+
+/* buzzin panel */
+.panel{display:flex;flex-direction:column;min-width:0;background:#fff;border-left:3px solid #000;overflow:hidden}
+#play.panel-hidden .panel{border:none}
+.panel-head{display:flex;gap:4px;align-items:center;padding:6px;background:#020a33;color:#cdd6ff;font-size:13px}
+.panel-head .spacer{flex:1}
+.panel iframe{flex:1;width:100%;border:0;background:#fff}
+.show-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:12px 6px;border-radius:8px 0 0 8px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;z-index:20}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<section id="home">
+  <div class="home-card">
+    <h1>JEOPARDY!</h1>
+    <p>Music class review game</p>
+    <div class="home-btns">
+      <button class="big-btn gold hidden" id="hResume"></button>
+      <button class="big-btn" id="hBuild">Build or edit a board</button>
+      <button class="big-btn" id="hPlayFile">Play a board file</button>
+      <button class="big-btn" id="hPlayDraft">Play the board I'm building</button>
+    </div>
+    <p class="home-note">Board files save to your computer. Your current draft and any game in progress are kept in this browser automatically.</p>
+  </div>
+</section>
+
+<!-- BUILDER -->
+<section id="builder" class="hidden">
+  <div class="b-top">
+    <h2>Board builder</h2>
+    <button class="btn" id="bHome">Home</button>
+    <button class="btn" id="bNew">New board</button>
+    <button class="btn" id="bLoad">Open board file</button>
+    <button class="btn" id="bSave">Save board file</button>
+    <span class="spacer"></span>
+    <span id="bSaved" class="hint" style="margin:0"></span>
+    <button class="btn primary" id="bPlay">Play this board</button>
+  </div>
+  <div class="tabs">
+    <button class="tab on" data-tab="board">Board</button>
+    <button class="tab" data-tab="final">Final Jeopardy</button>
+    <button class="tab" data-tab="sounds">Sounds</button>
+  </div>
+  <div class="b-body" id="bBody"></div>
+</section>
+
+<dialog id="tileDlg">
+  <div class="d-head">
+    <h3 id="tdTitle">Edit question</h3>
+    <button class="btn small" id="tdPrev">Previous</button>
+    <button class="btn small" id="tdNext">Next</button>
+    <button class="btn primary small" id="tdDone">Done</button>
+  </div>
+  <div class="d-body" id="tdBody"></div>
+</dialog>
+
+<!-- PLAY -->
+<section id="play" class="hidden">
+  <div class="main">
+    <div class="toolbar">
+      <span class="ttl" id="pTitle"></span>
+      <button class="tb" id="pHome">Home</button>
+      <button class="tb" id="pUndo">Undo</button>
+      <button class="tb" id="pStop">Stop sound</button>
+      <button class="tb" id="pFloor">Stop at $0: off</button>
+      <button class="tb" id="pMute">Sounds: on</button>
+      <button class="tb hidden" id="pRevealAll">Reveal all categories</button>
+      <span class="spacer"></span>
+      <button class="tb hidden" id="pFinal">Final Jeopardy</button>
+      <button class="tb hidden" id="pEnd">Final standings</button>
+    </div>
+    <div class="scores" id="pScores"></div>
+    <div class="stage" id="stage"></div>
+  </div>
+  <aside class="panel">
+    <div class="panel-head">
+      <span>buzzin.live</span>
+      <span class="spacer"></span>
+      <button class="tb" data-pw="300">Narrow</button>
+      <button class="tb" data-pw="420">Wide</button>
+      <button class="tb" id="pReload">Reload</button>
+      <button class="tb" id="pHide">Hide</button>
+    </div>
+    <iframe id="buzzFrame" title="buzzin.live" allow="autoplay; clipboard-write"></iframe>
+  </aside>
+  <button class="show-panel hidden" id="pShow">Show buzzin</button>
+</section>
+
+<input type="file" id="filePick" class="hidden">
+
+<script>
+"use strict";
+
+/* ===================== Storage (IndexedDB) ===================== */
+const DB = (() => {
+  let p;
+  function open() {
+    if (!p) p = new Promise((res, rej) => {
+      const r = indexedDB.open("jeopardyTool", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    return p;
+  }
+  function run(mode, fn) {
+    return open().then(db => new Promise((res, rej) => {
+      const tx = db.transaction("kv", mode);
+      const req = fn(tx.objectStore("kv"));
+      tx.oncomplete = () => res(req && req.result);
+      tx.onerror = () => rej(tx.error);
+    }));
+  }
+  return {
+    get: k => run("readonly", s => s.get(k)).catch(() => undefined),
+    set: (k, v) => run("readwrite", s => s.put(v, k)).catch(e => console.warn("Save failed", e)),
+    del: k => run("readwrite", s => s.delete(k)).catch(() => {})
+  };
+})();
+
+/* ===================== Helpers ===================== */
+const $ = id => document.getElementById(id);
+const clone = o => JSON.parse(JSON.stringify(o));
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function money(n) { return (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(); }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+function pickFile(accept) {
+  return new Promise(res => {
+    const inp = $("filePick");
+    inp.value = "";
+    inp.accept = accept;
+    inp.onchange = () => res(inp.files[0] || null);
+    inp.click();
+  });
+}
+function fileToDataURL(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(file);
+  });
+}
+async function imageToDataURL(file) {
+  if (/gif|svg/.test(file.type)) return fileToDataURL(file);
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const max = 1400;
+    const s = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * s);
+    c.height = Math.round(img.height * s);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL("image/webp", 0.85);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function audioToDataURL(file) {
+  if (file.size > 8 * 1024 * 1024 && !confirm("This audio file is over 8 MB, which will make the board file large. Use it anyway?")) return null;
+  return fileToDataURL(file);
+}
+function parseTime(t) {
+  t = String(t || "").trim();
+  if (!t) return null;
+  const parts = t.split(":").map(Number);
+  if (parts.some(isNaN)) return null;
+  return parts.reduce((a, b) => a * 60 + b, 0);
+}
+function videoSrc(url, start, end, autoplay) {
+  url = String(url || "").trim();
+  if (!url) return null;
+  let m = url.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([\w-]{11})/);
+  if (m) {
+    const q = new URLSearchParams({ rel: "0", modestbranding: "1", playsinline: "1" });
+    const s = parseTime(start), e = parseTime(end);
+    if (s) q.set("start", s);
+    if (e) q.set("end", e);
+    if (autoplay) q.set("autoplay", "1");
+    return "https://www.youtube.com/embed/" + m[1] + "?" + q;
+  }
+  m = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([\w-]+)/);
+  if (m) return "https://drive.google.com/file/d/" + m[1] + "/preview";
+  return null;
+}
+
+/* ===================== Board model ===================== */
+const MAX_CATS = 6, MAX_ROWS = 5;
+const SOUND_SLOTS = [
+  ["categoryReveal", "Category reveal", "Plays each time you reveal a category at the start"],
+  ["dailyDouble", "Daily Double", "Plays when a Daily Double tile opens"],
+  ["finalJeopardy", "Final Jeopardy", "Plays when Final Jeopardy starts"],
+  ["finalThink", "Final Jeopardy question", "Plays when the Final Jeopardy question appears"],
+  ["buzzersOpen", "Buzzers open", "Plays when the buzz cue turns on"],
+  ["correct", "Correct answer", "Plays when you mark a team right"],
+  ["incorrect", "Wrong answer", "Plays when you mark a team wrong"],
+  ["gameOver", "Final standings", "Plays on the final standings screen"]
+];
+function blankTile() { return { q: "", qImg: "", qAudio: "", video: "", vStart: "", vEnd: "", a: "", aImg: "", dd: false }; }
+function newBoard() {
+  return {
+    version: 1,
+    title: "Untitled review",
+    numCats: 6,
+    numRows: 5,
+    values: [100, 200, 300, 400, 500],
+    categories: Array.from({ length: MAX_CATS }, () => ({ name: "", tiles: Array.from({ length: MAX_ROWS }, blankTile) })),
+    final: { enabled: true, category: "", question: "", answer: "", image: "" },
+    sounds: {}
+  };
+}
+function normalizeBoard(b) {
+  const n = newBoard();
+  b = Object.assign(n, b || {});
+  b.numCats = Math.min(MAX_CATS, Math.max(1, +b.numCats || 6));
+  b.numRows = Math.min(MAX_ROWS, Math.max(1, +b.numRows || 5));
+  b.values = Array.from({ length: MAX_ROWS }, (_, i) => +((b.values || [])[i]) || (i + 1) * 100);
+  b.categories = Array.from({ length: MAX_CATS }, (_, c) => {
+    const cat = (b.categories || [])[c] || {};
+    return {
+      name: cat.name || "",
+      tiles: Array.from({ length: MAX_ROWS }, (_, r) => Object.assign(blankTile(), (cat.tiles || [])[r] || {}))
+    };
+  });
+  b.final = Object.assign({ enabled: true, category: "", question: "", answer: "", image: "" }, b.final || {});
+  b.sounds = b.sounds || {};
+  return b;
+}
+function tileFilled(t) { return !!(t.q || t.qImg || t.qAudio || t.video || t.a); }
+
+/* ===================== Sounds ===================== */
+let defaultSounds = {};
+let sfxPlaying = [];
+let muted = false;
+function soundFor(key, board) { return (board && board.sounds[key]) || defaultSounds[key] || ""; }
+function playSfx(key) {
+  if (muted || !game) return;
+  const src = soundFor(key, game.board);
+  if (!src) return;
+  const a = new Audio(src);
+  a.play().catch(() => {});
+  sfxPlaying.push(a);
+  a.onended = () => { sfxPlaying = sfxPlaying.filter(x => x !== a); };
+}
+function stopAllSound() {
+  sfxPlaying.forEach(a => { a.pause(); });
+  sfxPlaying = [];
+  if (qAudioEl) { qAudioEl.pause(); qAudioEl.currentTime = 0; }
+  const v = document.querySelector(".q-vid");
+  if (v) v.src = v.src.replace("&autoplay=1", "");
+  updateAudioBtn();
+}
+
+/* ===================== Views ===================== */
+function show(view) {
+  ["home", "builder", "play"].forEach(v => $(v).classList.toggle("hidden", v !== view));
+  if (view === "home") renderHome();
+}
+
+/* ===================== Home ===================== */
+async function renderHome() {
+  const st = await DB.get("gameState");
+  const btn = $("hResume");
+  if (st && st.screen !== "setup") {
+    btn.textContent = "Resume game: " + (st.title || "Untitled") + " (" + st.teams.map(t => t.name + " " + money(t.score)).join(", ") + ")";
+    btn.classList.remove("hidden");
+  } else btn.classList.add("hidden");
+}
+$("hBuild").onclick = () => openBuilder();
+$("hPlayFile").onclick = async () => {
+  const f = await pickFile(".json,application/json");
+  if (!f) return;
+  try { startSetup(normalizeBoard(JSON.parse(await f.text()))); }
+  catch (e) { alert("That file couldn't be opened as a board file."); }
+};
+$("hPlayDraft").onclick = async () => {
+  const d = await DB.get("draft");
+  if (!d) { alert("There's no board draft yet. Build one first."); return; }
+  startSetup(normalizeBoard(d));
+};
+$("hResume").onclick = resumeGame;
+
+/* ===================== Builder ===================== */
+let board = null;
+let bTab = "board";
+const saveDraft = debounce(async () => {
+  await DB.set("draft", board);
+  $("bSaved").textContent = "Draft saved in this browser";
+}, 600);
+function changed() { $("bSaved").textContent = "Saving draft..."; saveDraft(); }
+
+async function openBuilder() {
+  const d = await DB.get("draft");
+  board = d ? normalizeBoard(d) : newBoard();
+  if (!d) board.sounds = clone(defaultSounds);
+  bTab = "board";
+  show("builder");
+  renderBuilder();
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => { bTab = t.dataset.tab; renderBuilder(); });
+$("bHome").onclick = () => show("home");
+$("bNew").onclick = () => {
+  if (!confirm("Start a new blank board? Save your current board to a file first if you want to keep it.")) return;
+  board = newBoard();
+  board.sounds = clone(defaultSounds);
+  changed();
+  renderBuilder();
+};
+$("bLoad").onclick = async () => {
+  const f = await pickFile(".json,application/json");
+  if (!f) return;
+  try {
+    board = normalizeBoard(JSON.parse(await f.text()));
+    changed();
+    renderBuilder();
+  } catch (e) { alert("That file couldn't be opened as a board file."); }
+};
+$("bSave").onclick = () => {
+  const blob = new Blob([JSON.stringify(board)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (board.title || "board").replace(/[\\/:*?"<>|]+/g, "").trim() + ".jeopardy.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+$("bPlay").onclick = () => startSetup(normalizeBoard(clone(board)));
+
+function renderBuilder() {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.tab === bTab));
+  const body = $("bBody");
+  if (bTab === "board") renderBoardTab(body);
+  else if (bTab === "final") renderFinalTab(body);
+  else renderSoundsTab(body);
+}
+
+function renderBoardTab(body) {
+  const b = board;
+  const opt = (n, sel) => Array.from({ length: n }, (_, i) => `<option ${i + 1 === sel ? "selected" : ""}>${i + 1}</option>`).join("");
+  let html = `
+    <div class="b-settings">
+      <label class="field" style="flex:1;min-width:240px">Board title
+        <input type="text" id="bTitle" value="${esc(b.title)}"></label>
+      <label class="field">Categories
+        <select id="bCats">${opt(MAX_CATS, b.numCats)}</select></label>
+      <label class="field">Rows
+        <select id="bRows">${opt(MAX_ROWS, b.numRows)}</select></label>
+      <div class="field">Row values
+        <div class="values-row">${b.values.slice(0, b.numRows).map((v, i) => `<input type="number" step="100" data-val="${i}" value="${v}">`).join("")}</div></div>
+    </div>
+    <div class="b-grid" style="grid-template-columns:repeat(${b.numCats},1fr)">`;
+  for (let c = 0; c < b.numCats; c++) html += `<input class="cat" data-cat="${c}" placeholder="Category ${c + 1}" value="${esc(b.categories[c].name)}">`;
+  for (let r = 0; r < b.numRows; r++) {
+    for (let c = 0; c < b.numCats; c++) {
+      const t = b.categories[c].tiles[r];
+      const filled = tileFilled(t);
+      const tags = [];
+      if (t.dd) tags.push(`<span class="tag dd">Daily Double</span>`);
+      if (t.qImg) tags.push(`<span class="tag">Picture</span>`);
+      if (t.qAudio) tags.push(`<span class="tag">Audio</span>`);
+      if (t.video) tags.push(`<span class="tag">Video</span>`);
+      if (filled && !t.a) tags.push(`<span class="tag">No answer yet</span>`);
+      html += `<button class="b-tile ${filled ? "" : "empty"}" data-tile="${c},${r}">
+        <span class="v">${money(b.values[r])}</span>
+        <span class="s">${esc(t.q) || (filled ? "" : "Click to add a question")}</span>
+        <span class="tags">${tags.join("")}</span></button>`;
+    }
+  }
+  html += `</div><p class="hint">Click any tile to edit it. Changes save to this browser automatically. Use Save board file to keep a copy on your computer.</p>`;
+  body.innerHTML = html;
+
+  $("bTitle").oninput = e => { b.title = e.target.value; changed(); };
+  $("bCats").onchange = e => { b.numCats = +e.target.value; changed(); renderBuilder(); };
+  $("bRows").onchange = e => { b.numRows = +e.target.value; changed(); renderBuilder(); };
+  body.querySelectorAll("[data-val]").forEach(inp => inp.oninput = () => {
+    b.values[+inp.dataset.val] = parseInt(inp.value, 10) || 0;
+    changed();
+    body.querySelectorAll(`[data-tile$=",${inp.dataset.val}"] .v`).forEach(s => s.textContent = money(b.values[+inp.dataset.val]));
+  });
+  body.querySelectorAll("[data-cat]").forEach(inp => inp.oninput = () => { b.categories[+inp.dataset.cat].name = inp.value; changed(); });
+  body.querySelectorAll("[data-tile]").forEach(btn => btn.onclick = () => {
+    const [c, r] = btn.dataset.tile.split(",").map(Number);
+    openTileEditor(c, r);
+  });
+}
+
+/* media field widget */
+function mediaField(label, kind, value, onChange) {
+  const box = document.createElement("div");
+  box.className = "media";
+  function draw(val) {
+    let preview = "";
+    if (val && kind === "image") preview = `<img src="${val}" alt="">`;
+    if (val && kind === "audio") preview = `<audio controls src="${val}" style="width:100%"></audio>`;
+    box.innerHTML = `<span class="lbl">${esc(label)}</span>${preview}
+      <div class="row">
+        <button class="btn small" data-act="pick">${val ? "Replace" : "Upload"} ${kind === "image" ? "picture" : "audio"}</button>
+        ${val ? `<button class="btn small danger" data-act="rm">Remove</button>` : ""}
+      </div>`;
+    box.querySelector('[data-act="pick"]').onclick = async () => {
+      const f = await pickFile(kind === "image" ? "image/*" : "audio/*");
+      if (!f) return;
+      try {
+        const d = kind === "image" ? await imageToDataURL(f) : await audioToDataURL(f);
+        if (d) { onChange(d); draw(d); }
+      } catch (e) { alert("That file couldn't be read."); }
+    };
+    const rm = box.querySelector('[data-act="rm"]');
+    if (rm) rm.onclick = () => { onChange(""); draw(""); };
+  }
+  draw(value);
+  return box;
+}
+
+let edC = 0, edR = 0;
+function openTileEditor(c, r) {
+  edC = c; edR = r;
+  drawTileEditor();
+  if (!$("tileDlg").open) $("tileDlg").showModal();
+}
+function drawTileEditor() {
+  const b = board, t = b.categories[edC].tiles[edR];
+  $("tdTitle").textContent = (b.categories[edC].name || "Category " + (edC + 1)) + " - " + money(b.values[edR]);
+  const body = $("tdBody");
+  body.innerHTML = `
+    <label class="check"><input type="checkbox" id="tdDD" ${t.dd ? "checked" : ""}> Daily Double</label>
+    <label class="field">Question
+      <textarea id="tdQ" placeholder="This instrument uses a slide instead of buttons, keys or valves.">${esc(t.q)}</textarea></label>
+    <div class="two-col" id="tdQMedia"></div>
+    <div class="media">
+      <span class="lbl">Video (YouTube or Google Drive link)</span>
+      <input type="text" id="tdVid" placeholder="https://www.youtube.com/watch?v=..." value="${esc(t.video)}" style="padding:8px 10px;border:1px solid var(--line);border-radius:6px">
+      <div class="time-row">
+        <label class="field">Start (m:ss)<input type="text" id="tdVS" value="${esc(t.vStart)}" placeholder="0:00"></label>
+        <label class="field">End (m:ss)<input type="text" id="tdVE" value="${esc(t.vEnd)}" placeholder="optional"></label>
+      </div>
+      <div id="tdVidPrev"></div>
+      <span class="hint" style="margin:0">Start and end times work for YouTube only. Drive videos play from the beginning and need sharing set so the school computer can open them.</span>
+    </div>
+    <label class="field">Answer
+      <input type="text" id="tdA" value="${esc(t.a)}" placeholder="Trombone"></label>
+    <div class="two-col" id="tdAMedia"></div>
+    <div><button class="btn danger small" id="tdClear">Clear this tile</button></div>`;
+  $("tdQMedia").append(
+    mediaField("Question picture (optional)", "image", t.qImg, v => { t.qImg = v; changed(); }),
+    mediaField("Question audio (optional)", "audio", t.qAudio, v => { t.qAudio = v; changed(); })
+  );
+  $("tdAMedia").append(mediaField("Answer picture (optional)", "image", t.aImg, v => { t.aImg = v; changed(); }));
+  $("tdDD").onchange = e => { t.dd = e.target.checked; changed(); };
+  $("tdQ").oninput = e => { t.q = e.target.value; changed(); };
+  $("tdA").oninput = e => { t.a = e.target.value; changed(); };
+  const drawPrev = () => {
+    const src = videoSrc(t.video, t.vStart, t.vEnd, false);
+    const p = $("tdVidPrev");
+    if (!t.video) p.innerHTML = "";
+    else if (!src) p.innerHTML = `<span class="hint" style="color:var(--wrong);margin:0">That doesn't look like a YouTube or Google Drive video link.</span>`;
+    else p.innerHTML = `<iframe class="vid-preview" src="${src}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`;
+  };
+  const vidChange = debounce(drawPrev, 700);
+  $("tdVid").oninput = e => { t.video = e.target.value.trim(); changed(); vidChange(); };
+  $("tdVS").oninput = e => { t.vStart = e.target.value.trim(); changed(); vidChange(); };
+  $("tdVE").oninput = e => { t.vEnd = e.target.value.trim(); changed(); vidChange(); };
+  drawPrev();
+  $("tdClear").onclick = () => {
+    if (!confirm("Clear everything on this tile?")) return;
+    b.categories[edC].tiles[edR] = blankTile();
+    changed();
+    drawTileEditor();
+  };
+}
+function stepTile(dir) {
+  const b = board;
+  let idx = edR * b.numCats + edC + dir;
+  const total = b.numCats * b.numRows;
+  idx = (idx + total) % total;
+  edR = Math.floor(idx / b.numCats);
+  edC = idx % b.numCats;
+  drawTileEditor();
+}
+$("tdPrev").onclick = () => stepTile(-1);
+$("tdNext").onclick = () => stepTile(1);
+$("tdDone").onclick = () => $("tileDlg").close();
+$("tileDlg").addEventListener("close", () => { $("tdBody").innerHTML = ""; if (bTab === "board") renderBuilder(); });
+
+function renderFinalTab(body) {
+  const f = board.final;
+  body.innerHTML = `
+    <label class="check"><input type="checkbox" id="fOn" ${f.enabled ? "checked" : ""}> Include Final Jeopardy in this board</label>
+    <div style="display:grid;gap:14px;max-width:760px;margin-top:14px">
+      <label class="field">Final Jeopardy category
+        <input type="text" id="fCat" value="${esc(f.category)}" placeholder="Percussion"></label>
+      <label class="field">Question
+        <textarea id="fQ">${esc(f.question)}</textarea></label>
+      <div id="fImg"></div>
+      <label class="field">Answer
+        <textarea id="fA" style="min-height:60px">${esc(f.answer)}</textarea></label>
+    </div>`;
+  $("fImg").append(mediaField("Question picture (optional)", "image", f.image, v => { f.image = v; changed(); }));
+  $("fOn").onchange = e => { f.enabled = e.target.checked; changed(); };
+  $("fCat").oninput = e => { f.category = e.target.value; changed(); };
+  $("fQ").oninput = e => { f.question = e.target.value; changed(); };
+  $("fA").oninput = e => { f.answer = e.target.value; changed(); };
+}
+
+function renderSoundsTab(body) {
+  const s = board.sounds;
+  body.innerHTML = `
+    <p class="hint" style="margin:0 0 14px">These sounds are saved inside this board file. Use "Save as my default sounds" once and every new board will start with them.</p>
+    <div class="sound-list" id="sList"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn" id="sDef">Save as my default sounds</button>
+      <button class="btn" id="sUseDef">Use my default sounds on this board</button>
+    </div>`;
+  const list = $("sList");
+  SOUND_SLOTS.forEach(([key, name, desc]) => {
+    const row = document.createElement("div");
+    row.className = "sound-row";
+    row.innerHTML = `<div><strong>${esc(name)}</strong><div class="st">${esc(desc)}</div></div>
+      <div>${s[key] ? `<audio controls src="${s[key]}" style="width:100%"></audio>` : `<span class="st">No sound</span>`}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn small" data-up>${s[key] ? "Replace" : "Upload"}</button>
+        ${s[key] ? `<button class="btn small danger" data-rm>Remove</button>` : ""}
+      </div>`;
+    row.querySelector("[data-up]").onclick = async () => {
+      const f = await pickFile("audio/*");
+      if (!f) return;
+      const d = await audioToDataURL(f);
+      if (d) { s[key] = d; changed(); renderBuilder(); }
+    };
+    const rm = row.querySelector("[data-rm]");
+    if (rm) rm.onclick = () => { delete s[key]; changed(); renderBuilder(); };
+    list.append(row);
+  });
+  $("sDef").onclick = async () => {
+    defaultSounds = clone(s);
+    await DB.set("defaultSounds", defaultSounds);
+    alert("Saved. New boards will start with these sounds.");
+  };
+  $("sUseDef").onclick = () => {
+    Object.assign(s, clone(defaultSounds));
+    changed();
+    renderBuilder();
+  };
+}
+
+/* ===================== Game ===================== */
+let game = null;
+let undoStack = [];
+let qAudioEl = null;
+let markTimer = null;
+
+const persistGame = debounce(() => {
+  if (!game) return;
+  const st = {
+    title: game.board.title, teams: game.teams, active: game.active, used: game.used,
+    revealed: game.revealed, floorZero: game.floorZero, screen: game.screen === "setup" ? "setup" : "board",
+    final: game.final, undoStack: undoStack.slice(-40)
+  };
+  DB.set("gameState", st);
+}, 300);
+
+function startSetup(b) {
+  game = {
+    board: b,
+    teams: ["Team A", "Team B", "Team C"].map(name => ({ name, score: 0 })),
+    active: 0,
+    used: {},
+    revealed: Array(b.numCats).fill(false),
+    floorZero: false,
+    screen: "setup",
+    current: null,
+    cue: false,
+    tried: [],
+    final: { wagers: [], done: [] },
+    dd: null
+  };
+  undoStack = [];
+  enterPlay();
+}
+
+async function resumeGame() {
+  const st = await DB.get("gameState");
+  const b = await DB.get("gameBoard");
+  if (!st || !b) { alert("No saved game found."); return renderHome(); }
+  game = {
+    board: normalizeBoard(b), teams: st.teams, active: st.active, used: st.used || {},
+    revealed: st.revealed || [], floorZero: !!st.floorZero, screen: "board", current: null,
+    cue: false, tried: [], final: st.final || { wagers: [], done: [] }, dd: null
+  };
+  undoStack = st.undoStack || [];
+  enterPlay();
+}
+
+function enterPlay() {
+  show("play");
+  $("pTitle").textContent = game.board.title;
+  const fr = $("buzzFrame");
+  if (!fr.src) fr.src = "https://buzzin.live/";
+  render();
+}
+
+function snapshot() {
+  undoStack.push(clone({ teams: game.teams, active: game.active, used: game.used, revealed: game.revealed, final: game.final }));
+  if (undoStack.length > 60) undoStack.shift();
+}
+function undo() {
+  const s = undoStack.pop();
+  if (!s) return;
+  Object.assign(game, s);
+  persistGame();
+  render();
+}
+function applyDelta(i, delta) {
+  let s = game.teams[i].score + delta;
+  if (game.floorZero && s < 0) s = 0;
+  game.teams[i].score = s;
+}
+
+/* ---------- toolbar ---------- */
+$("pHome").onclick = () => { stopAllSound(); show("home"); };
+$("pUndo").onclick = undo;
+$("pStop").onclick = stopAllSound;
+$("pFloor").onclick = () => { game.floorZero = !game.floorZero; persistGame(); renderToolbar(); };
+$("pMute").onclick = () => { muted = !muted; if (muted) stopAllSound(); renderToolbar(); };
+$("pRevealAll").onclick = () => { snapshot(); game.revealed = game.revealed.map(() => true); persistGame(); render(); };
+$("pFinal").onclick = () => { stopAllSound(); game.screen = "finalWager"; playSfx("finalJeopardy"); render(); };
+$("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
+document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
+$("pReload").onclick = () => { if (confirm("Reload buzzin.live? You may need to rejoin or recreate your game.")) $("buzzFrame").src = "https://buzzin.live/"; };
+$("pHide").onclick = () => { $("play").classList.add("panel-hidden"); $("pShow").classList.remove("hidden"); };
+$("pShow").onclick = () => { $("play").classList.remove("panel-hidden"); $("pShow").classList.add("hidden"); };
+
+function renderToolbar() {
+  const g = game;
+  const playing = g.screen !== "setup";
+  $("pFloor").textContent = "Stop at $0: " + (g.floorZero ? "on" : "off");
+  $("pFloor").classList.toggle("on", g.floorZero);
+  $("pMute").textContent = "Sounds: " + (muted ? "off" : "on");
+  $("pMute").classList.toggle("on", muted);
+  $("pRevealAll").classList.toggle("hidden", !(playing && g.screen === "board" && g.revealed.some(x => !x)));
+  $("pFinal").classList.toggle("hidden", !(playing && g.board.final.enabled && g.screen === "board"));
+  $("pEnd").classList.toggle("hidden", !(playing && g.screen === "board"));
+  $("pUndo").disabled = !undoStack.length;
+  $("pUndo").style.opacity = undoStack.length ? 1 : .5;
+}
+
+/* ---------- scores ---------- */
+function renderScores() {
+  const box = $("pScores");
+  if (game.screen === "setup") { box.innerHTML = ""; return; }
+  box.innerHTML = game.teams.map((t, i) => `
+    <div class="team ${i === game.active ? "active" : ""}">
+      <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}:</button>
+      <button class="sc ${t.score < 0 ? "neg" : ""}" data-edit="${i}" title="Click to type a new score">${money(t.score)}</button>
+    </div>`).join("");
+  box.querySelectorAll("[data-act]").forEach(b => b.onclick = () => { snapshot(); game.active = +b.dataset.act; persistGame(); render(); });
+  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => {
+    const i = +b.dataset.edit;
+    const v = prompt("New score for " + game.teams[i].name + ":", game.teams[i].score);
+    if (v === null) return;
+    const n = parseInt(String(v).replace(/[$,\s]/g, ""), 10);
+    if (isNaN(n)) return;
+    snapshot();
+    game.teams[i].score = n;
+    persistGame();
+    render();
+  });
+}
+
+/* ---------- main render ---------- */
+function render() {
+  renderToolbar();
+  renderScores();
+  const s = game.screen;
+  const stage = $("stage");
+  if (s === "setup") renderSetup(stage);
+  else if (s === "board") renderBoard(stage);
+  else if (s === "question") renderQuestion(stage);
+  else if (s === "answer") renderAnswer(stage);
+  else if (s === "ddWager") renderDDWager(stage);
+  else if (s === "finalWager") renderFinalWager(stage);
+  else if (s === "finalQuestion") renderFinalQuestion(stage);
+  else if (s === "finalAnswer") renderFinalAnswer(stage);
+  else if (s === "end") renderEnd(stage);
+}
+
+/* ---------- setup ---------- */
+function renderSetup(stage) {
+  const g = game;
+  stage.innerHTML = `
+    <div class="setup"><div class="setup-card">
+      <h2>${esc(g.board.title)}</h2>
+      <p class="note">Set up your buzzin.live game in the panel on the right while you get teams ready.</p>
+      <label>Number of teams
+        <select id="sCount">${[2, 3, 4].map(n => `<option ${n === g.teams.length ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <div class="team-inputs">${g.teams.map((t, i) => `<label>Team ${i + 1} name<input type="text" data-tn="${i}" value="${esc(t.name)}"></label>`).join("")}</div>
+      <label class="chk"><input type="checkbox" id="sFloor" ${g.floorZero ? "checked" : ""}> Scores stop at $0 (no negative scores)</label>
+      <label class="chk"><input type="checkbox" id="sHide" checked> Hide categories at the start so I can reveal them one at a time</label>
+      <button class="big-btn gold" id="sGo">Start game</button>
+    </div></div>`;
+  $("sCount").onchange = e => {
+    const n = +e.target.value;
+    const names = ["Team A", "Team B", "Team C", "Team D"];
+    g.teams = Array.from({ length: n }, (_, i) => g.teams[i] || { name: names[i], score: 0 });
+    render();
+  };
+  stage.querySelectorAll("[data-tn]").forEach(inp => inp.oninput = () => { g.teams[+inp.dataset.tn].name = inp.value || "Team " + (+inp.dataset.tn + 1); });
+  $("sFloor").onchange = e => { g.floorZero = e.target.checked; };
+  $("sGo").onclick = async () => {
+    g.revealed = Array(g.board.numCats).fill(!$("sHide").checked);
+    g.screen = "board";
+    undoStack = [];
+    await DB.set("gameBoard", g.board);
+    persistGame();
+    render();
+  };
+}
+
+/* ---------- board ---------- */
+function renderBoard(stage) {
+  const b = game.board;
+  let html = `<div class="board" style="grid-template-columns:repeat(${b.numCats},1fr);grid-template-rows:auto repeat(${b.numRows},1fr)">`;
+  for (let c = 0; c < b.numCats; c++) {
+    const hid = !game.revealed[c];
+    html += `<div class="cat-h ${hid ? "hid" : ""}" data-rev="${c}" style="min-height:12cqh">${hid ? "" : esc(b.categories[c].name || "Category " + (c + 1))}</div>`;
+  }
+  for (let r = 0; r < b.numRows; r++) {
+    for (let c = 0; c < b.numCats; c++) {
+      const used = game.used[c + "-" + r];
+      html += `<button class="tile ${used ? "used" : ""}" data-t="${c},${r}">${money(b.values[r])}</button>`;
+    }
+  }
+  html += `</div>`;
+  stage.innerHTML = html;
+  stage.querySelectorAll(".cat-h.hid").forEach(h => h.onclick = () => {
+    snapshot();
+    game.revealed[+h.dataset.rev] = true;
+    playSfx("categoryReveal");
+    persistGame();
+    render();
+  });
+  stage.querySelectorAll("[data-t]").forEach(btn => btn.onclick = () => {
+    const [c, r] = btn.dataset.t.split(",").map(Number);
+    if (game.used[c + "-" + r] && !confirm("This question was already played. Open it again?")) return;
+    openTile(c, r);
+  });
+}
+
+function openTile(c, r) {
+  stopAllSound();
+  snapshot();
+  const t = game.board.categories[c].tiles[r];
+  game.used[c + "-" + r] = true;
+  if (!game.revealed[c]) game.revealed[c] = true;
+  game.current = { c, r, value: game.board.values[r] };
+  game.cue = false;
+  game.tried = [];
+  game.dd = null;
+  persistGame();
+  if (t.dd) {
+    game.dd = { team: game.active, wager: "" };
+    game.screen = "ddWager";
+    playSfx("dailyDouble");
+  } else game.screen = "question";
+  render();
+}
+
+function backToBoard() {
+  stopAllSound();
+  game.screen = "board";
+  game.current = null;
+  game.cue = false;
+  game.dd = null;
+  render();
+}
+
+/* ---------- cue ---------- */
+function setCue(open) {
+  if (game.screen !== "question" || game.dd) return;
+  if (game.cue === open) return;
+  game.cue = open;
+  if (open) playSfx("buzzersOpen");
+  const cue = document.querySelector(".cue");
+  const card = document.querySelector(".card");
+  if (cue) {
+    cue.classList.toggle("open", open);
+    cue.textContent = open ? "Buzzers open - buzz in!" : "Buzzers locked - listen to the whole question";
+  }
+  if (card) card.classList.toggle("ring", open);
+  const tb = $("cueBtn");
+  if (tb) tb.textContent = open ? "Lock buzz cue" : "Open buzz cue (Space)";
+}
+// Option 2: first click into the buzzin panel while a question is up turns the cue on
+window.addEventListener("blur", () => {
+  setTimeout(() => {
+    if (document.activeElement === $("buzzFrame") && game && game.screen === "question" && !game.dd && !game.cue) setCue(true);
+  }, 0);
+});
+document.addEventListener("keydown", e => {
+  if (!game || $("play").classList.contains("hidden")) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || "";
+  if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+  if (e.code === "Space" && game.screen === "question" && !game.dd) {
+    e.preventDefault();
+    setCue(!game.cue);
+  }
+});
+
+/* ---------- question / answer ---------- */
+function qSize(text) {
+  const n = (text || "").length;
+  return n < 50 ? "5.2cqw" : n < 100 ? "4.2cqw" : n < 170 ? "3.4cqw" : "2.7cqw";
+}
+function updateAudioBtn() {
+  const b = $("qAudioBtn");
+  if (b && qAudioEl) b.textContent = qAudioEl.paused ? "Play sound" : "Pause sound";
+}
+function mediaHTML(t) {
+  let h = "";
+  if (t.qImg) h += `<img class="q-img" src="${t.qImg}" alt="">`;
+  const vs = videoSrc(t.video, t.vStart, t.vEnd, false);
+  if (vs) h += `<iframe class="q-vid" src="${vs}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`;
+  const ctrls = [];
+  if (t.qAudio) ctrls.push(`<button class="play-btn" id="qAudioBtn">Play sound</button><button class="play-btn" id="qAudioRe">Restart</button>`);
+  if (vs) ctrls.push(`<button class="play-btn" id="qVidRe">Replay clip</button>`);
+  if (ctrls.length) h += `<div class="media-ctrls">${ctrls.join("")}</div>`;
+  return h;
+}
+function wireMedia(t) {
+  if (qAudioEl) { qAudioEl.pause(); qAudioEl = null; }
+  if (t.qAudio) {
+    qAudioEl = new Audio(t.qAudio);
+    qAudioEl.onplay = qAudioEl.onpause = qAudioEl.onended = updateAudioBtn;
+    $("qAudioBtn").onclick = () => { if (qAudioEl.paused) qAudioEl.play().catch(() => {}); else qAudioEl.pause(); };
+    $("qAudioRe").onclick = () => { qAudioEl.currentTime = 0; qAudioEl.play().catch(() => {}); };
+  }
+  const re = $("qVidRe");
+  if (re) re.onclick = () => { document.querySelector(".q-vid").src = videoSrc(t.video, t.vStart, t.vEnd, true); };
+}
+
+function teamButtons(onlyTeam) {
+  return game.teams.map((tm, i) => {
+    if (onlyTeam != null && i !== onlyTeam) return "";
+    return `<div class="tgroup ${game.tried.includes(i) ? "tried" : ""}">
+      <span class="tn">${esc(tm.name)}</span>
+      <button class="ok" data-ok="${i}" title="Correct">&#10003;</button>
+      <button class="no" data-no="${i}" title="Wrong">&#10007;</button></div>`;
+  }).join("");
+}
+function showMark(ok) {
+  const card = document.querySelector(".card, .splash");
+  if (!card) return;
+  const m = document.createElement("div");
+  m.className = "mark";
+  m.innerHTML = ok
+    ? `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#fff" stroke="#16a34a" stroke-width="8"/><path d="M27 52 L44 68 L74 34" fill="none" stroke="#16a34a" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#fff" stroke="#dc2626" stroke-width="8"/><path d="M32 32 L68 68 M68 32 L32 68" stroke="#dc2626" stroke-width="12" stroke-linecap="round"/></svg>`;
+  card.append(m);
+  clearTimeout(markTimer);
+  markTimer = setTimeout(() => m.remove(), 1100);
+}
+
+function currentTile() { const { c, r } = game.current; return game.board.categories[c].tiles[r]; }
+function labelFor() {
+  const { c, value } = game.current;
+  const cat = game.board.categories[c].name || "Category " + (c + 1);
+  return game.dd ? cat + " - Daily Double" : cat + " - " + money(value);
+}
+function pointsNow() { return game.dd ? (parseInt(game.dd.wager, 10) || 0) : game.current.value; }
+
+function renderQuestion(stage) {
+  const t = currentTile();
+  const dd = game.dd;
+  stage.innerHTML = `
+    <div class="card ${game.cue ? "ring" : ""}">
+      <div class="card-label">${esc(labelFor())}</div>
+      ${dd
+        ? `<div class="cue dd">${esc(game.teams[dd.team].name)} wagered ${money(pointsNow())}</div>`
+        : `<div class="cue ${game.cue ? "open" : ""}">${game.cue ? "Buzzers open - buzz in!" : "Buzzers locked - listen to the whole question"}</div>`}
+      <div class="card-body">
+        ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)}">${esc(t.q)}</div>` : ""}
+        ${mediaHTML(t)}
+      </div>
+      <div class="controls">
+        ${teamButtons(dd ? dd.team : null)}
+        ${dd ? "" : `<button class="ctl" id="cueBtn">${game.cue ? "Lock buzz cue" : "Open buzz cue (Space)"}</button>`}
+        <button class="ctl gold" id="toAnswer">Show answer</button>
+        <button class="ctl" id="toBoard">Back to board</button>
+      </div>
+    </div>`;
+  wireMedia(t);
+  wireScoring(true);
+  const cb = $("cueBtn");
+  if (cb) cb.onclick = () => setCue(!game.cue);
+  $("toAnswer").onclick = showAnswer;
+  $("toBoard").onclick = backToBoard;
+}
+
+function wireScoring(fromQuestion) {
+  document.querySelectorAll("[data-ok]").forEach(b => b.onclick = () => {
+    const i = +b.dataset.ok;
+    snapshot();
+    applyDelta(i, pointsNow());
+    game.active = i;
+    playSfx("correct");
+    persistGame();
+    if (fromQuestion) { game.screen = "answer"; render(); }
+    else { renderScores(); renderToolbar(); }
+    showMark(true);
+  });
+  document.querySelectorAll("[data-no]").forEach(b => b.onclick = () => {
+    const i = +b.dataset.no;
+    snapshot();
+    applyDelta(i, -pointsNow());
+    if (!game.tried.includes(i)) game.tried.push(i);
+    playSfx("incorrect");
+    persistGame();
+    if (game.dd && fromQuestion) { game.screen = "answer"; render(); showMark(false); return; }
+    renderScores(); renderToolbar();
+    b.closest(".tgroup").classList.add("tried");
+    showMark(false);
+  });
+}
+
+function showAnswer() {
+  stopAllSound();
+  game.screen = "answer";
+  render();
+}
+
+function renderAnswer(stage) {
+  const t = currentTile();
+  stage.innerHTML = `
+    <div class="card">
+      <div class="card-label">${esc(labelFor())} - Answer</div>
+      <div class="card-body">
+        <div class="a-text">${esc(t.a || "(no answer entered)")}</div>
+        ${t.aImg ? `<img class="q-img" src="${t.aImg}" alt="">` : ""}
+      </div>
+      <div class="controls">
+        ${teamButtons(game.dd ? game.dd.team : null)}
+        <button class="ctl" id="toQuestion">Show question again</button>
+        <button class="ctl gold" id="toBoard">Back to board</button>
+      </div>
+    </div>`;
+  wireScoring(false);
+  $("toQuestion").onclick = () => { game.screen = "question"; render(); };
+  $("toBoard").onclick = backToBoard;
+}
+
+/* ---------- daily double ---------- */
+function renderDDWager(stage) {
+  const dd = game.dd;
+  stage.innerHTML = `
+    <div class="splash">
+      <h1>DAILY DOUBLE</h1>
+      <h2>${esc(game.board.categories[game.current.c].name || "")}</h2>
+      <div class="wager-row">
+        ${game.teams.map((t, i) => `<button class="pick ${i === dd.team ? "on" : ""}" data-pick="${i}">${esc(t.name)} (${money(t.score)})</button>`).join("")}
+      </div>
+      <div class="wager sel">
+        <span class="wn">${esc(game.teams[dd.team].name)} wagers</span>
+        <input type="number" id="ddW" min="0" step="100" value="${esc(dd.wager)}" placeholder="$">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="ctl gold" id="ddGo">Show question</button>
+        <button class="ctl" id="toBoard">Back to board</button>
+      </div>
+    </div>`;
+  stage.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { dd.team = +b.dataset.pick; render(); $("ddW").focus(); });
+  $("ddW").oninput = e => { dd.wager = e.target.value; };
+  $("ddW").onkeydown = e => { if (e.key === "Enter") $("ddGo").click(); };
+  $("ddGo").onclick = () => {
+    if (!(parseInt(dd.wager, 10) >= 0)) { alert("Type the wager first."); return; }
+    stopAllSound();
+    game.screen = "question";
+    render();
+  };
+  $("toBoard").onclick = backToBoard;
+}
+
+/* ---------- final jeopardy ---------- */
+function renderFinalWager(stage) {
+  const f = game.board.final, fs = game.final;
+  stage.innerHTML = `
+    <div class="splash">
+      <h1>FINAL JEOPARDY</h1>
+      <h2>${esc(f.category)}</h2>
+      <p style="margin:0;font-size:clamp(14px,2cqw,22px)">Each team decides how much to bet.</p>
+      <div class="wager-row">
+        ${game.teams.map((t, i) => `<div class="wager"><span class="wn">${esc(t.name)}</span><span class="ws">has ${money(t.score)}</span>
+          <input type="number" min="0" step="100" data-fw="${i}" value="${esc(fs.wagers[i] ?? "")}" placeholder="$"></div>`).join("")}
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="ctl gold" id="fGo">Show question</button>
+        <button class="ctl" id="toBoard">Back to board</button>
+      </div>
+    </div>`;
+  stage.querySelectorAll("[data-fw]").forEach(inp => inp.oninput = () => { fs.wagers[+inp.dataset.fw] = inp.value; persistGame(); });
+  $("fGo").onclick = () => { stopAllSound(); game.screen = "finalQuestion"; playSfx("finalThink"); render(); };
+  $("toBoard").onclick = backToBoard;
+}
+function renderFinalQuestion(stage) {
+  const f = game.board.final;
+  stage.innerHTML = `
+    <div class="card">
+      <div class="card-label">Final Jeopardy - ${esc(f.category)}</div>
+      <div class="card-body">
+        ${f.question ? `<div class="q-text" style="--qs:${qSize(f.question)}">${esc(f.question)}</div>` : ""}
+        ${f.image ? `<img class="q-img" src="${f.image}" alt="">` : ""}
+      </div>
+      <div class="controls">
+        <button class="ctl" id="fBack">Back to wagers</button>
+        <button class="ctl gold" id="fAns">Show answer</button>
+      </div>
+    </div>`;
+  $("fBack").onclick = () => { stopAllSound(); game.screen = "finalWager"; render(); };
+  $("fAns").onclick = () => { stopAllSound(); game.screen = "finalAnswer"; render(); };
+}
+function renderFinalAnswer(stage) {
+  const f = game.board.final, fs = game.final;
+  stage.innerHTML = `
+    <div class="splash">
+      <h2>Final Jeopardy answer</h2>
+      <div class="a-text" style="white-space:pre-line">${esc(f.answer || "(no answer entered)")}</div>
+      <div class="wager-row">
+        ${game.teams.map((t, i) => {
+          const w = parseInt(fs.wagers[i], 10) || 0;
+          const done = fs.done[i];
+          return `<div class="wager ${done ? "sel" : ""}"><span class="wn">${esc(t.name)}</span>
+            <span class="ws">bet ${money(w)}${done ? " - marked " + done : ""}</span>
+            <div class="rs">
+              <button class="ok" data-fok="${i}" ${done ? "disabled style=opacity:.4" : ""}>&#10003;</button>
+              <button class="no" data-fno="${i}" ${done ? "disabled style=opacity:.4" : ""}>&#10007;</button>
+            </div></div>`;
+        }).join("")}
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="ctl" id="fBackQ">Show question again</button>
+        <button class="ctl gold" id="fEnd">Show final standings</button>
+      </div>
+    </div>`;
+  const mark = (i, ok) => {
+    snapshot();
+    const w = parseInt(fs.wagers[i], 10) || 0;
+    applyDelta(i, ok ? w : -w);
+    fs.done[i] = ok ? "right" : "wrong";
+    playSfx(ok ? "correct" : "incorrect");
+    persistGame();
+    render();
+    showMark(ok);
+  };
+  stage.querySelectorAll("[data-fok]").forEach(b => b.onclick = () => mark(+b.dataset.fok, true));
+  stage.querySelectorAll("[data-fno]").forEach(b => b.onclick = () => mark(+b.dataset.fno, false));
+  $("fBackQ").onclick = () => { game.screen = "finalQuestion"; render(); };
+  $("fEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
+}
+
+/* ---------- end ---------- */
+function renderEnd(stage) {
+  const ranked = game.teams.map((t, i) => ({ ...t, i })).sort((a, b) => b.score - a.score);
+  const top = ranked[0].score;
+  stage.innerHTML = `
+    <div class="splash">
+      <h1>FINAL SCORES</h1>
+      <div class="standings">
+        ${ranked.map(t => `<div class="stand ${t.score === top ? "win" : ""}"><span>${esc(t.name)}</span><span>${money(t.score)}</span></div>`).join("")}
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="ctl" id="toBoard">Back to board</button>
+        <button class="ctl gold" id="eDone">End game</button>
+      </div>
+    </div>`;
+  $("toBoard").onclick = backToBoard;
+  $("eDone").onclick = async () => {
+    if (!confirm("End this game? The saved game will be cleared.")) return;
+    await DB.del("gameState");
+    stopAllSound();
+    show("home");
+  };
+}
+
+/* ===================== Start ===================== */
+(async () => {
+  defaultSounds = (await DB.get("defaultSounds")) || {};
+  show("home");
+})();
+</script>
+</body>
+</html>
