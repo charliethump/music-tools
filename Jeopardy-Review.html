@@ -1393,8 +1393,7 @@ function wireScoring(fromQuestion) {
     if (!game.tried.includes(i)) game.tried.push(i);
     playSfx("incorrect");
     persistGame();
-    if (game.dd && fromQuestion) { game.screen = "answer"; render(); scoreFx(i, before, -pts); return; }
-    if (fromQuestion && bridge.on) { bridge.holdUntil = 0; sendBridge("unlock"); }
+    if (fromQuestion && bridge.on && !game.dd) { bridge.holdUntil = 0; sendBridge("unlock"); }
     renderScores(); renderToolbar();
     b.closest(".tgroup").classList.add("tried");
     scoreFx(i, before, -pts);
