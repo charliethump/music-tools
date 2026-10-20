@@ -114,6 +114,8 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .scores{display:flex;justify-content:center;gap:clamp(8px,2vw,24px);padding:10px}
 .team{min-width:clamp(120px,16vw,220px);background:#000;border:4px solid #fff;color:#fff;text-align:center;padding:6px 10px;border-radius:2px}
 .team.active{border-color:var(--active)}
+.team{position:relative}
+.delta{position:absolute;left:50%;top:100%;margin-top:4px;z-index:30;pointer-events:none;white-space:nowrap;font-family:var(--value-font);font-size:clamp(22px,2.8vw,40px);text-shadow:.06em .06em 0 #000}
 .team .nm{display:block;width:100%;background:none;border:none;color:#fff;font-weight:700;font-size:clamp(14px,1.6vw,22px)}
 .team .sc{display:block;width:100%;background:none;border:none;color:#fff;font-weight:700;font-size:clamp(18px,2.2vw,32px)}
 .team .sc.neg{color:#ff8a8a}
@@ -1329,6 +1331,43 @@ function renderQuestion(stage) {
   $("toBoard").onclick = backToBoard;
 }
 
+// Score feedback: the team's box glows green or red, the score counts to its new total,
+// and the points float up from under the box
+function scoreFx(i, from, delta) {
+  const box = document.querySelectorAll("#pScores .team")[i];
+  if (!box) return;
+  const to = game.teams[i].score;
+  const color = delta >= 0 ? "#22c55e" : "#ef4444";
+  const sc = box.querySelector(".sc");
+  const t0 = performance.now(), dur = 700;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur);
+    const v = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+    sc.textContent = money(v);
+    sc.classList.toggle("neg", v < 0);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  sc.textContent = money(from);
+  requestAnimationFrame(step);
+  box.animate([
+    { boxShadow: `0 0 0 0 ${color}`, borderColor: color, background: "#000" },
+    { boxShadow: `0 0 34px 10px ${color}`, borderColor: color, background: color + "55", offset: .2 },
+    { boxShadow: `0 0 18px 4px ${color}`, borderColor: color, background: color + "33", offset: .7 },
+    { boxShadow: `0 0 0 0 ${color}` }
+  ], { duration: 1300, easing: "ease-out" });
+  const f = document.createElement("div");
+  f.className = "delta";
+  f.style.color = color;
+  f.textContent = (delta >= 0 ? "+" : "-") + "$" + Math.abs(delta).toLocaleString();
+  box.append(f);
+  f.animate([
+    { transform: "translate(-50%, 10px)", opacity: 0 },
+    { transform: "translate(-50%, 0)", opacity: 1, offset: .15 },
+    { transform: "translate(-50%, -18px)", opacity: 1, offset: .7 },
+    { transform: "translate(-50%, -34px)", opacity: 0 }
+  ], { duration: 1400, easing: "ease-out", fill: "forwards" }).onfinish = () => f.remove();
+}
+
 function wireScoring(fromQuestion) {
   document.querySelectorAll("[data-ok]").forEach(b => b.onclick = () => {
     const i = +b.dataset.ok;
@@ -1336,27 +1375,29 @@ function wireScoring(fromQuestion) {
     game.cue = false;
     if (bridge.on) sendBridge("lock");
     snapshot();
-    applyDelta(i, pointsNow());
+    const before = game.teams[i].score, pts = pointsNow();
+    applyDelta(i, pts);
     game.active = i;
     playSfx("correct");
     persistGame();
     if (fromQuestion) { game.screen = "answer"; render(); }
     else { renderScores(); renderToolbar(); }
-    showMark(true);
+    scoreFx(i, before, pts);
   });
   document.querySelectorAll("[data-no]").forEach(b => b.onclick = () => {
     const i = +b.dataset.no;
     setCue(false);
     snapshot();
-    applyDelta(i, -pointsNow());
+    const before = game.teams[i].score, pts = pointsNow();
+    applyDelta(i, -pts);
     if (!game.tried.includes(i)) game.tried.push(i);
     playSfx("incorrect");
     persistGame();
-    if (game.dd && fromQuestion) { game.screen = "answer"; render(); showMark(false); return; }
+    if (game.dd && fromQuestion) { game.screen = "answer"; render(); scoreFx(i, before, -pts); return; }
     if (fromQuestion && bridge.on) { bridge.holdUntil = 0; sendBridge("unlock"); }
     renderScores(); renderToolbar();
     b.closest(".tgroup").classList.add("tried");
-    showMark(false);
+    scoreFx(i, before, -pts);
   });
 }
 
@@ -1481,12 +1522,13 @@ function renderFinalAnswer(stage) {
   const mark = (i, ok) => {
     snapshot();
     const w = parseInt(fs.wagers[i], 10) || 0;
+    const before = game.teams[i].score;
     applyDelta(i, ok ? w : -w);
     fs.done[i] = ok ? "right" : "wrong";
     playSfx(ok ? "correct" : "incorrect");
     persistGame();
     render();
-    showMark(ok);
+    scoreFx(i, before, ok ? w : -w);
   };
   stage.querySelectorAll("[data-fok]").forEach(b => b.onclick = () => mark(+b.dataset.fok, true));
   stage.querySelectorAll("[data-fno]").forEach(b => b.onclick = () => mark(+b.dataset.fno, false));
