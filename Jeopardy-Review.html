@@ -43,6 +43,9 @@ input,textarea,select{font:inherit}
 .big-btn{padding:16px 20px;border-radius:10px;border:2px solid #2b3f9e;background:var(--board);color:#fff;font-size:20px;font-weight:600}
 .big-btn:hover{background:#1530c4}
 .big-btn.gold{background:var(--gold);color:#1a1a1a;border-color:#c99a00}
+.shared-card{background:#0a1660;border:2px solid var(--gold);border-radius:12px;padding:16px;margin:0 0 22px}
+.sc-lbl{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold)}
+.sc-title{font-size:24px;font-weight:700;margin:4px 0 14px}
 .home-note{margin-top:22px;font-size:14px;opacity:.7}
 
 /* ---------- Builder ---------- */
@@ -207,6 +210,21 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .bridge-off{opacity:.55;margin-left:6px}
 .bridge-on{margin-left:6px;color:#4ade80;font-weight:700}
 .space-hint{font-size:13px;opacity:.8}
+.score-dlg{background:#0a1660;color:#fff;border:3px solid #fff;border-radius:10px;padding:20px 24px;width:min(380px,92vw)}
+.score-dlg::backdrop{background:rgba(0,0,0,.55)}
+.score-dlg h3{margin:0 0 14px;font-size:22px}
+.sd-row{display:flex;align-items:center;gap:8px;background:#000;border:2px solid #444c70;border-radius:8px;padding:6px 12px}
+.sd-dollar{font-size:30px;font-weight:700}
+.sd-row input{flex:1;min-width:0;background:transparent;border:none;color:#fff;font-size:32px;font-weight:700;outline:none}
+.sd-row input::-webkit-outer-spin-button,.sd-row input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sd-row input{-moz-appearance:textfield;appearance:textfield}
+.sd-btns{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.md-text{margin:0;font-size:18px;line-height:1.4}
+.share-dlg{width:min(620px,94vw)}
+.share-steps{margin:0 0 14px;padding-left:22px;display:grid;gap:10px;line-height:1.45}
+.sh-file{font-family:Consolas,monospace;font-size:14px;color:var(--gold)}
+.small-ctl{padding:3px 10px;font-size:14px;margin-left:4px}
+.share-dlg .sd-row input{font-size:15px;font-weight:400;font-family:Consolas,monospace}
 .show-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:12px 6px;border-radius:8px 0 0 8px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;z-index:20}
 </style>
 </head>
@@ -217,6 +235,14 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
   <div class="home-card">
     <h1>JEOPARDY!</h1>
     <p>Music class review game</p>
+    <div class="shared-card hidden" id="hShared">
+      <div class="sc-lbl">Shared board</div>
+      <div class="sc-title" id="hSharedTitle"></div>
+      <div class="home-btns">
+        <button class="big-btn gold" id="hSharedPlay">Play this board</button>
+        <button class="big-btn" id="hSharedEdit">Edit a copy</button>
+      </div>
+    </div>
     <div class="home-btns">
       <button class="big-btn gold hidden" id="hResume"></button>
       <button class="big-btn" id="hBuild">Build or edit a board</button>
@@ -235,6 +261,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
     <button class="btn" id="bNew">New board</button>
     <button class="btn" id="bLoad">Open board file</button>
     <button class="btn" id="bSave">Save board file</button>
+    <button class="btn" id="bShare">Share link</button>
     <span class="spacer"></span>
     <span id="bSaved" class="hint" style="margin:0"></span>
     <button class="btn primary" id="bPlay">Play this board</button>
@@ -295,6 +322,44 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 </section>
 
 <input type="file" id="filePick" class="hidden">
+
+<dialog id="shareDlg" class="score-dlg share-dlg">
+  <h3>Share this board</h3>
+  <ol class="share-steps">
+    <li>Save the board file: <button type="button" class="ctl small-ctl" id="shSave">Save board file</button><br><span class="sh-file" id="shFile"></span></li>
+    <li>Upload that file to the <strong>boards</strong> folder in your GitHub repo, next to this tool.</li>
+    <li>Copy the link. It works once GitHub finishes publishing, usually within a minute or two.</li>
+  </ol>
+  <div class="sd-row"><input type="text" id="shLink" readonly></div>
+  <div class="sd-btns">
+    <button type="button" class="ctl" id="shClose">Close</button>
+    <button type="button" class="ctl gold" id="shCopy">Copy link</button>
+  </div>
+</dialog>
+
+<dialog id="msgDlg" class="score-dlg">
+  <form method="dialog" id="msgForm">
+    <p id="mdText" class="md-text"></p>
+    <div class="sd-btns">
+      <button type="button" class="ctl" id="mdCancel">Cancel</button>
+      <button type="submit" class="ctl gold" id="mdOk">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="scoreDlg" class="score-dlg">
+  <form method="dialog" id="scoreForm">
+    <h3 id="sdTitle">Edit score</h3>
+    <div class="sd-row">
+      <span class="sd-dollar">$</span>
+      <input type="number" id="sdVal" step="100">
+    </div>
+    <div class="sd-btns">
+      <button type="button" class="ctl" id="sdCancel">Cancel</button>
+      <button type="submit" class="ctl gold" id="sdSave">Save</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
 "use strict";
@@ -368,7 +433,7 @@ async function imageToDataURL(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 async function audioToDataURL(file) {
-  if (file.size > 8 * 1024 * 1024 && !confirm("This audio file is over 8 MB, which will make the board file large. Use it anyway?")) return null;
+  if (file.size > 8 * 1024 * 1024 && !(await appConfirm("This audio file is over 8 MB, which will make the board file large. Use it anyway?", "Use it"))) return null;
   return fileToDataURL(file);
 }
 function parseTime(t) {
@@ -491,11 +556,11 @@ $("hPlayFile").onclick = async () => {
   const f = await pickFile(".json,application/json");
   if (!f) return;
   try { startSetup(normalizeBoard(JSON.parse(await f.text()))); }
-  catch (e) { alert("That file couldn't be opened as a board file."); }
+  catch (e) { appAlert("That file couldn't be opened as a board file."); }
 };
 $("hPlayDraft").onclick = async () => {
   const d = await DB.get("draft");
-  if (!d) { alert("There's no board draft yet. Build one first."); return; }
+  if (!d) { appAlert("There's no board draft yet. Build one first."); return; }
   startSetup(normalizeBoard(d));
 };
 $("hResume").onclick = resumeGame;
@@ -519,8 +584,8 @@ async function openBuilder() {
 }
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => { bTab = t.dataset.tab; renderBuilder(); });
 $("bHome").onclick = () => show("home");
-$("bNew").onclick = () => {
-  if (!confirm("Start a new blank board? Save your current board to a file first if you want to keep it.")) return;
+$("bNew").onclick = async () => {
+  if (!(await appConfirm("Start a new blank board? Save your current board to a file first if you want to keep it.", "New board"))) return;
   board = newBoard();
   board.sounds = clone(defaultSounds);
   changed();
@@ -533,15 +598,41 @@ $("bLoad").onclick = async () => {
     board = normalizeBoard(JSON.parse(await f.text()));
     changed();
     renderBuilder();
-  } catch (e) { alert("That file couldn't be opened as a board file."); }
+  } catch (e) { appAlert("That file couldn't be opened as a board file."); }
 };
-$("bSave").onclick = () => {
+// File names are kept link-friendly: "Gr4 Week 10" becomes gr4-week-10.jeopardy.json
+function boardFileName(b) {
+  const slug = String(b.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return (slug || "board") + ".jeopardy.json";
+}
+function saveBoardFile() {
   const blob = new Blob([JSON.stringify(board)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = (board.title || "board").replace(/[\\/:*?"<>|]+/g, "").trim() + ".jeopardy.json";
+  a.download = boardFileName(board);
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$("bSave").onclick = saveBoardFile;
+
+/* ---------- share link ---------- */
+function shareLinkFor(b) {
+  const base = location.href.split(/[?#]/)[0];
+  return base + "?board=boards/" + boardFileName(b);
+}
+$("bShare").onclick = () => {
+  $("shFile").textContent = boardFileName(board);
+  $("shLink").value = shareLinkFor(board);
+  $("shCopy").textContent = "Copy link";
+  $("shareDlg").showModal();
+};
+$("shSave").onclick = saveBoardFile;
+$("shClose").onclick = () => $("shareDlg").close();
+$("shCopy").onclick = async () => {
+  const inp = $("shLink");
+  try { await navigator.clipboard.writeText(inp.value); }
+  catch (e) { inp.select(); document.execCommand("copy"); }
+  $("shCopy").textContent = "Copied!";
 };
 $("bPlay").onclick = () => startSetup(normalizeBoard(clone(board)));
 
@@ -622,7 +713,7 @@ function mediaField(label, kind, value, onChange) {
       try {
         const d = kind === "image" ? await imageToDataURL(f) : await audioToDataURL(f);
         if (d) { onChange(d); draw(d); }
-      } catch (e) { alert("That file couldn't be read."); }
+      } catch (e) { appAlert("That file couldn't be read."); }
     };
     const rm = box.querySelector('[data-act="rm"]');
     if (rm) rm.onclick = () => { onChange(""); draw(""); };
@@ -679,8 +770,8 @@ function drawTileEditor() {
   $("tdVS").oninput = e => { t.vStart = e.target.value.trim(); changed(); vidChange(); };
   $("tdVE").oninput = e => { t.vEnd = e.target.value.trim(); changed(); vidChange(); };
   drawPrev();
-  $("tdClear").onclick = () => {
-    if (!confirm("Clear everything on this tile?")) return;
+  $("tdClear").onclick = async () => {
+    if (!(await appConfirm("Clear everything on this tile?", "Clear tile"))) return;
     b.categories[edC].tiles[edR] = blankTile();
     changed();
     drawTileEditor();
@@ -754,7 +845,7 @@ function renderSoundsTab(body) {
   $("sDef").onclick = async () => {
     defaultSounds = clone(s);
     await DB.set("defaultSounds", defaultSounds);
-    alert("Saved. New boards will start with these sounds.");
+    appAlert("Saved. New boards will start with these sounds.");
   };
   $("sUseDef").onclick = () => {
     Object.assign(s, clone(defaultSounds));
@@ -801,7 +892,7 @@ function startSetup(b) {
 async function resumeGame() {
   const st = await DB.get("gameState");
   const b = await DB.get("gameBoard");
-  if (!st || !b) { alert("No saved game found."); return renderHome(); }
+  if (!st || !b) { appAlert("No saved game found."); return renderHome(); }
   game = {
     board: normalizeBoard(b), teams: st.teams, active: st.active, used: st.used || {},
     revealed: st.revealed || [], floorZero: !!st.floorZero, screen: "board", current: null,
@@ -846,7 +937,7 @@ $("pRevealAll").onclick = () => { closeIntro(); snapshot(); game.revealed = game
 $("pFinal").onclick = () => { stopAllSound(); game.screen = "finalWager"; playSfx("finalJeopardy"); render(); };
 $("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
 document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
-$("pReload").onclick = () => { if (confirm("Reload buzzin.live? You may need to rejoin or recreate your game.")) { bridge.on = false; bridge.locked = null; setBridgeStat(); $("buzzFrame").src = "https://buzzin.live/"; } };
+$("pReload").onclick = async () => { if (await appConfirm("Reload buzzin.live? You may need to rejoin or recreate your game.", "Reload")) { bridge.on = false; bridge.locked = null; setBridgeStat(); $("buzzFrame").src = "https://buzzin.live/"; } };
 $("pHide").onclick = () => { $("play").classList.add("panel-hidden"); $("pShow").classList.remove("hidden"); };
 $("pShow").onclick = () => { $("play").classList.remove("panel-hidden"); $("pShow").classList.add("hidden"); };
 
@@ -874,16 +965,55 @@ function renderScores() {
       <button class="sc ${t.score < 0 ? "neg" : ""}" data-edit="${i}" title="Click to type a new score">${money(t.score)}</button>
     </div>`).join("");
   box.querySelectorAll("[data-act]").forEach(b => b.onclick = () => { snapshot(); game.active = +b.dataset.act; persistGame(); render(); });
-  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => {
+  box.querySelectorAll("[data-edit]").forEach(b => b.onclick = async () => {
     const i = +b.dataset.edit;
-    const v = prompt("New score for " + game.teams[i].name + ":", game.teams[i].score);
-    if (v === null) return;
-    const n = parseInt(String(v).replace(/[$,\s]/g, ""), 10);
-    if (isNaN(n)) return;
+    const n = await editScore(game.teams[i].name, game.teams[i].score);
+    if (n === null) return;
     snapshot();
     game.teams[i].score = n;
     persistGame();
     render();
+  });
+}
+
+// In-app message boxes (replace the browser's confirm and alert)
+function appDialog(text, okText, cancelText) {
+  return new Promise(res => {
+    const dlg = $("msgDlg");
+    $("mdText").textContent = text;
+    $("mdOk").textContent = okText;
+    $("mdCancel").textContent = cancelText || "";
+    $("mdCancel").classList.toggle("hidden", !cancelText);
+    let done = false;
+    const finish = v => { if (done) return; done = true; if (dlg.open) dlg.close(); res(v); };
+    $("msgForm").onsubmit = e => { e.preventDefault(); finish(true); };
+    $("mdCancel").onclick = () => finish(false);
+    dlg.onclose = () => finish(!cancelText);
+    dlg.showModal();
+    $("mdOk").focus();
+  });
+}
+function appConfirm(text, okText = "OK") { return appDialog(text, okText, "Cancel"); }
+function appAlert(text) { return appDialog(text, "OK", ""); }
+
+// In-app score editor (replaces the browser's prompt box)
+function editScore(name, current) {
+  return new Promise(res => {
+    const dlg = $("scoreDlg"), inp = $("sdVal");
+    $("sdTitle").textContent = "New score for " + name;
+    inp.value = current;
+    let done = false;
+    const finish = v => { if (done) return; done = true; if (dlg.open) dlg.close(); res(v); };
+    $("scoreForm").onsubmit = e => {
+      e.preventDefault();
+      const n = parseInt(String(inp.value).replace(/[$,\s]/g, ""), 10);
+      finish(isNaN(n) ? null : n);
+    };
+    $("sdCancel").onclick = () => finish(null);
+    dlg.onclose = () => finish(null);
+    dlg.showModal();
+    inp.focus();
+    inp.select();
   });
 }
 
@@ -1025,9 +1155,9 @@ function renderBoard(stage) {
   fitBoard();
   stage.querySelector(".board").addEventListener("click", () => { if (fill && fill.waiting) triggerFill(); });
   stage.querySelectorAll(".cat-h.hid").forEach(h => h.onclick = () => introAdvance());
-  stage.querySelectorAll("[data-t]").forEach(btn => btn.onclick = () => {
+  stage.querySelectorAll("[data-t]").forEach(btn => btn.onclick = async () => {
     const [c, r] = btn.dataset.t.split(",").map(Number);
-    if (game.used[c + "-" + r] && !confirm("This question was already played. Open it again?")) return;
+    if (game.used[c + "-" + r] && !(await appConfirm("This question was already played. Open it again?", "Open it"))) return;
     openTile(c, r);
   });
 }
@@ -1449,7 +1579,7 @@ function renderDDWager(stage) {
   $("ddW").oninput = e => { dd.wager = e.target.value; };
   $("ddW").onkeydown = e => { if (e.key === "Enter") $("ddGo").click(); };
   $("ddGo").onclick = () => {
-    if (!(parseInt(dd.wager, 10) >= 0)) { alert("Type the wager first."); return; }
+    if (!(parseInt(dd.wager, 10) >= 0)) { appAlert("Type the wager first.").then(() => $("ddW").focus()); return; }
     stopAllSound();
     game.screen = "question";
     render();
@@ -1552,7 +1682,7 @@ function renderEnd(stage) {
     </div>`;
   $("toBoard").onclick = backToBoard;
   $("eDone").onclick = async () => {
-    if (!confirm("End this game? The saved game will be cleared.")) return;
+    if (!(await appConfirm("End this game? The saved game will be cleared.", "End game"))) return;
     await DB.del("gameState");
     stopAllSound();
     show("home");
@@ -1598,9 +1728,37 @@ window.addEventListener("message", e => {
 });
 
 /* ===================== Start ===================== */
+/* ---------- opening a shared board from ?board=... ---------- */
+let sharedBoard = null;
+async function loadSharedBoard() {
+  const path = new URLSearchParams(location.search).get("board");
+  if (!path) return;
+  try {
+    const url = new URL(path, location.href);
+    if (!/^https?:$/.test(url.protocol)) throw new Error("bad url");
+    const r = await fetch(url, { cache: "no-cache" });
+    if (!r.ok) throw new Error(r.status);
+    sharedBoard = normalizeBoard(await r.json());
+    $("hSharedTitle").textContent = sharedBoard.title || "Untitled review";
+    $("hShared").classList.remove("hidden");
+  } catch (e) {
+    appAlert("This link's board couldn't be loaded. If it was just uploaded, GitHub may still be publishing it, so try again in a minute. Otherwise check that the file is in the boards folder with exactly this name: " + path.split("/").pop());
+  }
+}
+$("hSharedPlay").onclick = () => { if (sharedBoard) startSetup(normalizeBoard(clone(sharedBoard))); };
+$("hSharedEdit").onclick = async () => {
+  if (!sharedBoard) return;
+  const d = await DB.get("draft");
+  const hasDraft = d && normalizeBoard(d).categories.some(c => c.name || c.tiles.some(tileFilled));
+  if (hasDraft && !(await appConfirm("This replaces the board you're building in this browser. Save that one to a file first if you want to keep it.", "Edit a copy"))) return;
+  await DB.set("draft", clone(sharedBoard));
+  openBuilder();
+};
+
 (async () => {
   defaultSounds = (await DB.get("defaultSounds")) || {};
   show("home");
+  loadSharedBoard();
 })();
 </script>
 </body>
