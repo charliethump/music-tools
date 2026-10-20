@@ -6,7 +6,7 @@
 <title>Jeopardy Review</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='10' fill='%230a1f9e' stroke='%23000a5c' stroke-width='4'/%3E%3Ctext x='32' y='49' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23000' %3E$%3C/text%3E%3Ctext x='30' y='47' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23ffcc33'%3E$%3C/text%3E%3C/svg%3E">
 <style>
 :root{
@@ -136,15 +136,19 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .intro-panel span{display:block;max-width:100%}
 
 /* question & answer */
-.card{flex:1;min-height:0;background:var(--board);border:6px solid #000;display:flex;flex-direction:column;position:relative}
+.card{flex:1;min-height:0;background:radial-gradient(ellipse at 50% 45%,#1a2df2 0%,#0a18d8 55%,#0610b4 100%);border:6px solid #000;display:flex;flex-direction:column;position:relative}
+.stage .board.behind{position:absolute;inset:0 10px 10px 10px;z-index:0}
+.card.zooming,.splash.zooming{position:relative;z-index:2;transform-origin:0 0}
+.card.zooming .card-label,.card.zooming .cue,.card.zooming .controls,.card.zooming .media-ctrls{visibility:hidden}
 .card.ring{box-shadow:inset 0 0 0 14px var(--open)}
 .card-label{padding:10px 18px;font-weight:700;font-size:clamp(14px,2cqw,24px)}
 .cue{margin:0 18px;padding:10px 14px;border-radius:8px;text-align:center;font-weight:800;font-size:clamp(16px,2.6cqw,34px);background:#2c3354;color:#c9cfe6;border:3px solid #444c70}
 .cue.open{background:var(--open);color:#fff;border-color:#0d6b30;font-size:clamp(22px,4cqw,52px)}
 .cue.dd{background:var(--gold);color:#1a1a1a;border-color:#a88300}
 .card-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12px 24px;text-align:center}
-.q-text{font-size:clamp(20px,var(--qs,4.6cqw),64px);line-height:1.2;font-weight:600;max-width:95%}
-.a-text{font-size:clamp(28px,6cqw,80px);font-weight:700;color:#fff}
+.q-text,.a-text{font-family:"Libre Baskerville","Korinna",Georgia,"Times New Roman",serif;font-weight:700;color:#fff;text-transform:uppercase;text-shadow:.07em .07em 0 #000;letter-spacing:.01em}
+.q-text{font-size:clamp(20px,var(--qs,4.6cqw),64px);line-height:1.25;max-width:92%}
+.a-text{font-size:clamp(28px,5.5cqw,76px);line-height:1.2}
 .q-img{max-width:90%;max-height:46cqh;object-fit:contain}
 .q-vid{width:min(80cqw,calc(46cqh * 16 / 9));aspect-ratio:16/9;border:0;background:#000}
 .media-ctrls{display:flex;gap:10px;justify-content:center}
@@ -937,7 +941,13 @@ function startBoardFill() {
   const b = game.board, keys = [];
   for (let r = 0; r < b.numRows; r++) for (let c = 0; c < b.numCats; c++) keys.push(c + "-" + r);
   for (let i = keys.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [keys[i], keys[j]] = [keys[j], keys[i]]; }
-  fill = { shown: new Set() };
+  // wait on a blank board until the teacher clicks, presses Space or uses the clicker
+  fill = { shown: new Set(), waiting: true, keys };
+}
+function triggerFill() {
+  if (!fill || !fill.waiting) return;
+  fill.waiting = false;
+  const keys = fill.keys;
   playSfx("boardFill");
   const bursts = Math.min(6, keys.length), span = 2000;
   for (let k = 0; k < bursts; k++) {
@@ -1011,6 +1021,7 @@ function renderBoard(stage) {
   html += `</div>`;
   stage.innerHTML = html;
   fitBoard();
+  stage.querySelector(".board").addEventListener("click", () => { if (fill && fill.waiting) triggerFill(); });
   stage.querySelectorAll(".cat-h.hid").forEach(h => h.onclick = () => introAdvance());
   stage.querySelectorAll("[data-t]").forEach(btn => btn.onclick = () => {
     const [c, r] = btn.dataset.t.split(",").map(Number);
@@ -1091,6 +1102,7 @@ function closeIntro() {
   intro = null;
 }
 function introAdvance() {
+  if (fill && fill.waiting) { triggerFill(); return; }
   if (fill || introBusy() || !game || game.screen !== "board") return;
   if (!intro) {
     const first = game.revealed.indexOf(false);
@@ -1131,7 +1143,27 @@ function introBack() {
   slideIntro(prev, -1);
 }
 
+// The clicked tile grows from its spot on the board to fill the screen, like the TV show
+const ZOOM_MS = 650;
+function zoomFromTile(from, oldBoard) {
+  const stage = $("stage");
+  const el = stage.querySelector(".card, .splash");
+  if (!from || !el) return;
+  if (oldBoard) { oldBoard.classList.add("behind"); stage.prepend(oldBoard); }
+  const to = el.getBoundingClientRect();
+  el.classList.add("zooming");
+  const a = el.animate([
+    { transform: `translate(${from.left - to.left}px,${from.top - to.top}px) scale(${from.width / to.width},${from.height / to.height})` },
+    { transform: "none" }
+  ], { duration: ZOOM_MS, easing: "cubic-bezier(.3,.1,.3,1)" });
+  a.onfinish = a.oncancel = () => { el.classList.remove("zooming"); if (oldBoard) oldBoard.remove(); };
+}
+
 function openTile(c, r) {
+  const tileEl = document.querySelector(`.board .tile[data-t="${c},${r}"]`);
+  const from = tileEl ? tileEl.getBoundingClientRect() : null;
+  const oldBoard = document.querySelector("#stage .board");
+  if (tileEl) tileEl.classList.add("used");
   stopAllSound();
   snapshot();
   const t = game.board.categories[c].tiles[r];
@@ -1149,6 +1181,7 @@ function openTile(c, r) {
     playSfx("dailyDouble");
   } else game.screen = "question";
   render();
+  zoomFromTile(from, oldBoard);
 }
 
 function backToBoard() {
@@ -1186,6 +1219,12 @@ document.addEventListener("keydown", e => {
   if (!game || $("play").classList.contains("hidden")) return;
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+  if (game.screen === "board" && fill && fill.waiting &&
+      ["ArrowRight", "ArrowDown", "PageDown", "ArrowLeft", "ArrowUp", "PageUp", " "].includes(e.key)) {
+    e.preventDefault();
+    triggerFill();
+    return;
+  }
   if (game.screen === "board" && (intro || game.revealed.some(x => !x))) {
     const fwd = ["ArrowRight", "ArrowDown", "PageDown"].includes(e.key);
     const back = ["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key);
