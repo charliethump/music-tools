@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jeopardy Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='10' fill='%230a1f9e' stroke='%23000a5c' stroke-width='4'/%3E%3Ctext x='32' y='49' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23000' %3E$%3C/text%3E%3Ctext x='30' y='47' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23ffcc33'%3E$%3C/text%3E%3C/svg%3E">
 <style>
 :root{
@@ -20,7 +23,7 @@
   --line:#cdd4e4;
   --text:#18213a;
   --muted:#5b6682;
-  --value-font: Impact, Haettenschweiler, "Arial Narrow Bold", "Franklin Gothic Bold", sans-serif;
+  --value-font: Anton, Impact, Haettenschweiler, "Arial Narrow Bold", "Franklin Gothic Bold", sans-serif;
   --ui-font: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
   --panel-w: 360px;
 }
@@ -116,24 +119,21 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .team .sc.neg{color:#ff8a8a}
 .stage{flex:1;min-height:0;position:relative;container-type:size;padding:0 10px 10px;display:flex;flex-direction:column}
 
-/* board */
-.board{flex:1;min-height:0;display:grid;gap:6px;background:#000;border:6px solid #000}
-.cat-h,.tile{background:var(--board);display:grid;place-items:center;text-align:center;border:none;color:#fff;padding:4px}
-.cat-h{font-weight:800;font-size:clamp(12px,2.4cqw,28px);line-height:1.1;text-transform:none}
-.cat-h.hid{color:transparent;background:#071680;cursor:pointer}
-.cat-h.hid::after{content:"?";color:#4057c9;font-family:var(--value-font);font-size:clamp(18px,3.5cqw,44px)}
-.tile{font-family:var(--value-font);color:var(--gold);font-size:clamp(20px,4.6cqw,64px);text-shadow:3px 3px 0 #000}
-.tile:hover{background:#1530c4}
-.tile.used{color:transparent;text-shadow:none;background:#06127a}
-.tile.used:hover{background:#0a1a8e}
-.tile.pending{color:transparent;text-shadow:none;pointer-events:none}
-.tile.flip{animation:tileflip .4s ease-out}
-@keyframes tileflip{
-  0%{transform:perspective(600px) rotateX(0);color:transparent;text-shadow:none}
-  49%{transform:perspective(600px) rotateX(90deg);color:transparent;text-shadow:none}
-  50%{transform:perspective(600px) rotateX(-90deg);color:var(--gold)}
-  100%{transform:perspective(600px) rotateX(0)}
-}
+/* board - styled after the TV board */
+.board{flex:1;min-height:0;display:grid;gap:clamp(3px,.7cqw,9px);background:#000;border:clamp(4px,.8cqw,10px) solid #000}
+.cat-h,.tile{background:radial-gradient(ellipse at 50% 45%,#1a2df2 0%,#0a18d8 55%,#0610b4 100%);display:flex;align-items:center;justify-content:center;text-align:center;border:none;padding:4% 6%;overflow:hidden;min-width:0;min-height:0}
+.cat-h{font-family:var(--value-font);color:#fff;text-transform:uppercase;line-height:1.02;letter-spacing:.01em;text-shadow:.06em .06em 0 #000;overflow-wrap:normal;word-break:normal}
+.cat-h.hid{color:transparent;text-shadow:none;cursor:pointer}
+.tile{font-family:var(--value-font);color:#e5a84f;white-space:nowrap;letter-spacing:.01em;text-shadow:.06em .06em 0 #000;cursor:pointer;line-height:1}
+.tile:hover{filter:brightness(1.18)}
+.tile.used,.tile.pending{color:transparent;text-shadow:none}
+.tile.pending{pointer-events:none}
+
+/* category intro */
+#intro{position:fixed;inset:0;z-index:50;overflow:hidden;cursor:pointer}
+#intro .bg{position:absolute;inset:0;background:#000}
+.intro-panel{position:absolute;inset:0;transform-origin:0 0;background:radial-gradient(ellipse at 50% 45%,#1a2df2 0%,#0a18d8 55%,#0610b4 100%);display:flex;align-items:center;justify-content:center;padding:8vh 8vw;text-align:center;font-family:var(--value-font);color:#fff;text-transform:uppercase;line-height:1.02;text-shadow:.05em .05em 0 #000;overflow:hidden}
+.intro-panel span{display:block;max-width:100%}
 
 /* question & answer */
 .card{flex:1;min-height:0;background:var(--board);border:6px solid #000;display:flex;flex-direction:column;position:relative}
@@ -831,12 +831,12 @@ function applyDelta(i, delta) {
 }
 
 /* ---------- toolbar ---------- */
-$("pHome").onclick = () => { stopAllSound(); show("home"); };
+$("pHome").onclick = () => { stopAllSound(); closeIntro(); show("home"); };
 $("pUndo").onclick = undo;
 $("pStop").onclick = stopAllSound;
 $("pFloor").onclick = () => { game.floorZero = !game.floorZero; persistGame(); renderToolbar(); };
 $("pMute").onclick = () => { muted = !muted; if (muted) stopAllSound(); renderToolbar(); };
-$("pRevealAll").onclick = () => { snapshot(); game.revealed = game.revealed.map(() => true); persistGame(); render(); };
+$("pRevealAll").onclick = () => { closeIntro(); snapshot(); game.revealed = game.revealed.map(() => true); persistGame(); render(); };
 $("pFinal").onclick = () => { stopAllSound(); game.screen = "finalWager"; playSfx("finalJeopardy"); render(); };
 $("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
 document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
@@ -931,58 +931,204 @@ function renderSetup(stage) {
   };
 }
 
-/* ---------- board fill (dollar amounts flip in at random) ---------- */
+/* ---------- board fill: dollar amounts pop in at random, in bursts, over 2 seconds ---------- */
 let fill = null;
 function startBoardFill() {
   const b = game.board, keys = [];
   for (let r = 0; r < b.numRows; r++) for (let c = 0; c < b.numCats; c++) keys.push(c + "-" + r);
-  fill = { shown: new Set(), timers: [] };
-  playSfx("boardFill");
-  const span = 3000, startAt = 150;
-  // shuffle, then space the flips evenly with a little jitter
   for (let i = keys.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [keys[i], keys[j]] = [keys[j], keys[i]]; }
-  const step = keys.length > 1 ? span / (keys.length - 1) : 0;
-  keys.forEach((k, i) => {
-    const t = startAt + i * step + (Math.random() - .5) * step * .6;
-    fill.timers.push(setTimeout(() => {
+  fill = { shown: new Set() };
+  playSfx("boardFill");
+  const bursts = Math.min(6, keys.length), span = 2000;
+  for (let k = 0; k < bursts; k++) {
+    const group = keys.slice(Math.round(k * keys.length / bursts), Math.round((k + 1) * keys.length / bursts));
+    setTimeout(() => {
       if (!fill) return;
-      fill.shown.add(k);
-      const el = document.querySelector(`.tile[data-t="${k.replace("-", ",")}"]`);
-      if (el) { el.classList.remove("pending"); el.classList.add("flip"); }
+      group.forEach(key => {
+        fill.shown.add(key);
+        const el = document.querySelector(`.tile[data-t="${key.replace("-", ",")}"]`);
+        if (el) el.classList.remove("pending");
+      });
       if (fill.shown.size === keys.length) fill = null;
-    }, Math.max(0, t)));
-  });
+    }, bursts > 1 ? 150 + k * (span - 150) / (bursts - 1) : 0);
+  }
 }
 
+/* ---------- text fitting ---------- */
+function fits(el) { return el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1; }
+function fitText(el, max, min = 6) {
+  let lo = min, hi = Math.max(min, Math.floor(max));
+  el.style.fontSize = hi + "px";
+  if (fits(el)) return hi;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    el.style.fontSize = mid + "px";
+    if (fits(el)) lo = mid; else hi = mid;
+  }
+  el.style.fontSize = lo + "px";
+  return lo;
+}
+function fitBoard() {
+  const tiles = [...document.querySelectorAll(".board .tile")];
+  if (!tiles.length) return;
+  const b = game.board, h = tiles[0].clientHeight;
+  // size every dollar amount the same, based on the longest one
+  const longest = tiles.reduce((a, t) => t.textContent.length > a.textContent.length ? t : a, tiles[0]);
+  const keep = longest.className;
+  longest.classList.remove("used", "pending");
+  const fs = fitText(longest, h * 0.72);
+  longest.className = keep;
+  tiles.forEach(t => t.style.fontSize = fs + "px");
+  document.querySelectorAll(".board .cat-h").forEach(el => {
+    const real = el.dataset.name;
+    const was = el.textContent;
+    el.textContent = real;
+    fitText(el, h * 0.3);
+    el.textContent = was;
+  });
+}
+window.addEventListener("resize", debounce(() => { if (game && game.screen === "board") fitBoard(); }, 150));
+// re-fit once the board font finishes loading
+if (document.fonts) document.fonts.ready.then(() => { if (game && game.screen === "board") fitBoard(); });
+if (document.fonts) document.fonts.addEventListener("loadingdone", () => { if (game && game.screen === "board") fitBoard(); });
+
 /* ---------- board ---------- */
+function catName(c) { return game.board.categories[c].name || "Category " + (c + 1); }
 function renderBoard(stage) {
   const b = game.board;
-  let html = `<div class="board" style="grid-template-columns:repeat(${b.numCats},1fr);grid-template-rows:auto repeat(${b.numRows},1fr)">`;
+  let html = `<div class="board" style="grid-template-columns:repeat(${b.numCats},1fr);grid-template-rows:repeat(${b.numRows + 1},1fr)">`;
   for (let c = 0; c < b.numCats; c++) {
     const hid = !game.revealed[c];
-    html += `<div class="cat-h ${hid ? "hid" : ""}" data-rev="${c}" style="min-height:12cqh">${hid ? "" : esc(b.categories[c].name || "Category " + (c + 1))}</div>`;
+    html += `<div class="cat-h ${hid ? "hid" : ""}" data-rev="${c}" data-name="${esc(catName(c))}">${hid ? "" : esc(catName(c))}</div>`;
   }
   for (let r = 0; r < b.numRows; r++) {
     for (let c = 0; c < b.numCats; c++) {
       const used = game.used[c + "-" + r];
       const pending = fill && !fill.shown.has(c + "-" + r);
-      html += `<button class="tile ${used ? "used" : ""} ${pending ? "pending" : ""}" data-t="${c},${r}">${money(b.values[r])}</button>`;
+      html += `<button class="tile ${used ? "used" : ""} ${pending ? "pending" : ""}" data-t="${c},${r}">$${b.values[r]}</button>`;
     }
   }
   html += `</div>`;
   stage.innerHTML = html;
-  stage.querySelectorAll(".cat-h.hid").forEach(h => h.onclick = () => {
-    snapshot();
-    game.revealed[+h.dataset.rev] = true;
-    playSfx("categoryReveal");
-    persistGame();
-    render();
-  });
+  fitBoard();
+  stage.querySelectorAll(".cat-h.hid").forEach(h => h.onclick = () => introAdvance());
   stage.querySelectorAll("[data-t]").forEach(btn => btn.onclick = () => {
     const [c, r] = btn.dataset.t.split(",").map(Number);
     if (game.used[c + "-" + r] && !confirm("This question was already played. Open it again?")) return;
     openTile(c, r);
   });
+}
+
+/* ---------- category intro: full screen, swipe through, last one shrinks onto the board ---------- */
+let intro = null;
+const INTRO_MS = 500;
+function cellRect(c) {
+  const el = document.querySelector(`.cat-h[data-rev="${c}"]`);
+  return el ? el.getBoundingClientRect() : null;
+}
+function rectTransform(r) {
+  return `translate(${r.left}px,${r.top}px) scale(${r.width / innerWidth},${r.height / innerHeight})`;
+}
+function makePanel(c) {
+  const p = document.createElement("div");
+  p.className = "intro-panel";
+  const sp = document.createElement("span");
+  sp.textContent = catName(c);
+  p.append(sp);
+  return p;
+}
+function fitPanel(p) { fitText(p, innerHeight * 0.26, 20); }
+function introBusy() { return intro && intro.busy; }
+function openIntro(c) {
+  const ov = document.createElement("div");
+  ov.id = "intro";
+  ov.innerHTML = `<div class="bg"></div>`;
+  const p = makePanel(c);
+  ov.append(p);
+  document.body.append(ov);
+  fitPanel(p);
+  ov.onclick = () => introAdvance();
+  intro = { c, ov, panel: p, busy: true };
+  const r = cellRect(c);
+  ov.querySelector(".bg").animate([{ opacity: 0 }, { opacity: 1 }], { duration: INTRO_MS, fill: "both" });
+  const a = r
+    ? p.animate([{ transform: rectTransform(r) }, { transform: "none" }], { duration: INTRO_MS, easing: "ease-out" })
+    : p.animate([{ opacity: 0 }, { opacity: 1 }], { duration: INTRO_MS });
+  a.onfinish = () => { intro.busy = false; };
+  playSfx("categoryReveal");
+}
+function slideIntro(next, dir) {
+  const old = intro.panel, p = makePanel(next);
+  intro.ov.append(p);
+  fitPanel(p);
+  intro.busy = true;
+  const opts = { duration: INTRO_MS, easing: "ease-in-out" };
+  old.animate([{ transform: "translateX(0)" }, { transform: `translateX(${-dir * 100}%)` }], { ...opts, fill: "forwards" });
+  const a = p.animate([{ transform: `translateX(${dir * 100}%)` }, { transform: "translateX(0)" }], opts);
+  a.onfinish = () => { old.remove(); intro.busy = false; };
+  intro.panel = p;
+  intro.c = next;
+  stopAllSound();
+  playSfx("categoryReveal");
+}
+function shrinkIntro() {
+  const { c, ov, panel } = intro;
+  const r = cellRect(c);
+  intro.busy = true;
+  ov.querySelector(".bg").animate([{ opacity: 1 }, { opacity: 0 }], { duration: INTRO_MS, fill: "forwards" });
+  const a = r
+    ? panel.animate([{ transform: "none" }, { transform: rectTransform(r) }], { duration: INTRO_MS, easing: "ease-in", fill: "forwards" })
+    : panel.animate([{ opacity: 1 }, { opacity: 0 }], { duration: INTRO_MS, fill: "forwards" });
+  a.onfinish = () => {
+    game.revealed[c] = true;
+    persistGame();
+    closeIntro();
+    render();
+  };
+}
+function closeIntro() {
+  if (intro) intro.ov.remove();
+  intro = null;
+}
+function introAdvance() {
+  if (fill || introBusy() || !game || game.screen !== "board") return;
+  if (!intro) {
+    const first = game.revealed.indexOf(false);
+    if (first >= 0) openIntro(first);
+    return;
+  }
+  const cur = intro.c;
+  const next = game.revealed.findIndex((v, i) => !v && i !== cur);
+  if (next < 0) { shrinkIntro(); return; }
+  game.revealed[cur] = true;
+  persistGame();
+  render();
+  slideIntro(next, 1);
+}
+function introBack() {
+  if (fill || introBusy() || !game || game.screen !== "board") return;
+  if (!intro) {
+    // outside the intro, step back by re-hiding the last revealed category
+    const c = game.revealed.lastIndexOf(true);
+    if (c < 0) return;
+    game.revealed[c] = false;
+    persistGame();
+    render();
+    return;
+  }
+  const prev = game.revealed.lastIndexOf(true);
+  if (prev < 0) {
+    // back from the first category closes the intro
+    const ov = intro.ov;
+    intro.busy = true;
+    ov.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" }).onfinish = () => closeIntro();
+    stopAllSound();
+    return;
+  }
+  game.revealed[prev] = false;
+  persistGame();
+  render();
+  slideIntro(prev, -1);
 }
 
 function openTile(c, r) {
@@ -1040,25 +1186,12 @@ document.addEventListener("keydown", e => {
   if (!game || $("play").classList.contains("hidden")) return;
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
-  if (game.screen === "board" && game.revealed.some(x => !x)) {
+  if (game.screen === "board" && (intro || game.revealed.some(x => !x))) {
     const fwd = ["ArrowRight", "ArrowDown", "PageDown"].includes(e.key);
     const back = ["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key);
     if (fwd || back) {
       e.preventDefault();
-      if (fwd) {
-        const c = game.revealed.indexOf(false);
-        snapshot();
-        game.revealed[c] = true;
-        playSfx("categoryReveal");
-      } else {
-        const c = game.revealed.lastIndexOf(true);
-        if (c < 0) return;
-        snapshot();
-        game.revealed[c] = false;
-        stopAllSound();
-      }
-      persistGame();
-      render();
+      if (fwd) introAdvance(); else introBack();
       return;
     }
   }
