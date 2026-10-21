@@ -210,6 +210,8 @@ input[type=color]{width:38px;height:32px;border:1.5px solid var(--line);border-r
         <button class="fbtn" id="bDel" title="Delete">Delete beat</button>
         <span class="row" style="gap:4px"><button class="fbtn small" data-bn="-0.01">-10 ms</button><button class="fbtn small" data-bn="-0.002">-2 ms</button><button class="fbtn small" data-bn="0.002">+2 ms</button><button class="fbtn small" data-bn="0.01">+10 ms</button></span>
         <button class="fbtn" id="bSnapSel">Snap to hit</button>
+        <button class="fbtn" id="bErase">Erase selected stretch</button>
+        <button class="fbtn" id="bEraseEnd">Erase from playhead to end</button>
         <label class="fsnap"><input type="checkbox" id="bSnap" checked> Snap taps and drags to the nearest hit</label>
       </div>
       <div class="fmsg" id="bMsg"></div>
@@ -3046,9 +3048,9 @@ strip.addEventListener('pointerup',()=>{scrub=false;});
 function seekFromStrip(e){const r=strip.getBoundingClientRect();const t=(e.clientX-r.left)/r.width*duration();B.center=t-TL.pad;seek(t);}
 
 /* ================= Beat editor ================= */
-const B={open:false,span:8,center:0,tapping:false,taps:[],sel:-1,drag:-1,dragMoved:false,tapFrom:0};
+const B={range:null,rangeStart:null,open:false,span:8,center:0,tapping:false,taps:[],sel:-1,drag:-1,dragMoved:false,tapFrom:0};
 const bPanel=document.getElementById('beatPanel'),bCv=document.getElementById('bWave'),bMsg=document.getElementById('bMsg'),bTapBtn=document.getElementById('bTap');
-const B_HELP='Press <b>Tap from here</b> and tap T, Enter or your foot pedal on every beat. Stop with Space or Esc. Re-tapping a stretch replaces only the beats in that stretch. Drag a marker to fix it, or click one and use the nudge buttons.';
+const B_HELP='Press <b>Tap from here</b> and tap T, Enter or your foot pedal on every beat. Stop with Space or Esc. Re-tapping a stretch replaces only the beats in that stretch. Drag a marker to fix it, or click one and use the nudge buttons. Drag across an empty part of the waveform to select a stretch you want to erase.';
 function openBeats(){closeGrid();B.open=true;bPanel.hidden=false;B.center=ui.t-TL.pad;bMsg.innerHTML=B_HELP;drawBeatPanel(ui.t);}
 function closeBeats(){if(B.tapping)stopTapping();B.open=false;bPanel.hidden=true;redraw();}
 function bView(){return{a:B.center-B.span/2,b:B.center+B.span/2};}
@@ -3092,6 +3094,7 @@ function drawBeatPanel(vt){
     // nominal grid until tapped
     for(let g=Math.ceil(beatAt(a));timeAt(g)<a+B.span;g++){const x=Math.round(X(timeAt(g)));c.fillStyle='rgba(255,255,255,.12)';c.fillRect(x,8,1,h-8);}
   }
+  if(B.range){const x0=X(B.range.a),x1=X(B.range.b);c.fillStyle='rgba(255,90,90,.22)';c.fillRect(x0,0,x1-x0,h);c.fillStyle='rgba(255,120,120,.9)';c.fillRect(x0,0,1,h);c.fillRect(x1,0,1,h);}
   B.taps.forEach(tp=>{const x=X(tp);c.fillStyle='rgba(255,201,40,.9)';c.fillRect(Math.round(x)-1,h-22,3,22);});
   c.fillStyle='#FFC928';c.fillRect(Math.round(X(t))-1,0,2,h);
   // info
@@ -3101,7 +3104,11 @@ function drawBeatPanel(vt){
   document.querySelectorAll('[data-z]').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.z===B.span));
   document.getElementById('bDel').disabled=B.sel<0;document.getElementById('bSnapSel').disabled=B.sel<0||!song.buf;
   document.querySelectorAll('[data-bn]').forEach(b=>b.disabled=B.sel<0);
+  const nr=B.range?rangeCount():0;
+  const eb=document.getElementById('bErase');eb.disabled=!nr;eb.textContent=nr?`Erase ${nr} beat${nr>1?'s':''} in the stretch`:'Erase selected stretch';
+  document.getElementById('bEraseEnd').disabled=!S.beats.some(x=>x>=t-1e-6);
 }
+function rangeCount(){return S.beats.filter(x=>x>=B.range.a&&x<=B.range.b).length;}
 function lowerBound(a,x){let lo=0,hi=a.length;while(lo<hi){const m=(lo+hi)>>1;if(a[m]<x)lo=m+1;else hi=m;}return lo;}
 document.querySelectorAll('[data-z]').forEach(b=>b.addEventListener('click',()=>{B.span=+b.dataset.z;if(B.sel>=0)B.center=S.beats[B.sel];drawBeatPanel(songTime());}));
 // onset snap: the steepest rise in a short envelope near the time
@@ -3122,16 +3129,21 @@ bCv.addEventListener('pointerdown',e=>{
   if(B.tapping||ui.exporting)return;
   const t=bTimeAt(e),i=nearestBeat(t,8);
   dragStartX=e.clientX;B.dragMoved=false;
-  if(i>=0){B.sel=i;B.drag=i;bCv.setPointerCapture(e.pointerId);}
-  else{B.sel=-1;seek(t+TL.pad);}
+  if(i>=0){B.sel=i;B.drag=i;B.range=null;bCv.setPointerCapture(e.pointerId);}
+  else{B.sel=-1;B.rangeStart=t;bCv.setPointerCapture(e.pointerId);}
   drawBeatPanel(songTime());
 });
 bCv.addEventListener('pointermove',e=>{
+  if(B.rangeStart!==null){if(Math.abs(e.clientX-dragStartX)<4&&!B.range)return;const t=bTimeAt(e);B.range={a:Math.min(B.rangeStart,t),b:Math.max(B.rangeStart,t)};drawBeatPanel(songTime());return;}
   if(B.drag<0)return;if(Math.abs(e.clientX-dragStartX)<3&&!B.dragMoved)return;
   B.dragMoved=true;const i=B.drag,lo=i>0?S.beats[i-1]+0.05:-Infinity,hi=i+1<S.beats.length?S.beats[i+1]-0.05:Infinity;
   S.beats[i]=Math.max(lo,Math.min(hi,bTimeAt(e)));beatsChanged(false);drawBeatPanel(songTime());
 });
 bCv.addEventListener('pointerup',e=>{
+  if(B.rangeStart!==null){const st=B.rangeStart;B.rangeStart=null;
+    if(B.range){const n=rangeCount();bMsg.innerHTML=n?`${n} beat${n>1?'s':''} selected. Press <b>Erase</b> (or Delete) to remove them, then <b>Tap from here</b> to tap that stretch again.`:'No beats in that stretch.';}
+    else seek(st+TL.pad);
+    drawBeatPanel(songTime());return;}
   if(B.drag<0)return;const i=B.drag;B.drag=-1;
   if(B.dragMoved){if(document.getElementById('bSnap').checked)S.beats[i]=clampBeat(i,snapOnset(S.beats[i]));beatsChanged(true);bMsg.innerHTML='Moved. Turn on <b>Click on every beat</b> and play to check it.';}
   else seek(S.beats[i]+TL.pad);
@@ -3150,6 +3162,14 @@ function delBeat(){
   if(B.sel<0)return;S.beats.splice(B.sel,1);B.sel=Math.min(B.sel,S.beats.length-1);beatsChanged(true);
   bMsg.textContent='Deleted. Everything after it moved one beat earlier.';
 }
+function eraseBeats(test,what){
+  const before=S.beats.length;S.beats=S.beats.filter(x=>!test(x));const n=before-S.beats.length;
+  B.range=null;B.sel=-1;if(!n){bMsg.textContent='No beats there to erase.';return;}
+  beatsChanged(true);
+  bMsg.innerHTML=`Erased ${n} beat${n>1?'s':''} ${what}. Bar numbers after a gap are off until you fill it, so put the playhead just before it and press <b>Tap from here</b>. Undo brings them back.`;
+}
+document.getElementById('bErase').addEventListener('click',()=>{if(!B.range)return;const r=B.range;eraseBeats(x=>x>=r.a&&x<=r.b,'in the stretch');ui.t=Math.max(0,r.a+TL.pad-2);redraw();});
+document.getElementById('bEraseEnd').addEventListener('click',()=>{const t=songTime()-TL.pad,n=S.beats.filter(x=>x>=t-1e-6).length;if(!n)return;if(!confirm(`Erase all ${n} beats from the playhead to the end?`))return;eraseBeats(x=>x>=t-1e-6,'from the playhead on');});
 document.getElementById('bAdd').addEventListener('click',()=>addBeat(songTime()-TL.pad));
 document.getElementById('bDel').addEventListener('click',delBeat);
 document.getElementById('bSnapSel').addEventListener('click',()=>{if(B.sel<0)return;const was=S.beats[B.sel];S.beats[B.sel]=clampBeat(B.sel,snapOnset(was,0.06));beatsChanged(true);bMsg.textContent=Math.abs(S.beats[B.sel]-was)<0.0005?'No clear hit nearby, so it stayed put.':`Snapped ${((S.beats[B.sel]-was)*1000).toFixed(0)} ms.`;});
@@ -3160,7 +3180,7 @@ bTapBtn.addEventListener('click',()=>B.tapping?stopTapping():startTapping());
 function startTapping(){
   pause();
   if(!song.buf){bMsg.textContent='Load the audio first.';return;}
-  B.taps=[];B.tapping=true;B.sel=-1;bTapBtn.textContent='Stop tapping';bTapBtn.classList.add('on');
+  B.taps=[];B.tapping=true;B.sel=-1;B.range=null;bTapBtn.textContent='Stop tapping';bTapBtn.classList.add('on');
   B.tapFrom=Math.max(0,ui.t-(S.beats.length?2:0));
   bMsg.innerHTML='Tap <b>T</b>, <b>Enter</b> or your foot pedal on every beat. <b>Space</b> or <b>Esc</b> stops.';
   ui.t=B.tapFrom;play();
@@ -3634,12 +3654,13 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(e.key===' '){e.preventDefault();ui.playing?pause():play();return;}
-  if(e.key==='Escape'){if(G.smode){G.smode=false;G.step=null;renderGrid();}return;}
+  if(e.key==='Escape'){if(B.range){B.range=null;drawBeatPanel(ui.t);return;}if(G.smode){G.smode=false;G.step=null;renderGrid();}return;}
   if(['ArrowRight','PageDown'].includes(e.key)){e.preventDefault();jumpBar(1);return;}
   if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();jumpBar(-1);return;}
   if(e.key==='Home'){e.preventDefault();seek(0);return;}
   if(B.open){
     if(e.key==='b'||e.key==='B'){addBeat(songTime()-TL.pad);return;}
+    if((e.key==='Delete'||e.key==='Backspace')&&B.range){e.preventDefault();document.getElementById('bErase').click();return;}
     if((e.key==='Delete'||e.key==='Backspace')&&B.sel>=0){e.preventDefault();delBeat();return;}
     if(e.key==='['||e.key===']'){nudge((e.key===']'?1:-1)*(e.shiftKey?0.002:0.01));return;}
     if((e.key==='t'||e.key==='T')){startTapping();return;}
