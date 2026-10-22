@@ -225,6 +225,10 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .sh-file{font-family:Consolas,monospace;font-size:14px;color:var(--gold)}
 .small-ctl{padding:3px 10px;font-size:14px;margin-left:4px}
 .share-dlg .sd-row input{font-size:15px;font-weight:400;font-family:Consolas,monospace}
+#play.preview{grid-template-columns:1fr}
+#play.preview .panel,#play.preview .scores,#play.preview .show-panel{display:none !important}
+#play.preview .toolbar .tb:not(#pPrevBack):not(#pFinal):not(#pStop){display:none}
+.preview-tag{color:var(--gold);font-weight:700;font-size:13px;margin-right:6px}
 .show-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:12px 6px;border-radius:8px 0 0 8px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;z-index:20}
 </style>
 </head>
@@ -264,6 +268,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
     <button class="btn" id="bShare">Share link</button>
     <span class="spacer"></span>
     <span id="bSaved" class="hint" style="margin:0"></span>
+    <button class="btn" id="bPreview">Preview board</button>
     <button class="btn primary" id="bPlay">Play this board</button>
   </div>
   <div class="tabs">
@@ -293,6 +298,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
   <div class="main">
     <div class="toolbar">
       <span class="ttl" id="pTitle"></span>
+      <button class="tb hidden" id="pPrevBack">Back to builder</button>
       <button class="tb" id="pHome">Home</button>
       <button class="tb" id="pUndo">Undo</button>
       <button class="tb" id="pStop">Stop sound</button>
@@ -861,7 +867,7 @@ let qAudioEl = null;
 let markTimer = null;
 
 const persistGame = debounce(() => {
-  if (!game) return;
+  if (!game || game.preview) return;
   const st = {
     title: game.board.title, teams: game.teams, active: game.active, used: game.used,
     revealed: game.revealed, floorZero: game.floorZero, screen: game.screen === "setup" ? "setup" : "board",
@@ -904,11 +910,33 @@ async function resumeGame() {
 
 function enterPlay() {
   show("play");
-  $("pTitle").textContent = game.board.title;
+  $("play").classList.toggle("preview", !!game.preview);
+  $("pPrevBack").classList.toggle("hidden", !game.preview);
+  $("pTitle").innerHTML = (game.preview ? `<span class="preview-tag">PREVIEW</span>` : "") + esc(game.board.title);
   const fr = $("buzzFrame");
-  if (!fr.src) { fr.src = "https://buzzin.live/"; fr.addEventListener("load", helloBridge); }
+  if (!game.preview && !fr.src) { fr.src = "https://buzzin.live/"; fr.addEventListener("load", helloBridge); }
   render();
 }
+
+/* ---------- preview: playable board with no scoring, buzzers, fill or category intro ---------- */
+function startPreview(b) {
+  game = {
+    preview: true, board: b, teams: [], active: 0, used: {},
+    revealed: Array(b.numCats).fill(true), floorZero: false, screen: "board",
+    current: null, cue: false, tried: [], final: { wagers: [], done: [] }, dd: null
+  };
+  fill = null;
+  enterPlay();
+}
+$("bPreview").onclick = () => startPreview(normalizeBoard(clone(board)));
+$("pPrevBack").onclick = () => {
+  stopAllSound();
+  closeIntro();
+  game = null;
+  $("play").classList.remove("preview");
+  show("builder");
+  renderBuilder();
+};
 
 function snapshot() {
   undoStack.push(clone({ teams: game.teams, active: game.active, used: game.used, revealed: game.revealed, final: game.final }));
@@ -934,7 +962,11 @@ $("pStop").onclick = stopAllSound;
 $("pFloor").onclick = () => { game.floorZero = !game.floorZero; persistGame(); renderToolbar(); };
 $("pMute").onclick = () => { muted = !muted; if (muted) stopAllSound(); renderToolbar(); };
 $("pRevealAll").onclick = () => { closeIntro(); snapshot(); game.revealed = game.revealed.map(() => true); persistGame(); render(); };
-$("pFinal").onclick = () => { stopAllSound(); game.screen = "finalWager"; playSfx("finalJeopardy"); render(); };
+$("pFinal").onclick = () => {
+  stopAllSound();
+  if (game.preview) { game.screen = "finalQuestion"; playSfx("finalThink"); render(); return; }
+  game.screen = "finalWager"; playSfx("finalJeopardy"); render();
+};
 $("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
 document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
 $("pReload").onclick = async () => { if (await appConfirm("Reload buzzin.live? You may need to rejoin or recreate your game.", "Reload")) { bridge.on = false; bridge.locked = null; setBridgeStat(); $("buzzFrame").src = "https://buzzin.live/"; } };
@@ -950,6 +982,7 @@ function renderToolbar() {
   $("pMute").classList.toggle("on", muted);
   $("pRevealAll").classList.toggle("hidden", !(playing && g.screen === "board" && g.revealed.some(x => !x)));
   $("pFinal").classList.toggle("hidden", !(playing && g.board.final.enabled && g.screen === "board"));
+  if (g.preview) { $("pRevealAll").classList.add("hidden"); $("pEnd").classList.add("hidden"); }
   $("pEnd").classList.toggle("hidden", !(playing && g.screen === "board"));
   $("pUndo").disabled = !undoStack.length;
   $("pUndo").style.opacity = undoStack.length ? 1 : .5;
@@ -958,7 +991,7 @@ function renderToolbar() {
 /* ---------- scores ---------- */
 function renderScores() {
   const box = $("pScores");
-  if (game.screen === "setup") { box.innerHTML = ""; return; }
+  if (game.screen === "setup" || game.preview) { box.innerHTML = ""; return; }
   box.innerHTML = game.teams.map((t, i) => `
     <div class="team ${i === game.active ? "active" : ""}">
       <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}:</button>
@@ -1295,8 +1328,17 @@ function openTile(c, r) {
   const tileEl = document.querySelector(`.board .tile[data-t="${c},${r}"]`);
   const from = tileEl ? tileEl.getBoundingClientRect() : null;
   const oldBoard = document.querySelector("#stage .board");
-  if (tileEl) tileEl.classList.add("used");
   stopAllSound();
+  if (game.preview) {
+    game.current = { c, r, value: game.board.values[r], dd: game.board.categories[c].tiles[r].dd };
+    game.dd = null;
+    game.screen = "question";
+    if (game.current.dd) playSfx("dailyDouble");
+    render();
+    zoomFromTile(from, oldBoard);
+    return;
+  }
+  if (tileEl) tileEl.classList.add("used");
   snapshot();
   const t = game.board.categories[c].tiles[r];
   game.used[c + "-" + r] = true;
@@ -1318,7 +1360,7 @@ function openTile(c, r) {
 
 function backToBoard() {
   stopAllSound();
-  if (bridge.on) lockAndClear();
+  if (bridge.on && !game.preview) lockAndClear();
   game.screen = "board";
   game.current = null;
   game.cue = false;
@@ -1366,7 +1408,7 @@ document.addEventListener("keydown", e => {
       return;
     }
   }
-  if (e.code === "Space" && game.screen === "question" && !game.dd) {
+  if (e.code === "Space" && game.screen === "question" && !game.dd && !game.preview) {
     e.preventDefault();
     if (bridge.on) { bridge.holdUntil = 0; sendBridge(bridge.locked === false ? "lock" : "unlock"); }
     else setCue(!game.cue);
@@ -1431,6 +1473,7 @@ function currentTile() { const { c, r } = game.current; return game.board.catego
 function labelFor() {
   const { c, value } = game.current;
   const cat = game.board.categories[c].name || "Category " + (c + 1);
+  if (game.preview && game.current.dd) return cat + " - " + money(value) + " - Daily Double";
   return game.dd ? cat + " - Daily Double" : cat + " - " + money(value);
 }
 function pointsNow() { return game.dd ? (parseInt(game.dd.wager, 10) || 0) : game.current.value; }
@@ -1441,7 +1484,7 @@ function renderQuestion(stage) {
   stage.innerHTML = `
     <div class="card ${game.cue ? "ring" : ""}">
       <div class="card-label">${esc(labelFor())}</div>
-      ${dd
+      ${game.preview ? "" : dd
         ? `<div class="cue dd">${esc(game.teams[dd.team].name)} wagered ${money(pointsNow())}</div>`
         : `<div class="cue ${game.cue ? "open" : ""}">${game.cue ? "Buzzers open - buzz in!" : "Buzzers locked - listen to the whole question"}</div>`}
       <div class="card-body">
@@ -1449,8 +1492,8 @@ function renderQuestion(stage) {
         ${mediaHTML(t)}
       </div>
       <div class="controls">
-        ${teamButtons(dd ? dd.team : null)}
-        ${!dd && bridge.on ? `<span class="space-hint">Space: unlock / lock buzzers</span>` : ""}
+        ${game.preview ? "" : teamButtons(dd ? dd.team : null)}
+        ${!game.preview && !dd && bridge.on ? `<span class="space-hint">Space: unlock / lock buzzers</span>` : ""}
         <button class="ctl gold" id="toAnswer">Show answer</button>
         <button class="ctl" id="toBoard">Back to board</button>
       </div>
@@ -1546,7 +1589,7 @@ function renderAnswer(stage) {
         ${t.aImg ? `<img class="q-img" src="${t.aImg}" alt="">` : ""}
       </div>
       <div class="controls">
-        ${teamButtons(game.dd ? game.dd.team : null)}
+        ${game.preview ? "" : teamButtons(game.dd ? game.dd.team : null)}
         <button class="ctl" id="toQuestion">Show question again</button>
         <button class="ctl gold" id="toBoard">Back to board</button>
       </div>
@@ -1618,15 +1661,29 @@ function renderFinalQuestion(stage) {
         ${f.image ? `<img class="q-img" src="${f.image}" alt="">` : ""}
       </div>
       <div class="controls">
-        <button class="ctl" id="fBack">Back to wagers</button>
+        <button class="ctl" id="fBack">${game.preview ? "Back to board" : "Back to wagers"}</button>
         <button class="ctl gold" id="fAns">Show answer</button>
       </div>
     </div>`;
-  $("fBack").onclick = () => { stopAllSound(); game.screen = "finalWager"; render(); };
+  $("fBack").onclick = () => { if (game.preview) return backToBoard(); stopAllSound(); game.screen = "finalWager"; render(); };
   $("fAns").onclick = () => { stopAllSound(); game.screen = "finalAnswer"; render(); };
 }
 function renderFinalAnswer(stage) {
   const f = game.board.final, fs = game.final;
+  if (game.preview) {
+    stage.innerHTML = `
+      <div class="splash">
+        <h2>Final Jeopardy answer</h2>
+        <div class="a-text" style="white-space:pre-line">${esc(f.answer || "(no answer entered)")}</div>
+        <div style="display:flex;gap:10px">
+          <button class="ctl" id="fBackQ">Show question again</button>
+          <button class="ctl gold" id="toBoard">Back to board</button>
+        </div>
+      </div>`;
+    $("fBackQ").onclick = () => { game.screen = "finalQuestion"; render(); };
+    $("toBoard").onclick = backToBoard;
+    return;
+  }
   stage.innerHTML = `
     <div class="splash">
       <h2>Final Jeopardy answer</h2>
