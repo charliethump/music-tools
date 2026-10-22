@@ -148,9 +148,14 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .card.ring{box-shadow:inset 0 0 0 14px var(--open)}
 .card-label{padding:10px 18px;font-weight:700;font-size:clamp(14px,2cqw,24px)}
 .cue{margin:0 18px;padding:10px 14px;border-radius:8px;text-align:center;font-weight:800;font-size:clamp(16px,2.6cqw,34px);background:#2c3354;color:#c9cfe6;border:3px solid #444c70}
-.cue.open{background:var(--open);color:#fff;border-color:#0d6b30;font-size:clamp(22px,4cqw,52px)}
+/* buzzer state: a slim color block with a lock icon, no text */
+.cue.lockbar{padding:0;height:clamp(22px,4.2cqh,40px);display:flex;align-items:center;justify-content:center;background:#c81e1e;border-color:#7f1010}
+.cue.lockbar.open{background:var(--open);border-color:#0d6b30}
+.cue.lockbar svg{height:72%;width:auto;display:block}
 .cue.dd{background:var(--gold);color:#1a1a1a;border-color:#a88300}
-.card-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12px 24px;text-align:center}
+.card-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:14px;padding:12px 24px;text-align:center;overflow:hidden}
+.card-body > *{flex-shrink:0}
+.card-body > .q-img{flex:0 1 auto;min-height:0}
 .q-text,.a-text{font-family:"Libre Baskerville","Korinna",Georgia,"Times New Roman",serif;font-weight:700;color:#fff;text-transform:uppercase;text-shadow:.07em .07em 0 #000;letter-spacing:.01em}
 .q-text{font-size:clamp(20px,var(--qs,4.6cqw),64px);line-height:1.25;max-width:92%}
 .a-text{font-size:clamp(28px,5.5cqw,76px);line-height:1.2}
@@ -1369,6 +1374,13 @@ function backToBoard() {
 }
 
 /* ---------- cue ---------- */
+function lockIcon(open) {
+  // closed padlock when locked, shackle swung open when unlocked
+  const shackle = open
+    ? `<path d="M7 11V7a5 5 0 0 1 9.6-1.9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`
+    : `<path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${shackle}<rect x="4.5" y="11" width="15" height="11" rx="2" fill="#fff"/><circle cx="12" cy="16.5" r="1.6" fill="${open ? "#16a34a" : "#c81e1e"}"/></svg>`;
+}
 function setCue(open) {
   if (game.screen !== "question" || game.dd) return;
   if (game.cue === open) return;
@@ -1378,7 +1390,8 @@ function setCue(open) {
   const card = document.querySelector(".card");
   if (cue) {
     cue.classList.toggle("open", open);
-    cue.textContent = open ? "Buzzers open - buzz in!" : "Buzzers locked - listen to the whole question";
+    cue.innerHTML = lockIcon(open);
+    cue.title = open ? "Buzzers open" : "Buzzers locked";
   }
   if (card) card.classList.toggle("ring", open);
 }
@@ -1486,7 +1499,7 @@ function renderQuestion(stage) {
       <div class="card-label">${esc(labelFor())}</div>
       ${game.preview ? "" : dd
         ? `<div class="cue dd">${esc(game.teams[dd.team].name)} wagered ${money(pointsNow())}</div>`
-        : `<div class="cue ${game.cue ? "open" : ""}">${game.cue ? "Buzzers open - buzz in!" : "Buzzers locked - listen to the whole question"}</div>`}
+        : `<div class="cue lockbar ${game.cue ? "open" : ""}" title="${game.cue ? "Buzzers open" : "Buzzers locked"}">${lockIcon(game.cue)}</div>`}
       <div class="card-body">
         ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)}">${esc(t.q)}</div>` : ""}
         ${mediaHTML(t)}
