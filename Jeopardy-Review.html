@@ -6,7 +6,7 @@
 <title>Jeopardy Review</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Lexend:wght@600&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='10' fill='%230a1f9e' stroke='%23000a5c' stroke-width='4'/%3E%3Ctext x='32' y='49' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23000' %3E$%3C/text%3E%3Ctext x='30' y='47' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23ffcc33'%3E$%3C/text%3E%3C/svg%3E">
 <style>
 :root{
@@ -122,6 +122,10 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .team .nm{display:block;width:100%;background:none;border:none;color:#fff;font-weight:700;font-size:clamp(14px,1.6vw,22px)}
 .team .sc{display:block;width:100%;background:none;border:none;color:#fff;font-weight:700;font-size:clamp(18px,2.2vw,32px)}
 .team .sc.neg{color:#ff8a8a}
+.team.has-life{padding-left:clamp(34px,3vw,46px);padding-right:clamp(34px,3vw,46px)}
+.team .life{position:absolute;top:50%;right:6px;transform:translateY(-50%);width:clamp(26px,2.4vw,38px);height:clamp(26px,2.4vw,38px);padding:2px;border:2px solid #ffcc33;border-radius:8px;background:#14206e;cursor:pointer}
+.team .life:hover{background:#24409a}
+.team .life svg{width:100%;height:100%;display:block}
 .stage{flex:1;min-height:0;position:relative;container-type:size;padding:0 10px 10px;display:flex;flex-direction:column}
 
 /* board - styled after the TV board */
@@ -160,7 +164,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .card-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:14px;padding:12px 24px;text-align:center;overflow:hidden}
 .card-body > *{flex-shrink:0}
 .card-body > .q-img{flex:0 1 auto;min-height:0}
-.q-text,.a-text{font-family:"Libre Baskerville","Korinna",Georgia,"Times New Roman",serif;font-weight:700;color:#fff;text-transform:uppercase;text-shadow:.07em .07em 0 #000;letter-spacing:.01em}
+.q-text,.a-text{font-family:Lexend,"Segoe UI",Verdana,Arial,sans-serif;font-weight:600;color:#fff;text-transform:uppercase;text-shadow:.07em .07em 0 #000;letter-spacing:.01em}
 .q-text{font-size:clamp(20px,var(--qs,4.6cqw),64px);line-height:1.25;max-width:92%}
 .a-text{font-size:clamp(28px,5.5cqw,76px);line-height:1.2}
 .q-img{max-width:90%;max-height:46cqh;object-fit:contain}
@@ -1036,15 +1040,32 @@ function renderToolbar() {
 }
 
 /* ---------- scores ---------- */
+// Lifeline symbol: two teammates with a speech bubble
+const LIFE_ICON = `<svg viewBox="0 0 32 32" aria-hidden="true">
+  <circle cx="10" cy="15" r="4" fill="#fff"/><path d="M2.5 29c0-4.4 3.4-7.5 7.5-7.5s7.5 3.1 7.5 7.5z" fill="#fff"/>
+  <circle cx="22" cy="15" r="4" fill="#fff"/><path d="M14.5 29c0-4.4 3.4-7.5 7.5-7.5s7.5 3.1 7.5 7.5z" fill="#fff"/>
+  <path d="M17 1.5h12a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-6l-3.5 3v-3H17a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z" fill="#ffcc33"/>
+  <text x="23" y="8.8" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="7.5" fill="#111">?</text>
+</svg>`;
 function renderScores() {
   const box = $("pScores");
   if (game.screen === "setup" || game.preview) { box.innerHTML = ""; return; }
   box.innerHTML = game.teams.map((t, i) => `
-    <div class="team ${i === game.active ? "active" : ""}">
+    <div class="team ${i === game.active ? "active" : ""} ${t.lifeline ? "has-life" : ""}">
+      ${t.lifeline ? `<button class="life" data-life="${i}" title="Use lifeline: ask a teammate">${LIFE_ICON}</button>` : ""}
       <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}:</button>
       <button class="sc ${t.score < 0 ? "neg" : ""}" data-edit="${i}" title="Click to type a new score">${money(t.score)}</button>
     </div>`).join("");
   box.querySelectorAll("[data-act]").forEach(b => b.onclick = () => { snapshot(); game.active = +b.dataset.act; persistGame(); render(); });
+  box.querySelectorAll("[data-life]").forEach(b => b.onclick = async () => {
+    const i = +b.dataset.life;
+    if (!(await appConfirm(game.teams[i].name + ": are you sure you want to ask a friend?", "Yes"))) return;
+    snapshot();
+    game.teams[i].lifeline = false;
+    persistGame();
+    renderScores();
+    renderToolbar();
+  });
   box.querySelectorAll("[data-edit]").forEach(b => b.onclick = async () => {
     const i = +b.dataset.edit;
     const n = await editScore(game.teams[i].name, game.teams[i].score);
@@ -1125,6 +1146,7 @@ function renderSetup(stage) {
         <select id="sCount">${[2, 3, 4].map(n => `<option ${n === g.teams.length ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <div class="team-inputs">${g.teams.map((t, i) => `<label>Team ${i + 1} name<input type="text" data-tn="${i}" value="${esc(t.name)}"></label>`).join("")}</div>
       <label class="chk"><input type="checkbox" id="sFloor" ${g.floorZero ? "checked" : ""}> Scores stop at $0 (no negative scores)</label>
+      <label class="chk"><input type="checkbox" id="sLife" ${g.lifelines ? "checked" : ""}> Lifelines: each team gets one "Ask a teammate"</label>
       <label class="chk"><input type="checkbox" id="sHide" checked> Hide categories at the start so I can reveal them one at a time</label>
       <button class="big-btn gold" id="sGo">Start game</button>
     </div></div>`;
@@ -1137,6 +1159,8 @@ function renderSetup(stage) {
   stage.querySelectorAll("[data-tn]").forEach(inp => inp.oninput = () => { g.teams[+inp.dataset.tn].name = inp.value || "Team " + (+inp.dataset.tn + 1); });
   $("sFloor").onchange = e => { g.floorZero = e.target.checked; };
   $("sGo").onclick = async () => {
+    g.lifelines = $("sLife").checked;
+    g.teams.forEach(t => { t.lifeline = g.lifelines; });
     g.revealed = Array(g.board.numCats).fill(!$("sHide").checked);
     g.screen = "board";
     undoStack = [];
