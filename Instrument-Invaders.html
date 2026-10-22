@@ -59,21 +59,21 @@
     font-family: var(--pixel);
     font-size: calc(var(--u) * 10);
     color: var(--brass);
-    background: transparent;
+    background: var(--space); /* solid, so the stars don't show through */
     border: calc(var(--u) * 2) solid currentColor;
     padding: calc(var(--u) * 9) calc(var(--u) * 14);
     cursor: pointer;
   }
   .btn small { display: block; margin-top: calc(var(--u) * 6); font-size: calc(var(--u) * 6); color: var(--dim); }
-  .btn:hover { background: rgba(255, 255, 255, .08); }
+  .btn:hover { background: #1a1438; }
   .btn:focus-visible, .mini:focus-visible, #initials:focus-visible { outline: calc(var(--u) * 2) dashed var(--ink); outline-offset: calc(var(--u) * 3); }
   .btn.easy { color: var(--woodwinds); }
   .btn.medium { color: var(--brass); }
   .btn.hard { color: var(--strings); }
   .btn.britten { color: #c9d1e8; }
-  .btn.britten.locked { opacity: .35; cursor: not-allowed; }
   .btn.quiet { color: var(--dim); }
-  .btn:disabled { opacity: .4; cursor: wait; }
+  .btn:disabled { filter: brightness(.45); cursor: wait; }
+  .btn.britten.locked { filter: brightness(.4); cursor: not-allowed; }
   .btn.gone, #logo span.gone { visibility: hidden; }
   #fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
   #front { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
