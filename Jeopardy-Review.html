@@ -135,8 +135,12 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .tile.pending{pointer-events:none}
 
 /* category intro */
-#intro{position:fixed;inset:0;z-index:50;overflow:hidden;cursor:pointer}
-#intro .bg{position:absolute;inset:0;background:#000}
+#intro,#fjIntro{position:fixed;inset:0;z-index:50;overflow:hidden;cursor:pointer}
+#intro .bg,#fjIntro .bg{position:absolute;inset:0;background:#000}
+.splash.fj-wager{justify-content:space-between}
+.fj-cat{margin:0;font-family:var(--value-font);font-weight:400;text-transform:uppercase;color:#fff;text-shadow:.05em .05em 0 #000;font-size:clamp(40px,9cqw,120px);line-height:1.05;max-width:95%}
+.fj-mid{display:flex;flex-direction:column;align-items:center;gap:18px}
+.fj-foot{font-family:var(--value-font);text-transform:uppercase;letter-spacing:.08em;color:#cdd6ff;font-size:clamp(16px,2.4cqw,30px);text-shadow:.06em .06em 0 #000}
 .intro-panel{position:absolute;inset:0;transform-origin:0 0;background:radial-gradient(ellipse at 50% 45%,#1a2df2 0%,#0a18d8 55%,#0610b4 100%);display:flex;align-items:center;justify-content:center;padding:8vh 8vw;text-align:center;font-family:var(--value-font);color:#fff;text-transform:uppercase;line-height:1.02;text-shadow:.05em .05em 0 #000;overflow:hidden}
 .intro-panel span{display:block;max-width:100%}
 
@@ -160,7 +164,11 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .q-text{font-size:clamp(20px,var(--qs,4.6cqw),64px);line-height:1.25;max-width:92%}
 .a-text{font-size:clamp(28px,5.5cqw,76px);line-height:1.2}
 .q-img{max-width:90%;max-height:46cqh;object-fit:contain}
-.q-vid{width:min(80cqw,calc(46cqh * 16 / 9));aspect-ratio:16/9;border:0;background:#000}
+.vid-wrap{flex:1 1 0 !important;min-height:0;width:100%;container-type:size;display:flex;align-items:center;justify-content:center}
+.q-vid{width:min(90cqw,calc(100cqh * 16 / 9));aspect-ratio:16/9;border:0;background:#000}
+.media-btn{border-color:#9fb0f5}
+#stage:focus{outline:none}
+.ctl-sep{width:2px;align-self:stretch;background:rgba(255,255,255,.25);margin:0 4px}
 .media-ctrls{display:flex;gap:10px;justify-content:center}
 .play-btn{padding:10px 22px;border-radius:999px;border:3px solid #fff;background:#0d1a7a;color:#fff;font-weight:700;font-size:clamp(14px,2cqw,22px)}
 .play-btn:hover{background:#1530c4}
@@ -466,7 +474,7 @@ function videoSrc(url, start, end, autoplay) {
   if (!url) return null;
   let m = url.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([\w-]{11})/);
   if (m) {
-    const q = new URLSearchParams({ rel: "0", modestbranding: "1", playsinline: "1" });
+    const q = new URLSearchParams({ rel: "0", modestbranding: "1", playsinline: "1", disablekb: "1" });
     const s = parseTime(start), e = parseTime(end);
     if (s) q.set("start", s);
     if (e) q.set("end", e);
@@ -969,7 +977,7 @@ function applyDelta(i, delta) {
 }
 
 /* ---------- toolbar ---------- */
-$("pHome").onclick = () => { stopAllSound(); closeIntro(); show("home"); };
+$("pHome").onclick = () => { stopAllSound(); closeIntro(); if (fjIntro) { fjIntro.remove(); fjIntro = null; } show("home"); };
 $("pUndo").onclick = undo;
 $("pStop").onclick = stopAllSound;
 $("pFloor").onclick = () => { game.floorZero = !game.floorZero; persistGame(); renderToolbar(); };
@@ -977,9 +985,34 @@ $("pMute").onclick = () => { muted = !muted; if (muted) stopAllSound(); renderTo
 $("pRevealAll").onclick = () => { closeIntro(); snapshot(); game.revealed = game.revealed.map(() => true); persistGame(); render(); };
 $("pFinal").onclick = () => {
   stopAllSound();
-  if (game.preview) { game.screen = "finalQuestion"; render(); return; }
-  game.screen = "finalWager"; playSfx("finalJeopardy"); render();
+  playSfx("finalJeopardy");
+  openFinalIntro();
 };
+
+/* ---------- Final Jeopardy intro: full-screen title until any click or key ---------- */
+let fjIntro = null;
+function openFinalIntro() {
+  const ov = document.createElement("div");
+  ov.id = "fjIntro";
+  ov.innerHTML = `<div class="bg"></div>`;
+  const p = document.createElement("div");
+  p.className = "intro-panel";
+  p.innerHTML = `<span>Final Jeopardy</span>`;
+  ov.append(p);
+  document.body.append(ov);
+  fitText(p, innerHeight * 0.3, 20);
+  ov.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400 });
+  ov.onclick = closeFinalIntro;
+  fjIntro = ov;
+}
+function closeFinalIntro() {
+  if (!fjIntro) return;
+  const ov = fjIntro;
+  fjIntro = null;
+  game.screen = game.preview ? "finalQuestion" : "finalWager";
+  render();
+  ov.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" }).onfinish = () => ov.remove();
+}
 $("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
 document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
 $("pReload").onclick = async () => { if (await appConfirm("Reload buzzin.live? You may need to rejoin or recreate your game.", "Reload")) { bridge.on = false; bridge.locked = null; setBridgeStat(); $("buzzFrame").src = "https://buzzin.live/"; } };
@@ -1404,6 +1437,20 @@ function setCue(open) {
   }
   if (card) card.classList.toggle("ring", open);
 }
+// After a click into a video, hand keyboard focus back to the board so Space reaches the game
+// instead of pausing the video
+window.addEventListener("blur", () => {
+  setTimeout(() => {
+    const a = document.activeElement;
+    if (!a || !a.classList || !a.classList.contains("q-vid")) return;
+    setTimeout(() => {
+      if (document.activeElement !== a) return;
+      const st = $("stage");
+      st.setAttribute("tabindex", "-1");
+      st.focus({ preventScroll: true });
+    }, 350);
+  }, 0);
+});
 // Option 2: first click into the buzzin panel while a question is up turns the cue on
 window.addEventListener("blur", () => {
   setTimeout(() => {
@@ -1413,6 +1460,7 @@ window.addEventListener("blur", () => {
 });
 document.addEventListener("keydown", e => {
   if (!game || $("play").classList.contains("hidden")) return;
+  if (fjIntro) { e.preventDefault(); closeFinalIntro(); return; }
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
   if (game.screen === "board" && fill && fill.waiting &&
@@ -1450,12 +1498,15 @@ function mediaHTML(t) {
   let h = "";
   if (t.qImg) h += `<img class="q-img" src="${t.qImg}" alt="">`;
   const vs = videoSrc(t.video, t.vStart, t.vEnd, false);
-  if (vs) h += `<iframe class="q-vid" src="${vs}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`;
-  const ctrls = [];
-  if (t.qAudio) ctrls.push(`<button class="play-btn" id="qAudioBtn">Play sound</button><button class="play-btn" id="qAudioRe">Restart</button>`);
-  if (vs) ctrls.push(`<button class="play-btn" id="qVidRe">Replay clip</button>`);
-  if (ctrls.length) h += `<div class="media-ctrls">${ctrls.join("")}</div>`;
+  if (vs) h += `<div class="vid-wrap"><iframe class="q-vid" src="${vs}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe></div>`;
   return h;
+}
+// Media buttons live in the bottom bar so a large video or picture can never push them off screen
+function mediaCtrlsHTML(t) {
+  const ctrls = [];
+  if (t.qAudio) ctrls.push(`<button class="ctl media-btn" id="qAudioBtn">Play sound</button><button class="ctl media-btn" id="qAudioRe">Restart sound</button>`);
+  if (videoSrc(t.video, t.vStart, t.vEnd, false)) ctrls.push(`<button class="ctl media-btn" id="qVidRe">Replay clip</button>`);
+  return ctrls.length ? ctrls.join("") + `<span class="ctl-sep"></span>` : "";
 }
 function wireMedia(t) {
   if (qAudioEl) { qAudioEl.pause(); qAudioEl = null; }
@@ -1514,6 +1565,7 @@ function renderQuestion(stage) {
         ${mediaHTML(t)}
       </div>
       <div class="controls">
+        ${mediaCtrlsHTML(t)}
         ${game.preview ? "" : teamButtons(dd ? dd.team : null)}
         ${!game.preview && !dd && bridge.on ? `<span class="space-hint">Space: unlock / lock buzzers</span>` : ""}
         <button class="ctl gold" id="toAnswer">Show answer</button>
@@ -1656,9 +1708,9 @@ function renderDDWager(stage) {
 function renderFinalWager(stage) {
   const f = game.board.final, fs = game.final;
   stage.innerHTML = `
-    <div class="splash">
-      <h1>FINAL JEOPARDY</h1>
-      <h2>${esc(f.category)}</h2>
+    <div class="splash fj-wager">
+      <h1 class="fj-cat">${esc(f.category || "Final Jeopardy")}</h1>
+      <div class="fj-mid">
       <p style="margin:0;font-size:clamp(14px,2cqw,22px)">Each team decides how much to bet.</p>
       <div class="wager-row">
         ${game.teams.map((t, i) => `<div class="wager"><span class="wn">${esc(t.name)}</span><span class="ws">has ${money(t.score)}</span>
@@ -1668,6 +1720,8 @@ function renderFinalWager(stage) {
         <button class="ctl gold" id="fGo">Show question</button>
         <button class="ctl" id="toBoard">Back to board</button>
       </div>
+      </div>
+      <div class="fj-foot">Final Jeopardy</div>
     </div>`;
   stage.querySelectorAll("[data-fw]").forEach(inp => inp.oninput = () => { fs.wagers[+inp.dataset.fw] = inp.value; persistGame(); });
   $("fGo").onclick = () => { stopAllSound(); game.screen = "finalQuestion"; render(); };
