@@ -1407,6 +1407,7 @@
         g.bombs.splice(i, 1);
         loseLife('Ouch!');
         if (state !== 'playing') return;
+        break; // losing a life clears every sour note, so there's nothing left to move this frame
       }
     }
     if (g.britten) updateBritten(dt);
@@ -1559,6 +1560,7 @@
         g.clefs.splice(i, 1);
         loseLife('Ouch!');
         if (state !== 'playing') return;
+        break; // losing a life clears every clef, so there's nothing left to move this frame
       }
     }
   }
@@ -2490,27 +2492,32 @@
 
   let last = performance.now();
   function frame(now) {
+    // Ask for the next frame first, so an unexpected error can never freeze the game
+    requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    updatePauseBtn();
-    musicSchedule();
-    if (state === 'playing' || state === 'wavebreak') {
-      update(dt);
-      render();
-    } else if (state === 'dying') {
-      updateEffects(dt);
-      render();
-      game.dieTimer -= dt;
-      if (game.dieTimer <= 0) showOver();
-    } else if ((state === 'title' || state === 'handoff') && bg) {
-      updateTitle(dt);
-      renderTitle();
-    } else if (needsRender && bg) {
-      clearFront();
-      render();
-      needsRender = false;
+    try {
+      updatePauseBtn();
+      musicSchedule();
+      if (state === 'playing' || state === 'wavebreak') {
+        update(dt);
+        render();
+      } else if (state === 'dying') {
+        updateEffects(dt);
+        render();
+        game.dieTimer -= dt;
+        if (game.dieTimer <= 0) showOver();
+      } else if ((state === 'title' || state === 'handoff') && bg) {
+        updateTitle(dt);
+        renderTitle();
+      } else if (needsRender && bg) {
+        clearFront();
+        render();
+        needsRender = false;
+      }
+    } catch (err) {
+      console.error('Instrument Invaders hit an error and kept going:', err);
     }
-    requestAnimationFrame(frame);
   }
 
   /* ===== Start up ===== */
