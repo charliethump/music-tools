@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jeopardy Review</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://www.youtube.com">
+<link rel="preconnect" href="https://i.ytimg.com">
+<link rel="preconnect" href="https://www.google.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Lexend:wght@600&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='10' fill='%230a1f9e' stroke='%23000a5c' stroke-width='4'/%3E%3Ctext x='32' y='49' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23000' %3E$%3C/text%3E%3Ctext x='30' y='47' text-anchor='middle' font-family='Impact,Arial Black,sans-serif' font-size='46' fill='%23ffcc33'%3E$%3C/text%3E%3C/svg%3E">
@@ -309,6 +312,22 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 @keyframes timeup-pulse{from{opacity:.25}to{opacity:.95}}
 #play.preview .toolbar .tb:not(#pPrevBack):not(#pFinal):not(#pStop){display:none}
 .preview-tag{color:var(--gold);font-weight:700;font-size:13px;margin-right:6px}
+/* practice round */
+.pcap{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 14px;padding:10px 14px;background:#f2b705;color:#111;border-top:3px solid #8a6500;position:relative;z-index:1}
+.pcap .pc-step{font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
+.pcap .pc-text{font-family:Lexend,"Segoe UI",Arial,sans-serif;font-weight:600;font-size:clamp(16px,2.4cqw,28px);text-align:center;flex:1 1 320px}
+.pcap .ctl{border-color:#111;color:#111;padding:6px 12px}
+.pcap .ctl.gold{background:#111;color:#f2b705;border-color:#111}
+.splash .pcap{border-radius:10px;border:3px solid #8a6500;width:min(900px,95%)}
+.card-label.practice-label{color:#f2b705}
+.pc-teams{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:95%}
+.pc-team{background:#000;border:3px solid #59607a;padding:8px 16px;font-weight:700;font-size:clamp(16px,2.2cqw,26px);min-width:150px;text-align:center}
+.pc-team.ok{border-color:#22c55e}
+.pc-team .st{display:block;font-size:.65em;font-weight:600;opacity:.85}
+.pc-team.ok .st{color:#4ade80;opacity:1}
+.pc-miss{color:#ff8a8a;font-weight:700;font-size:clamp(14px,1.8cqw,20px);text-align:center}
+.pc-icon{width:clamp(80px,12cqw,160px)}
+.pc-icon svg{width:100%;height:auto;display:block}
 .show-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;padding:12px 6px;border-radius:8px 0 0 8px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;z-index:20}
 </style>
 </head>
@@ -388,6 +407,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
       <button class="tb" id="pMute">Sounds: on</button>
       <button class="tb hidden" id="pRevealAll">Reveal all categories</button>
       <span class="spacer"></span>
+      <button class="tb hidden" id="pPractice">Practice</button>
       <button class="tb hidden" id="pBuzz" title="Show or tuck away the buzzin.live panel"></button>
       <button class="tb hidden" id="pFinal">Final Jeopardy</button>
       <button class="tb hidden" id="pEnd">Final standings</button>
@@ -962,7 +982,7 @@ let qAudioEl = null;
 let markTimer = null;
 
 function writeGame() {
-  if (!game || game.preview) return Promise.resolve();
+  if (!game || game.preview || game.practice) return Promise.resolve(); // practice never saves
   const st = {
     title: game.board.title, teams: game.teams, active: game.active, used: game.used,
     revealed: game.revealed, floorZero: game.floorZero, screen: game.screen === "setup" ? "setup" : "board",
@@ -1137,6 +1157,11 @@ function renderToolbar() {
   $("pRevealAll").classList.toggle("hidden", !(playing && g.screen === "board" && g.revealed.some(x => !x)));
   $("pFinal").classList.toggle("hidden", !(playing && g.board.final.enabled && g.screen === "board"));
   if (g.preview) { $("pRevealAll").classList.add("hidden"); $("pEnd").classList.add("hidden"); }
+  const pp = $("pPractice");
+  pp.classList.toggle("hidden", !!g.preview || !(g.practice || g.screen === "board"));
+  pp.textContent = g.practice ? "End practice" : "Practice";
+  pp.classList.toggle("on", !!g.practice);
+  if (g.practice) ["pFinal", "pEnd", "pRevealAll"].forEach(id => $(id).classList.add("hidden"));
   const pb = $("pBuzz"), tucked = $("play").classList.contains("sliver");
   pb.classList.toggle("hidden", !!g.preview);
   pb.classList.toggle("linked", bridge.on);
@@ -1286,6 +1311,11 @@ function render() {
   else if (s === "finalQuestion") renderFinalQuestion(stage);
   else if (s === "finalAnswer") renderFinalAnswer(stage);
   else if (s === "end") renderEnd(stage);
+  else if (s === "practiceCheck") renderPracticeCheck(stage);
+  else if (s === "practiceDD") renderPracticeSplash(stage, "DAILY DOUBLE", "");
+  else if (s === "practiceLife") renderPracticeSplash(stage, "ASK A TEAMMATE", LIFE_ICON);
+  else if (s === "practiceReady") renderPracticeSplash(stage, "LET'S PLAY!", "");
+  if (game.practice) decoratePractice(stage);
 }
 
 /* ---------- setup ---------- */
@@ -1325,9 +1355,40 @@ function renderSetup(stage) {
     await DB.set("gameBoard", g.board);
     persistGame();
     startBoardFill();
+    prewarmVideos(g.board);
     if (bridge.on) setPanelMode("sliver");
     render();
   };
+}
+
+/* ---------- video prewarm: load each clue's YouTube player once, off screen, at game start ---------- */
+// This puts YouTube's player files and thumbnails in the browser cache, so clue videos appear faster later
+function prewarmVideos(b) {
+  const srcs = [];
+  b.categories.slice(0, b.numCats).forEach(cat => cat.tiles.slice(0, b.numRows).forEach(t => {
+    const src = videoSrc(t.video, t.vStart, t.vEnd, false);
+    if (src && !srcs.includes(src)) srcs.push(src);
+  }));
+  let box = $("vidWarm");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "vidWarm";
+    box.setAttribute("aria-hidden", "true");
+    box.style.cssText = "position:fixed;left:-10000px;top:0;width:320px;height:180px;overflow:hidden;pointer-events:none";
+    document.body.append(box);
+  }
+  box.innerHTML = "";
+  // load a few at a time so the school network isn't flooded
+  let i = 0;
+  const next = () => {
+    if (i >= srcs.length) return;
+    const fr = document.createElement("iframe");
+    fr.width = 320; fr.height = 180; fr.tabIndex = -1;
+    fr.src = srcs[i++];
+    fr.onload = () => setTimeout(() => { fr.remove(); next(); }, 1500);
+    box.append(fr);
+  };
+  next(); next();
 }
 
 /* ---------- board fill: dollar amounts pop in at random, in bursts, over 2 seconds ---------- */
@@ -1634,7 +1695,7 @@ function matchTeam(text) {
 }
 function currentBuzz() {
   if (!game || game.preview || game.screen !== "question" || game.dd || !bridge.on) return null;
-  if (bridge.locked === false || bridge.awaitClear) return null;
+  if (bridge.awaitClear) return null;
   for (let k = 0; k < bridge.buzzes.length; k++) {
     const text = bridge.buzzes[k], idx = matchTeam(text);
     if (idx >= 0 && game.tried.includes(idx)) continue;
@@ -1694,6 +1755,11 @@ document.addEventListener("keydown", e => {
   if (!game || $("play").classList.contains("hidden")) return;
   if (document.querySelector("dialog[open]")) return; // pop-up boxes handle their own keys
   if (fjIntro) { e.preventDefault(); closeFinalIntro(); return; }
+  if (game.practice && ["ArrowRight", "ArrowDown", "PageDown", "ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) {
+    e.preventDefault();
+    practiceGo(game.practice.step + (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key) ? -1 : 1));
+    return;
+  }
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
   if (game.screen === "board" && fill && fill.waiting &&
@@ -1779,8 +1845,9 @@ function showMark(ok) {
   markTimer = setTimeout(() => m.remove(), 1100);
 }
 
-function currentTile() { const { c, r } = game.current; return game.board.categories[c].tiles[r]; }
+function currentTile() { if (game.current.practice) return PRACTICE_TILE; const { c, r } = game.current; return game.board.categories[c].tiles[r]; }
 function labelFor() {
+  if (game.current.practice) return "Practice round - doesn't count";
   const { c, value } = game.current;
   const cat = game.board.categories[c].name || "Category " + (c + 1);
   if (game.preview && game.current.dd) return cat + " - " + money(value) + " - Daily Double";
@@ -2110,6 +2177,131 @@ function renderEnd(stage) {
   };
 }
 
+/* ===================== Practice round ===================== */
+const PRACTICE_TILE = { q: "What is your music teacher's name?", a: "Mr. Larson", qImg: "", qAudio: "", video: "", vStart: "", vEnd: "", aImg: "", dd: false };
+const PRACTICE_VALUE = 100;
+const PRACTICE_TEXT = {
+  check: "Buzzer check: each team, press your buzzer once.",
+  wait: "Red means wait. Listen to the whole question before you buzz.",
+  buzz: "When the bar turns green, buzz in! The first team to buzz gets to answer.",
+  wrong: "A wrong answer loses points, and the other teams get a chance to buzz.",
+  right: "A right answer wins points!",
+  dd: "Daily Double: only the team that picked it answers, and they choose how much to bet.",
+  life: "Lifeline: once per game, your team can ask a teammate for help.",
+  ready: "That's it. Let's play!"
+};
+function practiceSteps() {
+  const steps = [];
+  if (bridge.on) steps.push("check");
+  steps.push("wait", "buzz", "wrong", "right");
+  const hasDD = game.board.categories.slice(0, game.board.numCats).some(c => c.tiles.slice(0, game.board.numRows).some(t => t.dd));
+  if (hasDD) steps.push("dd");
+  if (game.teams.some(t => t.lifeline)) steps.push("life");
+  steps.push("ready");
+  return steps;
+}
+function startPractice() {
+  if (!game || game.preview || game.practice) return;
+  stopAllSound();
+  closeIntro();
+  game.practice = { saved: stateNow(), undo: undoStack, redo: redoStack, steps: practiceSteps(), step: 0, checked: [], missed: [] };
+  undoStack = []; redoStack = [];
+  game.teams.forEach(t => { t.score = 0; }); // practice starts everyone at $0; real scores come back at the end
+  practiceGo(0);
+}
+function endPractice() {
+  if (!game || !game.practice) return;
+  const p = game.practice;
+  stopAllSound();
+  Object.assign(game, p.saved);
+  undoStack = p.undo; redoStack = p.redo;
+  game.practice = null;
+  game.screen = "board"; game.current = null; game.tried = []; game.cue = false; game.dd = null;
+  if (bridge.on) lockAndClear();
+  render();
+}
+function practiceGo(i) {
+  const p = game.practice;
+  if (!p) return;
+  if (i < 0) i = 0;
+  if (i >= p.steps.length) { endPractice(); return; }
+  const prev = p.steps[p.step], step = p.steps[i];
+  p.step = i;
+  const onClue = ["wait", "buzz", "wrong", "right"].includes(step);
+  const fresh = step === "wait" || !["question", "answer"].includes(game.screen) || !["wait", "buzz", "wrong", "right"].includes(prev);
+  if (step === "check") {
+    game.screen = "practiceCheck";
+    p.checked = []; p.missed = [];
+    bridge.holdUntil = 0; bridge.awaitClear = false;
+    sendBridge("clear");
+    setTimeout(() => sendBridge("unlock"), 200);
+  } else if (onClue) {
+    if (fresh) {
+      game.current = { c: -1, r: -1, value: PRACTICE_VALUE, practice: true };
+      game.tried = []; game.cue = false; game.dd = null;
+      game.screen = "question";
+      if (bridge.on) lockAndClear();
+    }
+  } else {
+    game.screen = step === "dd" ? "practiceDD" : step === "life" ? "practiceLife" : "practiceReady";
+    if (step === "dd") playSfx("dailyDouble");
+  }
+  render();
+}
+function buzzName(text) { return String(text).replace(/\+?\s*\d+(?:\.\d+)?\s*s\b/g, "").replace(/^\s*\d+[.)]?\s+/, "").trim(); }
+function practiceCheckBuzzes() {
+  const p = game.practice;
+  if (!bridge.buzzes.length) return;
+  bridge.buzzes.forEach(text => {
+    const idx = matchTeam(text);
+    if (idx >= 0) { if (!p.checked.includes(idx)) p.checked.push(idx); }
+    else { const n = buzzName(text); if (n && !p.missed.includes(n)) p.missed.push(n); }
+  });
+  // reset so the next team can buzz
+  sendBridge("clear");
+  setTimeout(() => sendBridge("unlock"), 200);
+  render();
+}
+function renderPracticeCheck(stage) {
+  const p = game.practice;
+  stage.innerHTML = `
+    <div class="splash">
+      <h1 style="font-size:clamp(40px,8cqw,100px)">BUZZER CHECK</h1>
+      <div class="pc-teams">${game.teams.map((t, i) => {
+        const ok = p.checked.includes(i);
+        return `<div class="pc-team ${ok ? "ok" : ""}">${esc(t.name)}<span class="st">${ok ? "&#10003; buzzer works" : "waiting..."}</span></div>`;
+      }).join("")}</div>
+      ${p.missed.length ? `<div class="pc-miss">Not on a team: ${p.missed.map(esc).join(", ")}<br><span style="font-weight:400">Check the spelling of that buzzin nickname or the team name.</span></div>` : ""}
+    </div>`;
+}
+function renderPracticeSplash(stage, title, icon) {
+  stage.innerHTML = `
+    <div class="splash">
+      ${icon ? `<div class="pc-icon">${icon}</div>` : ""}
+      <h1 style="font-size:clamp(40px,9cqw,120px)">${esc(title)}</h1>
+    </div>`;
+}
+// Add the caption strip and practice controls to whatever practice screen is showing
+function decoratePractice(stage) {
+  const p = game.practice, step = p.steps[p.step];
+  const tb = stage.querySelector("#toBoard");
+  if (tb) tb.remove();
+  const label = stage.querySelector(".card-label");
+  if (label) label.classList.add("practice-label");
+  const last = p.step === p.steps.length - 1;
+  const cap = document.createElement("div");
+  cap.className = "pcap";
+  cap.innerHTML = `<span class="pc-step">Practice ${p.step + 1} of ${p.steps.length}</span>
+    <span class="pc-text">${esc(PRACTICE_TEXT[step])}</span>
+    <button class="ctl" id="pcBack" ${p.step === 0 ? "disabled style=opacity:.4" : ""}>Back</button>
+    <button class="ctl gold" id="pcNext">${last ? "End practice" : "Next"}</button>`;
+  const controls = stage.querySelector(".card .controls");
+  if (controls) controls.before(cap); else (stage.querySelector(".splash") || stage).append(cap);
+  $("pcBack").onclick = () => practiceGo(p.step - 1);
+  $("pcNext").onclick = () => practiceGo(p.step + 1);
+}
+$("pPractice").onclick = () => { if (game.practice) endPractice(); else startPractice(); };
+
 /* ===================== Buzzin Bridge (optional extension) ===================== */
 const bridge = { on: false, locked: null, holdUntil: 0, buzzes: [], awaitClear: false, awaitTimer: null, version: "" };
 // Clearing in buzzin can unlock the buzzers, so clear first, then keep them locked for a moment
@@ -2150,12 +2342,22 @@ window.addEventListener("message", e => {
   if (d.type === "state") {
     bridge.locked = !!d.locked;
     if (!bridge.locked && Date.now() < bridge.holdUntil) { sendBridge("lock"); return; }
+    // outside an open question (setup, board, answers, Daily Doubles, Final Jeopardy) buzzers stay locked,
+    // so they're locked the moment a game is created and players start joining
+    if (!bridge.locked && game && !game.preview && game.screen !== "practiceCheck" && (game.screen !== "question" || game.dd)) { sendBridge("lock"); return; }
     if (game && game.screen === "question" && !game.dd) setCue(!bridge.locked);
     refreshBuzzUI();
   }
   if (d.type === "buzzes") {
     bridge.buzzes = Array.isArray(d.list) ? d.list.map(String) : [];
     if (bridge.awaitClear && !bridge.buzzes.length) bridge.awaitClear = false;
+    if (game && game.practice && game.screen === "practiceCheck") { practiceCheckBuzzes(); return; }
+    // buzzin only locks itself on the first buzz of a round, so after a re-unlock
+    // the board locks it when the next eligible team buzzes
+    if (game && !game.preview && game.screen === "question" && !game.dd && bridge.locked === false && currentBuzz()) {
+      sendBridge("lock");
+      setCue(false);
+    }
     refreshBuzzUI();
   }
   if (d.type === "dump") {
