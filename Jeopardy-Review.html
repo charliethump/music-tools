@@ -112,7 +112,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 #play.sliver .panel{border:none;overflow:hidden}
 #play.sliver .panel-head{display:none}
 #play.sliver .panel iframe{flex:1 0 auto;width:400px;min-width:400px}
-.cue.lockbar.buzz{background:#f2b705;border-color:#8a6500;color:#111;font-family:var(--value-font);font-size:clamp(20px,4.2cqh,44px);letter-spacing:.04em;height:auto;min-height:clamp(22px,4.2cqh,40px);text-transform:uppercase}
+.cue.lockbar.buzz{background:#f2b705;border-color:#8a6500;color:#111;font-family:var(--value-font);font-size:calc(var(--bar-h) * .62);line-height:1;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
 .cue.lockbar.buzz .gap{font-size:.6em;margin-left:.6em;opacity:.8;text-transform:none}
 .team.buzzed{border-color:#ffcc33;animation:buzzpulse .75s ease-in-out infinite alternate}
 @keyframes buzzpulse{from{box-shadow:0 0 0 0 rgba(255,204,51,0)}to{box-shadow:0 0 30px 10px rgba(255,204,51,.9)}}
@@ -170,9 +170,12 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .card-label{padding:10px 18px;font-weight:700;font-size:clamp(14px,2cqw,24px)}
 .cue{margin:0 18px;padding:10px 14px;border-radius:8px;text-align:center;font-weight:800;font-size:clamp(16px,2.6cqw,34px);background:#2c3354;color:#c9cfe6;border:3px solid #444c70}
 /* buzzer state: a slim color block with a lock icon, no text */
-.cue.lockbar{padding:0;height:clamp(22px,4.2cqh,40px);display:flex;align-items:center;justify-content:center;background:#c81e1e;border-color:#7f1010}
+.cue.lockbar{--bar-h:clamp(30px,5.6cqh,54px);padding:0;height:var(--bar-h);display:flex;align-items:center;justify-content:center;background:#c81e1e;border-color:#7f1010}
 .cue.lockbar.open{background:var(--open);border-color:#0d6b30}
-.cue.lockbar svg{height:72%;width:auto;display:block}
+.cue.lockbar svg{height:62%;width:auto;display:block}
+/* fill-in-the-blank: runs of 2+ underscores become one solid line */
+.blank{display:inline-block;width:var(--bw,4em);height:.9em;border-bottom:.09em solid currentColor;vertical-align:baseline;margin:0 .08em;filter:drop-shadow(.06em .06em 0 #000)}
+.cat-h.done{color:transparent;text-shadow:none}
 .cue.dd{background:var(--gold);color:#1a1a1a;border-color:#a88300}
 .card-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:14px;padding:12px 24px;text-align:center;overflow:hidden}
 .card-body > *{flex-shrink:0}
@@ -339,6 +342,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
       <button class="tb hidden" id="pPrevBack">Back to builder</button>
       <button class="tb" id="pHome">Home</button>
       <button class="tb" id="pUndo">Undo</button>
+      <button class="tb" id="pRedo">Redo</button>
       <button class="tb" id="pStop">Stop sound</button>
       <button class="tb" id="pFloor">Stop at $0: off</button>
       <button class="tb" id="pMute">Sounds: on</button>
@@ -943,7 +947,7 @@ function startSetup(b) {
     final: { wagers: [], done: [] },
     dd: null
   };
-  undoStack = [];
+  undoStack = []; redoStack = [];
   enterPlay();
 }
 
@@ -956,7 +960,7 @@ async function resumeGame() {
     revealed: st.revealed || [], floorZero: !!st.floorZero, screen: "board", current: null,
     cue: false, tried: [], final: st.final || { wagers: [], done: [] }, dd: null
   };
-  undoStack = st.undoStack || [];
+  undoStack = st.undoStack || []; redoStack = [];
   enterPlay();
 }
 
@@ -990,13 +994,25 @@ $("pPrevBack").onclick = () => {
   renderBuilder();
 };
 
+let redoStack = [];
+function stateNow() { return clone({ teams: game.teams, active: game.active, used: game.used, revealed: game.revealed, final: game.final }); }
 function snapshot() {
-  undoStack.push(clone({ teams: game.teams, active: game.active, used: game.used, revealed: game.revealed, final: game.final }));
+  undoStack.push(stateNow());
   if (undoStack.length > 60) undoStack.shift();
+  redoStack = []; // a new action replaces anything that could be redone
 }
 function undo() {
   const s = undoStack.pop();
   if (!s) return;
+  redoStack.push(stateNow());
+  Object.assign(game, s);
+  persistGame();
+  render();
+}
+function redo() {
+  const s = redoStack.pop();
+  if (!s) return;
+  undoStack.push(stateNow());
   Object.assign(game, s);
   persistGame();
   render();
@@ -1010,6 +1026,7 @@ function applyDelta(i, delta) {
 /* ---------- toolbar ---------- */
 $("pHome").onclick = () => { stopAllSound(); closeIntro(); if (fjIntro) { fjIntro.remove(); fjIntro = null; } show("home"); };
 $("pUndo").onclick = undo;
+$("pRedo").onclick = redo;
 $("pStop").onclick = stopAllSound;
 $("pFloor").onclick = () => { game.floorZero = !game.floorZero; persistGame(); renderToolbar(); };
 $("pMute").onclick = () => { muted = !muted; if (muted) stopAllSound(); renderToolbar(); };
@@ -1084,6 +1101,8 @@ function renderToolbar() {
   $("pEnd").classList.toggle("hidden", !(playing && g.screen === "board"));
   $("pUndo").disabled = !undoStack.length;
   $("pUndo").style.opacity = undoStack.length ? 1 : .5;
+  $("pRedo").disabled = !redoStack.length;
+  $("pRedo").style.opacity = redoStack.length ? 1 : .5;
 }
 
 /* ---------- scores ---------- */
@@ -1100,7 +1119,7 @@ function renderScores() {
   box.innerHTML = game.teams.map((t, i) => `
     <div class="team ${i === game.active ? "active" : ""} ${t.lifeline ? "has-life" : ""} ${buzzTeam() === i ? "buzzed" : ""}">
       ${t.lifeline ? `<button class="life" data-life="${i}" title="Use lifeline: ask a teammate">${LIFE_ICON}</button>` : ""}
-      <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}:</button>
+      <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}</button>
       <button class="sc ${t.score < 0 ? "neg" : ""}" data-edit="${i}" title="Click to type a new score">${money(t.score)}</button>
     </div>`).join("");
   box.querySelectorAll("[data-act]").forEach(b => b.onclick = () => { snapshot(); game.active = +b.dataset.act; persistGame(); render(); });
@@ -1210,7 +1229,7 @@ function renderSetup(stage) {
     g.teams.forEach(t => { t.lifeline = g.lifelines; });
     g.revealed = Array(g.board.numCats).fill(!$("sHide").checked);
     g.screen = "board";
-    undoStack = [];
+    undoStack = []; redoStack = [];
     await DB.set("gameBoard", g.board);
     persistGame();
     startBoardFill();
@@ -1293,7 +1312,9 @@ function renderBoard(stage) {
   let html = `<div class="board" style="grid-template-columns:repeat(${b.numCats},1fr);grid-template-rows:repeat(${b.numRows + 1},1fr)">`;
   for (let c = 0; c < b.numCats; c++) {
     const hid = !game.revealed[c];
-    html += `<div class="cat-h ${hid ? "hid" : ""}" data-rev="${c}" data-name="${esc(catName(c))}">${hid ? "" : esc(catName(c))}</div>`;
+    // once every clue in a category has been played, its name leaves the board
+    const done = !hid && !game.preview && Array.from({ length: b.numRows }, (_, r) => game.used[c + "-" + r]).every(Boolean);
+    html += `<div class="cat-h ${hid ? "hid" : ""} ${done ? "done" : ""}" data-rev="${c}" data-name="${esc(catName(c))}">${hid || done ? "" : esc(catName(c))}</div>`;
   }
   for (let r = 0; r < b.numRows; r++) {
     for (let c = 0; c < b.numCats; c++) {
@@ -1600,6 +1621,10 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------- question / answer ---------- */
+// Escape clue text and turn any run of two or more underscores into one solid blank line
+function clueHTML(text) {
+  return esc(text).replace(/_{2,}/g, m => `<span class="blank" style="--bw:${Math.min(8, Math.max(2.5, m.length * .55)).toFixed(2)}em" aria-label="blank"></span>`);
+}
 function qSize(text) {
   const n = (text || "").length;
   return n < 50 ? "5.2cqw" : n < 100 ? "4.2cqw" : n < 170 ? "3.4cqw" : "2.7cqw";
@@ -1675,7 +1700,7 @@ function renderQuestion(stage) {
         ? `<div class="cue dd">${esc(game.teams[dd.team].name)} wagered ${money(pointsNow())}</div>`
         : cueBarHTML()}
       <div class="card-body">
-        ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)}">${esc(t.q)}</div>` : ""}
+        ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)}">${clueHTML(t.q)}</div>` : ""}
         ${mediaHTML(t)}
       </div>
       <div class="controls">
@@ -1774,7 +1799,7 @@ function renderAnswer(stage) {
     <div class="card">
       <div class="card-label">${esc(labelFor())} - Answer</div>
       <div class="card-body">
-        <div class="a-text">${esc(t.a || "(no answer entered)")}</div>
+        <div class="a-text">${clueHTML(t.a || "(no answer entered)")}</div>
         ${t.aImg ? `<img class="q-img" src="${t.aImg}" alt="">` : ""}
       </div>
       <div class="controls">
@@ -1881,7 +1906,7 @@ function renderFinalQuestion(stage) {
       <div class="card-label">Final Jeopardy - ${esc(f.category)}</div>
       <div class="final-clock-row ${finalTimer ? "" : "idle"}" id="finalClockRow"><div class="final-clock" id="finalClock">${FINAL_SECONDS}</div></div>
       <div class="card-body">
-        ${f.question ? `<div class="q-text" style="--qs:${qSize(f.question)}">${esc(f.question)}</div>` : ""}
+        ${f.question ? `<div class="q-text" style="--qs:${qSize(f.question)}">${clueHTML(f.question)}</div>` : ""}
         ${f.image ? `<img class="q-img" src="${f.image}" alt="">` : ""}
       </div>
       <div class="controls">
