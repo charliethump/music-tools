@@ -107,6 +107,19 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 /* ---------- Play ---------- */
 #play{height:100vh;display:grid;grid-template-columns:1fr var(--panel-w)}
 #play.panel-hidden{grid-template-columns:1fr 0}
+/* buzzin tucked away: a 1-pixel sliver keeps it "on screen" so Chrome doesn't throttle it */
+#play.sliver{grid-template-columns:1fr 1px}
+#play.sliver .panel{border:none;overflow:hidden}
+#play.sliver .panel-head{display:none}
+#play.sliver .panel iframe{flex:1 0 auto;width:400px;min-width:400px}
+.cue.lockbar.buzz{background:#f2b705;border-color:#8a6500;color:#111;font-family:var(--value-font);font-size:clamp(20px,4.2cqh,44px);letter-spacing:.04em;height:auto;min-height:clamp(22px,4.2cqh,40px);text-transform:uppercase}
+.cue.lockbar.buzz .gap{font-size:.6em;margin-left:.6em;opacity:.8;text-transform:none}
+.team.buzzed{border-color:#ffcc33;animation:buzzpulse .75s ease-in-out infinite alternate}
+@keyframes buzzpulse{from{box-shadow:0 0 0 0 rgba(255,204,51,0)}to{box-shadow:0 0 30px 10px rgba(255,204,51,.9)}}
+.tgroup.buzzed{border-color:#ffcc33;box-shadow:0 0 0 3px #ffcc33}
+#pBuzz{white-space:nowrap;flex-shrink:0}
+#pBuzz.linked{color:#4ade80}
+.toolbar .tb{white-space:nowrap}
 .main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 10px;background:#020a33}
 .tb{padding:4px 10px;border-radius:6px;border:1px solid #23306e;background:#0a1660;color:#cdd6ff;font-size:13px}
@@ -331,6 +344,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
       <button class="tb" id="pMute">Sounds: on</button>
       <button class="tb hidden" id="pRevealAll">Reveal all categories</button>
       <span class="spacer"></span>
+      <button class="tb hidden" id="pBuzz" title="Show or tuck away the buzzin.live panel"></button>
       <button class="tb hidden" id="pFinal">Final Jeopardy</button>
       <button class="tb hidden" id="pEnd">Final standings</button>
     </div>
@@ -344,6 +358,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
       <span class="spacer"></span>
       <button class="tb" data-pw="300">Narrow</button>
       <button class="tb" data-pw="420">Wide</button>
+      <button class="tb" id="pDump" title="Copy buzzin page details for troubleshooting">Details</button>
       <button class="tb" id="pReload">Reload</button>
       <button class="tb" id="pHide">Hide</button>
     </div>
@@ -365,6 +380,16 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
   <div class="sd-btns">
     <button type="button" class="ctl" id="shClose">Close</button>
     <button type="button" class="ctl gold" id="shCopy">Copy link</button>
+  </div>
+</dialog>
+
+<dialog id="dumpDlg" class="score-dlg share-dlg">
+  <h3>buzzin details</h3>
+  <p class="md-text" style="font-size:15px;margin-bottom:10px">Copy this and paste it into the chat if team names aren't showing up when someone buzzes.</p>
+  <textarea id="dumpText" readonly style="width:100%;height:220px;font:12px Consolas,monospace;background:#000;color:#fff;border:2px solid #444c70;border-radius:8px;padding:8px"></textarea>
+  <div class="sd-btns">
+    <button type="button" class="ctl" id="dumpClose">Close</button>
+    <button type="button" class="ctl gold" id="dumpCopy">Copy</button>
   </div>
 </dialog>
 
@@ -903,6 +928,7 @@ const persistGame = debounce(() => {
 }, 300);
 
 function startSetup(b) {
+  setTimeout(() => setPanelMode("full"), 0);
   game = {
     board: b,
     teams: ["Team A", "Team B", "Team C"].map(name => ({ name, score: 0 })),
@@ -1021,7 +1047,24 @@ function closeFinalIntro() {
 $("pEnd").onclick = () => { stopAllSound(); game.screen = "end"; playSfx("gameOver"); render(); };
 document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => document.documentElement.style.setProperty("--panel-w", b.dataset.pw + "px"));
 $("pReload").onclick = async () => { if (await appConfirm("Reload buzzin.live? You may need to rejoin or recreate your game.", "Reload")) { bridge.on = false; bridge.locked = null; setBridgeStat(); $("buzzFrame").src = "https://buzzin.live/"; } };
-$("pHide").onclick = () => { $("play").classList.add("panel-hidden"); $("pShow").classList.remove("hidden"); };
+$("pHide").onclick = () => setPanelMode("sliver");
+$("pBuzz").onclick = () => setPanelMode($("play").classList.contains("sliver") ? "full" : "sliver");
+function setPanelMode(mode) {
+  $("play").classList.toggle("sliver", mode === "sliver");
+  $("play").classList.remove("panel-hidden");
+  $("pShow").classList.add("hidden");
+  if (game) renderToolbar();
+}
+$("pDump").onclick = () => {
+  if (!bridge.on) { appAlert("The Buzzin Bridge extension isn't connected, so there are no details to copy."); return; }
+  sendBridge("dump");
+};
+$("dumpClose").onclick = () => $("dumpDlg").close();
+$("dumpCopy").onclick = async () => {
+  const ta = $("dumpText");
+  try { await navigator.clipboard.writeText(ta.value); } catch (e) { ta.select(); document.execCommand("copy"); }
+  $("dumpCopy").textContent = "Copied!";
+};
 $("pShow").onclick = () => { $("play").classList.remove("panel-hidden"); $("pShow").classList.add("hidden"); };
 
 function renderToolbar() {
@@ -1034,6 +1077,10 @@ function renderToolbar() {
   $("pRevealAll").classList.toggle("hidden", !(playing && g.screen === "board" && g.revealed.some(x => !x)));
   $("pFinal").classList.toggle("hidden", !(playing && g.board.final.enabled && g.screen === "board"));
   if (g.preview) { $("pRevealAll").classList.add("hidden"); $("pEnd").classList.add("hidden"); }
+  const pb = $("pBuzz"), tucked = $("play").classList.contains("sliver");
+  pb.classList.toggle("hidden", !!g.preview);
+  pb.classList.toggle("linked", bridge.on);
+  pb.textContent = (bridge.on ? (bridge.version === "1.0" ? "buzzin: connected (update extension for team names)" : "buzzin: connected") : "buzzin: not connected") + (tucked ? " - show" : " - tuck away");
   $("pEnd").classList.toggle("hidden", !(playing && g.screen === "board"));
   $("pUndo").disabled = !undoStack.length;
   $("pUndo").style.opacity = undoStack.length ? 1 : .5;
@@ -1051,7 +1098,7 @@ function renderScores() {
   const box = $("pScores");
   if (game.screen === "setup" || game.preview) { box.innerHTML = ""; return; }
   box.innerHTML = game.teams.map((t, i) => `
-    <div class="team ${i === game.active ? "active" : ""} ${t.lifeline ? "has-life" : ""}">
+    <div class="team ${i === game.active ? "active" : ""} ${t.lifeline ? "has-life" : ""} ${buzzTeam() === i ? "buzzed" : ""}">
       ${t.lifeline ? `<button class="life" data-life="${i}" title="Use lifeline: ask a teammate">${LIFE_ICON}</button>` : ""}
       <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}:</button>
       <button class="sc ${t.score < 0 ? "neg" : ""}" data-edit="${i}" title="Click to type a new score">${money(t.score)}</button>
@@ -1167,6 +1214,7 @@ function renderSetup(stage) {
     await DB.set("gameBoard", g.board);
     persistGame();
     startBoardFill();
+    if (bridge.on) setPanelMode("sliver");
     render();
   };
 }
@@ -1453,14 +1501,55 @@ function setCue(open) {
   if (game.cue === open) return;
   game.cue = open;
   if (open) playSfx("buzzersOpen");
-  const cue = document.querySelector(".cue");
-  const card = document.querySelector(".card");
-  if (cue) {
-    cue.classList.toggle("open", open);
-    cue.innerHTML = lockIcon(open);
-    cue.title = open ? "Buzzers open" : "Buzzers locked";
+  refreshBuzzUI();
+}
+
+/* ---------- who buzzed (from the Buzzin Bridge extension) ---------- */
+const normName = s => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Match a buzz entry to a board team, ignoring upper/lower case
+function matchTeam(text) {
+  const t = normName(text);
+  let best = -1, bestLen = 0;
+  game.teams.forEach((tm, i) => {
+    const n = normName(tm.name);
+    if (!n) return;
+    const hit = t === n || new RegExp("(^|[^a-z0-9])" + escRe(n) + "($|[^a-z0-9])").test(t);
+    if (hit && n.length > bestLen) { best = i; bestLen = n.length; }
+  });
+  return best;
+}
+function currentBuzz() {
+  if (!game || game.preview || game.screen !== "question" || game.dd || !bridge.on) return null;
+  if (bridge.locked === false || bridge.awaitClear) return null;
+  for (let k = 0; k < bridge.buzzes.length; k++) {
+    const text = bridge.buzzes[k], idx = matchTeam(text);
+    if (idx >= 0 && game.tried.includes(idx)) continue;
+    const gm = text.match(/\+?\s*(\d+(?:\.\d+)?)\s*s\b/);
+    return { text, idx, first: k === 0, gap: gm && k > 0 ? "+" + gm[1] + "s" : "" };
   }
-  if (card) card.classList.toggle("ring", open);
+  return null;
+}
+function buzzTeam() { const b = currentBuzz(); return b ? b.idx : -1; }
+function cueBarHTML() {
+  const b = currentBuzz();
+  if (b) {
+    const name = b.idx >= 0 ? game.teams[b.idx].name : b.text.replace(/\+?\s*\d+(?:\.\d+)?\s*s\b/g, "").replace(/^\s*\d+[.)]?\s+/, "").trim();
+    return `<div class="cue lockbar buzz" title="${esc(name)} buzzed in">${esc(name)}${b.gap ? `<span class="gap">${esc(b.gap)}</span>` : ""}</div>`;
+  }
+  return `<div class="cue lockbar ${game.cue ? "open" : ""}" title="${game.cue ? "Buzzers open" : "Buzzers locked"}">${lockIcon(game.cue)}</div>`;
+}
+function refreshBuzzUI() {
+  if (!game || game.preview) return;
+  const idx = buzzTeam(), b = currentBuzz();
+  if (game.screen === "question" && !game.dd) {
+    const cue = document.querySelector(".cue");
+    if (cue) cue.outerHTML = cueBarHTML();
+    const card = document.querySelector(".card");
+    if (card) card.classList.toggle("ring", !!game.cue && !b);
+  }
+  document.querySelectorAll("#pScores .team").forEach((el, i) => el.classList.toggle("buzzed", i === idx));
+  document.querySelectorAll(".tgroup[data-tg]").forEach(el => el.classList.toggle("buzzed", +el.dataset.tg === idx));
 }
 // After a click into a video, hand keyboard focus back to the board so Space reaches the game
 // instead of pausing the video
@@ -1505,7 +1594,7 @@ document.addEventListener("keydown", e => {
   }
   if (e.code === "Space" && game.screen === "question" && !game.dd && !game.preview) {
     e.preventDefault();
-    if (bridge.on) { bridge.holdUntil = 0; sendBridge(bridge.locked === false ? "lock" : "unlock"); }
+    if (bridge.on) { bridge.holdUntil = 0; bridge.awaitClear = false; sendBridge(bridge.locked === false ? "lock" : "unlock"); }
     else setCue(!game.cue);
   }
 });
@@ -1548,7 +1637,7 @@ function wireMedia(t) {
 function teamButtons(onlyTeam) {
   return game.teams.map((tm, i) => {
     if (onlyTeam != null && i !== onlyTeam) return "";
-    return `<div class="tgroup ${game.tried.includes(i) ? "tried" : ""}">
+    return `<div class="tgroup ${game.tried.includes(i) ? "tried" : ""} ${buzzTeam() === i ? "buzzed" : ""}" data-tg="${i}">
       <span class="tn">${esc(tm.name)}</span>
       <button class="ok" data-ok="${i}" title="Correct">&#10003;</button>
       <button class="no" data-no="${i}" title="Wrong">&#10007;</button></div>`;
@@ -1580,11 +1669,11 @@ function renderQuestion(stage) {
   const t = currentTile();
   const dd = game.dd;
   stage.innerHTML = `
-    <div class="card ${game.cue ? "ring" : ""}">
+    <div class="card ${game.cue && !currentBuzz() ? "ring" : ""}">
       <div class="card-label">${esc(labelFor())}</div>
       ${game.preview ? "" : dd
         ? `<div class="cue dd">${esc(game.teams[dd.team].name)} wagered ${money(pointsNow())}</div>`
-        : `<div class="cue lockbar ${game.cue ? "open" : ""}" title="${game.cue ? "Buzzers open" : "Buzzers locked"}">${lockIcon(game.cue)}</div>`}
+        : cueBarHTML()}
       <div class="card-body">
         ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)}">${esc(t.q)}</div>` : ""}
         ${mediaHTML(t)}
@@ -1668,6 +1757,7 @@ function wireScoring(fromQuestion) {
     if (fromQuestion && bridge.on && !game.dd) { bridge.holdUntil = 0; sendBridge("unlock"); }
     renderScores(); renderToolbar();
     b.closest(".tgroup").classList.add("tried");
+    refreshBuzzUI();
     scoreFx(i, before, -pts);
   });
 }
@@ -1898,10 +1988,14 @@ function renderEnd(stage) {
 }
 
 /* ===================== Buzzin Bridge (optional extension) ===================== */
-const bridge = { on: false, locked: null, holdUntil: 0 };
+const bridge = { on: false, locked: null, holdUntil: 0, buzzes: [], awaitClear: false, awaitTimer: null, version: "" };
 // Clearing in buzzin can unlock the buzzers, so clear first, then keep them locked for a moment
 function lockAndClear() {
   bridge.holdUntil = Date.now() + 2000;
+  // ignore the previous question's buzz list until buzzin reports the cleared list
+  bridge.awaitClear = true;
+  clearTimeout(bridge.awaitTimer);
+  bridge.awaitTimer = setTimeout(() => { bridge.awaitClear = false; refreshBuzzUI(); }, 2500);
   sendBridge("clear");
   setTimeout(() => sendBridge("lock"), 150);
 }
@@ -1918,6 +2012,7 @@ function setBridgeStat() {
   const s = $("bridgeStat");
   s.textContent = bridge.on ? "Bridge: connected" : "Bridge: off";
   s.className = bridge.on ? "bridge-on" : "bridge-off";
+  if (game) renderToolbar();
 }
 window.addEventListener("message", e => {
   if (e.origin !== "https://buzzin.live" || e.source !== $("buzzFrame").contentWindow) return;
@@ -1928,10 +2023,22 @@ window.addEventListener("message", e => {
     setBridgeStat();
     if (game && game.screen === "question") render();
   }
+  if (d.type === "ready") { bridge.version = d.version || "1.0"; setBridgeStat(); }
   if (d.type === "state") {
     bridge.locked = !!d.locked;
     if (!bridge.locked && Date.now() < bridge.holdUntil) { sendBridge("lock"); return; }
     if (game && game.screen === "question" && !game.dd) setCue(!bridge.locked);
+    refreshBuzzUI();
+  }
+  if (d.type === "buzzes") {
+    bridge.buzzes = Array.isArray(d.list) ? d.list.map(String) : [];
+    if (bridge.awaitClear && !bridge.buzzes.length) bridge.awaitClear = false;
+    refreshBuzzUI();
+  }
+  if (d.type === "dump") {
+    $("dumpText").value = d.text || "";
+    $("dumpCopy").textContent = "Copy";
+    $("dumpDlg").showModal();
   }
 });
 
