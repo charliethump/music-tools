@@ -117,6 +117,45 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .team.buzzed{border-color:#ffcc33;animation:buzzpulse .75s ease-in-out infinite alternate}
 @keyframes buzzpulse{from{box-shadow:0 0 0 0 rgba(255,204,51,0)}to{box-shadow:0 0 30px 10px rgba(255,204,51,.9)}}
 .tgroup.buzzed{border-color:#ffcc33;box-shadow:0 0 0 3px #ffcc33}
+.scores .team.buzzed{border-color:#ffcc33}
+/* lots of teams: shrink the scoreboard and buttons */
+.scores.many,.scores.lots{flex-wrap:wrap;gap:8px;padding:6px 10px}
+.scores.many .team{min-width:110px;padding:4px 8px;border-width:3px}
+.scores.many .team .nm{font-size:15px}.scores.many .team .sc{font-size:20px}
+.scores.lots .team{min-width:84px;padding:3px 5px;border-width:2px}
+.scores.lots .team .nm{font-size:12px}.scores.lots .team .sc{font-size:15px}
+.scores.many .team.has-life,.scores.lots .team.has-life{padding-right:30px;padding-left:8px}
+.scores.many .life,.scores.lots .life{width:22px;height:22px;right:4px}
+.tgroup.compact{padding:2px 4px;gap:2px}
+.tgroup.compact .tn{font-size:13px;padding:1px 5px !important}
+.tgroup.compact .ok,.tgroup.compact .no{width:30px;height:28px;font-size:15px}
+.wager.compact{padding:6px 8px}.wager.compact input{width:90px;font-size:16px;padding:5px}
+.standings.many{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;min-width:min(900px,95%);max-height:60cqh;overflow:auto}
+.standings.many .stand{font-size:clamp(14px,1.8cqw,22px);padding:6px 12px}
+/* setup team rows */
+.team-row{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:center}
+.tr-num{text-align:right;opacity:.75;font-size:14px}
+.team-inputs{max-height:42vh;overflow:auto;padding-right:4px}
+/* printable answer key */
+#printArea{display:none}
+@media print{
+  body{background:#fff !important}
+  body > *:not(#printArea){display:none !important}
+  #printArea{display:block !important;color:#000;font:9pt/1.2 "Segoe UI",Arial,sans-serif}
+  @page{margin:.4in}
+}
+#printArea h1{font-size:14pt;margin:0 0 1pt}
+#printArea .sub{font-size:8pt;color:#444;margin:0 0 5pt}
+#printArea table{width:100%;border-collapse:collapse}
+#printArea th,#printArea td{border:1px solid #999;padding:1.6pt 4pt;vertical-align:top;text-align:left}
+#printArea th{background:#eee;font-size:9pt}
+#printArea tr.cat td{background:#dde3f5;font-weight:700;font-size:9.5pt;border-top:2px solid #000;padding:1.2pt 4pt}
+#printArea td.v{width:44pt;white-space:nowrap;font-weight:700}
+#printArea td.a{width:28%;font-weight:700}
+#printArea .dd{display:inline-block;background:#000;color:#fff;font-size:7.5pt;font-weight:700;padding:0 4pt;border-radius:3pt;margin-left:4pt}
+#printArea .med{color:#555;font-size:8pt;font-style:italic}
+#printArea .blank{filter:none;border-bottom-color:#000}
+#printArea .fj{margin-top:6pt;page-break-inside:avoid}
 #pBuzz{white-space:nowrap;flex-shrink:0}
 #pBuzz.linked{color:#4ade80}
 .toolbar .tb{white-space:nowrap}
@@ -237,7 +276,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 /* buzzin panel */
 .panel{display:flex;flex-direction:column;min-width:0;background:#fff;border-left:3px solid #000;overflow:hidden}
 #play.panel-hidden .panel{border:none}
-.panel-head{display:flex;gap:4px;align-items:center;padding:6px;background:#020a33;color:#cdd6ff;font-size:13px}
+.panel-head{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:6px;background:#020a33;color:#cdd6ff;font-size:13px}
 .panel-head .spacer{flex:1}
 .panel iframe{flex:1;width:100%;border:0;background:#fff}
 .bridge-off{opacity:.55;margin-left:6px}
@@ -307,6 +346,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
     <button class="btn" id="bLoad">Open board file</button>
     <button class="btn" id="bSave">Save board file</button>
     <button class="btn" id="bShare">Share link</button>
+    <button class="btn" id="bKey">Answer key</button>
     <span class="spacer"></span>
     <span id="bSaved" class="hint" style="margin:0"></span>
     <button class="btn" id="bPreview">Preview board</button>
@@ -921,21 +961,22 @@ let undoStack = [];
 let qAudioEl = null;
 let markTimer = null;
 
-const persistGame = debounce(() => {
-  if (!game || game.preview) return;
+function writeGame() {
+  if (!game || game.preview) return Promise.resolve();
   const st = {
     title: game.board.title, teams: game.teams, active: game.active, used: game.used,
     revealed: game.revealed, floorZero: game.floorZero, screen: game.screen === "setup" ? "setup" : "board",
     final: game.final, undoStack: undoStack.slice(-40)
   };
-  DB.set("gameState", st);
-}, 300);
+  return DB.set("gameState", st);
+}
+const persistGame = debounce(writeGame, 300);
 
 function startSetup(b) {
   setTimeout(() => setPanelMode("full"), 0);
   game = {
     board: b,
-    teams: ["Team A", "Team B", "Team C"].map(name => ({ name, score: 0 })),
+    teams: [0, 1, 2].map(i => ({ name: defaultTeamName(i), score: 0, color: TEAM_COLORS[i] })),
     active: 0,
     used: {},
     revealed: Array(b.numCats).fill(false),
@@ -961,6 +1002,8 @@ async function resumeGame() {
     cue: false, tried: [], final: st.final || { wagers: [], done: [] }, dd: null
   };
   undoStack = st.undoStack || []; redoStack = [];
+  fill = null; // never resume into a half-finished board fill
+  closeIntro();
   enterPlay();
 }
 
@@ -1024,7 +1067,7 @@ function applyDelta(i, delta) {
 }
 
 /* ---------- toolbar ---------- */
-$("pHome").onclick = () => { stopAllSound(); closeIntro(); if (fjIntro) { fjIntro.remove(); fjIntro = null; } show("home"); };
+$("pHome").onclick = async () => { await writeGame(); stopAllSound(); closeIntro(); if (fjIntro) { fjIntro.remove(); fjIntro = null; } show("home"); };
 $("pUndo").onclick = undo;
 $("pRedo").onclick = redo;
 $("pStop").onclick = stopAllSound;
@@ -1106,6 +1149,48 @@ function renderToolbar() {
 }
 
 /* ---------- scores ---------- */
+/* ---------- teams: names, colors ---------- */
+const MAX_TEAMS = 30;
+const TEAM_COLORS = ["#ef4444", "#22c55e", "#a855f7", "#f97316", "#06b6d4", "#ec4899", "#84cc16", "#eab308", "#14b8a6", "#8b5cf6",
+  "#f43f5e", "#0ea5e9", "#10b981", "#d946ef", "#f59e0b", "#6366f1", "#65a30d", "#e11d48", "#0891b2", "#c026d3",
+  "#ea580c", "#16a34a", "#7c3aed", "#db2777", "#ca8a04", "#0d9488", "#2563eb", "#9333ea", "#dc2626", "#059669"];
+function defaultTeamName(i) { return "Team " + (i < 26 ? String.fromCharCode(65 + i) : i + 1); }
+function teamColor(t, i) { return /^#[0-9a-f]{6}$/i.test(t && t.color || "") ? t.color : TEAM_COLORS[i % TEAM_COLORS.length]; }
+function textOn(hex) {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#000" : "#fff";
+}
+function teamVars() { return ""; } // team colors were removed; kept as a no-op
+
+/* ---------- printable answer key ---------- */
+function printAnswerKey(b) {
+  b = normalizeBoard(clone(b));
+  const media = t => [t.qImg && "picture", t.qAudio && "audio", t.video && "video"].filter(Boolean);
+  let rows = "";
+  for (let c = 0; c < b.numCats; c++) {
+    const cat = b.categories[c];
+    rows += `<tr class="cat"><td colspan="3">${esc(cat.name || "Category " + (c + 1))}</td></tr>`;
+    for (let r = 0; r < b.numRows; r++) {
+      const t = cat.tiles[r], m = media(t);
+      rows += `<tr><td class="v">$${b.values[r]}${t.dd ? `<span class="dd">DD</span>` : ""}</td>
+        <td>${t.q ? clueHTML(t.q) : "<em>(no clue)</em>"}${m.length ? ` <span class="med">[${m.join(", ")}]</span>` : ""}</td>
+        <td class="a">${t.a ? clueHTML(t.a) : "<em>(no answer)</em>"}</td></tr>`;
+    }
+  }
+  const f = b.final;
+  $("printArea").innerHTML = `
+    <h1>${esc(b.title || "Jeopardy review")} - Answer key</h1>
+    <p class="sub">DD = Daily Double</p>
+    <table><thead><tr><th>Value</th><th>Clue</th><th>Answer</th></tr></thead><tbody>${rows}</tbody></table>
+    ${f.enabled ? `<div class="fj"><table><tbody>
+      <tr class="cat"><td colspan="2">Final Jeopardy${f.category ? ": " + esc(f.category) : ""}</td></tr>
+      <tr><td>${f.question ? clueHTML(f.question) : "<em>(no clue)</em>"}${f.image ? ` <span class="med">[picture]</span>` : ""}</td>
+        <td class="a" style="white-space:pre-line">${f.answer ? clueHTML(f.answer) : "<em>(no answer)</em>"}</td></tr>
+    </tbody></table></div>` : ""}`;
+  window.print();
+}
+$("bKey").onclick = () => printAnswerKey(board);
+
 // Lifeline symbol: two teammates with a speech bubble
 const LIFE_ICON = `<svg viewBox="0 0 32 32" aria-hidden="true">
   <circle cx="10" cy="15" r="4" fill="#fff"/><path d="M2.5 29c0-4.4 3.4-7.5 7.5-7.5s7.5 3.1 7.5 7.5z" fill="#fff"/>
@@ -1116,8 +1201,10 @@ const LIFE_ICON = `<svg viewBox="0 0 32 32" aria-hidden="true">
 function renderScores() {
   const box = $("pScores");
   if (game.screen === "setup" || game.preview) { box.innerHTML = ""; return; }
+  const n = game.teams.length;
+  box.className = "scores" + (n > 10 ? " lots" : n > 4 ? " many" : "");
   box.innerHTML = game.teams.map((t, i) => `
-    <div class="team ${i === game.active ? "active" : ""} ${t.lifeline ? "has-life" : ""} ${buzzTeam() === i ? "buzzed" : ""}">
+    <div class="team ${i === game.active ? "active" : ""} ${t.lifeline ? "has-life" : ""} ${buzzTeam() === i ? "buzzed" : ""}" style="${teamVars(t, i)}">
       ${t.lifeline ? `<button class="life" data-life="${i}" title="Use lifeline: ask a teammate">${LIFE_ICON}</button>` : ""}
       <button class="nm" data-act="${i}" title="Click to make this the team picking next">${esc(t.name)}</button>
       <button class="sc ${t.score < 0 ? "neg" : ""}" data-edit="${i}" title="Click to type a new score">${money(t.score)}</button>
@@ -1209,20 +1296,25 @@ function renderSetup(stage) {
       <h2>${esc(g.board.title)}</h2>
       <p class="note">Set up your buzzin.live game in the panel on the right while you get teams ready.</p>
       <label>Number of teams
-        <select id="sCount">${[2, 3, 4].map(n => `<option ${n === g.teams.length ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-      <div class="team-inputs">${g.teams.map((t, i) => `<label>Team ${i + 1} name<input type="text" data-tn="${i}" value="${esc(t.name)}"></label>`).join("")}</div>
+        <select id="sCount">${Array.from({ length: MAX_TEAMS - 1 }, (_, k) => k + 2).map(n => `<option ${n === g.teams.length ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <p class="note">Each name must match the buzzin.live nickname that team joins with. Capital letters don't matter.</p>
+      <div class="team-inputs">${g.teams.map((t, i) => `<div class="team-row">
+        <span class="tr-num">${i + 1}</span>
+        <input type="text" data-tn="${i}" value="${esc(t.name)}" aria-label="Team ${i + 1} name">
+      </div>`).join("")}</div>
       <label class="chk"><input type="checkbox" id="sFloor" ${g.floorZero ? "checked" : ""}> Scores stop at $0 (no negative scores)</label>
       <label class="chk"><input type="checkbox" id="sLife" ${g.lifelines ? "checked" : ""}> Lifelines: each team gets one "Ask a teammate"</label>
       <label class="chk"><input type="checkbox" id="sHide" checked> Hide categories at the start so I can reveal them one at a time</label>
       <button class="big-btn gold" id="sGo">Start game</button>
+      <button class="btn" id="sKey" style="justify-self:center">Print answer key</button>
     </div></div>`;
   $("sCount").onchange = e => {
     const n = +e.target.value;
-    const names = ["Team A", "Team B", "Team C", "Team D"];
-    g.teams = Array.from({ length: n }, (_, i) => g.teams[i] || { name: names[i], score: 0 });
+    g.teams = Array.from({ length: n }, (_, i) => g.teams[i] || { name: defaultTeamName(i), score: 0, color: TEAM_COLORS[i % TEAM_COLORS.length] });
     render();
   };
-  stage.querySelectorAll("[data-tn]").forEach(inp => inp.oninput = () => { g.teams[+inp.dataset.tn].name = inp.value || "Team " + (+inp.dataset.tn + 1); });
+  stage.querySelectorAll("[data-tn]").forEach(inp => inp.oninput = () => { g.teams[+inp.dataset.tn].name = inp.value.trim() || defaultTeamName(+inp.dataset.tn); });
+  $("sKey").onclick = () => printAnswerKey(g.board);
   $("sFloor").onchange = e => { g.floorZero = e.target.checked; };
   $("sGo").onclick = async () => {
     g.lifelines = $("sLife").checked;
@@ -1556,7 +1648,7 @@ function cueBarHTML() {
   const b = currentBuzz();
   if (b) {
     const name = b.idx >= 0 ? game.teams[b.idx].name : b.text.replace(/\+?\s*\d+(?:\.\d+)?\s*s\b/g, "").replace(/^\s*\d+[.)]?\s+/, "").trim();
-    return `<div class="cue lockbar buzz" title="${esc(name)} buzzed in">${esc(name)}${b.gap ? `<span class="gap">${esc(b.gap)}</span>` : ""}</div>`;
+    return `<div class="cue lockbar buzz ${b.idx >= 0 ? "teamed" : ""}" style="${b.idx >= 0 ? teamVars(game.teams[b.idx], b.idx) : ""}" title="${esc(name)} buzzed in">${esc(name)}${b.gap ? `<span class="gap">${esc(b.gap)}</span>` : ""}</div>`;
   }
   return `<div class="cue lockbar ${game.cue ? "open" : ""}" title="${game.cue ? "Buzzers open" : "Buzzers locked"}">${lockIcon(game.cue)}</div>`;
 }
@@ -1593,8 +1685,14 @@ window.addEventListener("blur", () => {
     if (document.activeElement === $("buzzFrame") && game && game.screen === "question" && !game.dd && !game.cue) setCue(true);
   }, 0);
 });
+// After clicking a game button, drop its keyboard focus so Space or Enter can't press it again
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("#play button");
+  if (b) setTimeout(() => { if (document.activeElement === b) b.blur(); }, 0);
+}, true);
 document.addEventListener("keydown", e => {
   if (!game || $("play").classList.contains("hidden")) return;
+  if (document.querySelector("dialog[open]")) return; // pop-up boxes handle their own keys
   if (fjIntro) { e.preventDefault(); closeFinalIntro(); return; }
   const tag = (document.activeElement && document.activeElement.tagName) || "";
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
@@ -1662,7 +1760,7 @@ function wireMedia(t) {
 function teamButtons(onlyTeam) {
   return game.teams.map((tm, i) => {
     if (onlyTeam != null && i !== onlyTeam) return "";
-    return `<div class="tgroup ${game.tried.includes(i) ? "tried" : ""} ${buzzTeam() === i ? "buzzed" : ""}" data-tg="${i}">
+    return `<div class="tgroup ${game.tried.includes(i) ? "tried" : ""} ${buzzTeam() === i ? "buzzed" : ""} ${game.teams.length > 6 ? "compact" : ""}" data-tg="${i}" style="${teamVars(tm, i)}">
       <span class="tn">${esc(tm.name)}</span>
       <button class="ok" data-ok="${i}" title="Correct">&#10003;</button>
       <button class="no" data-no="${i}" title="Wrong">&#10007;</button></div>`;
@@ -1821,7 +1919,7 @@ function renderDDWager(stage) {
       <h1>DAILY DOUBLE</h1>
       <h2>${esc(game.board.categories[game.current.c].name || "")}</h2>
       <div class="wager-row">
-        ${game.teams.map((t, i) => `<button class="pick ${i === dd.team ? "on" : ""}" data-pick="${i}">${esc(t.name)} (${money(t.score)})</button>`).join("")}
+        ${game.teams.map((t, i) => `<button class="pick ${i === dd.team ? "on" : ""}" data-pick="${i}" style="${teamVars(t, i)}">${esc(t.name)} (${money(t.score)})</button>`).join("")}
       </div>
       <div class="wager sel">
         <span class="wn">${esc(game.teams[dd.team].name)} wagers</span>
@@ -1853,7 +1951,7 @@ function renderFinalWager(stage) {
       <div class="fj-mid">
       <p style="margin:0;font-size:clamp(14px,2cqw,22px)">Each team decides how much to bet.</p>
       <div class="wager-row">
-        ${game.teams.map((t, i) => `<div class="wager"><span class="wn">${esc(t.name)}</span><span class="ws">has ${money(t.score)}</span>
+        ${game.teams.map((t, i) => `<div class="wager ${game.teams.length > 6 ? "compact" : ""}"><span class="wn tchip" style="${teamVars(t, i)}">${esc(t.name)}</span><span class="ws">has ${money(t.score)}</span>
           <input type="number" min="0" step="100" data-fw="${i}" value="${esc(fs.wagers[i] ?? "")}" placeholder="$"></div>`).join("")}
       </div>
       <div style="display:flex;gap:10px">
@@ -1995,7 +2093,7 @@ function renderEnd(stage) {
   stage.innerHTML = `
     <div class="splash">
       <h1>FINAL SCORES</h1>
-      <div class="standings">
+      <div class="standings ${game.teams.length > 8 ? "many" : ""}">
         ${ranked.map(t => `<div class="stand ${t.score === top ? "win" : ""}"><span>${esc(t.name)}</span><span>${money(t.score)}</span></div>`).join("")}
       </div>
       <div style="display:flex;gap:10px">
@@ -2101,5 +2199,6 @@ $("hSharedEdit").onclick = async () => {
   loadSharedBoard();
 })();
 </script>
+<div id="printArea"></div>
 </body>
 </html>
