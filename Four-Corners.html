@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Instrument Family Four Corners</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%23d4141c%22/%3E%3Crect x=%2213%22 y=%228%22 width=%2238%22 height=%2226%22 rx=%223%22 fill=%22%23fff%22/%3E%3Crect x=%2213%22 y=%2230%22 width=%2238%22 height=%225%22 rx=%222%22 fill=%22%238a0a10%22/%3E%3Crect x=%2229.5%22 y=%2235%22 width=%225%22 height=%2214%22 fill=%22%23fff%22/%3E%3Cpath d=%22M32 47 L17 57 M32 47 L47 57 M32 47 V58%22 stroke=%22%23fff%22 stroke-width=%224.5%22 stroke-linecap=%22round%22 fill=%22none%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -37,7 +38,8 @@ body.timesup #title{color:#fff;text-shadow:3px 5px 0 #6d0910}
 .desk{position:absolute;background:#fff;border:6px solid var(--wood);border-bottom-width:16px;border-radius:6px;
   display:flex;align-items:center;justify-content:center;box-shadow:5px 8px 14px rgba(0,0,0,.28)}
 .desk span{font-family:var(--serif);font-weight:700;color:#111}
-.desk.correct{background:#e9ffef;border-color:var(--green);box-shadow:0 0 0 10px var(--green-glow),0 0 70px 30px rgba(63,220,117,.9)}
+.desk.correct{background:#e9ffef;border-color:var(--green);box-shadow:0 0 0 10px var(--green-glow),0 0 70px 30px rgba(63,220,117,.9);animation:halo 1.2s ease-in-out infinite alternate}
+@keyframes halo{from{box-shadow:0 0 0 10px var(--green-glow),0 0 70px 30px rgba(63,220,117,.9)}to{box-shadow:0 0 0 5px rgba(63,220,117,.6),0 0 30px 10px rgba(63,220,117,.35)}}
 .desk.correct span{color:#0b6b2f}
 .desk.wrong{opacity:.28;filter:grayscale(1)}
 
@@ -45,7 +47,11 @@ body.timesup #title{color:#fff;text-shadow:3px 5px 0 #6d0910}
 #people .fig{fill:var(--navy);stroke:var(--gap);stroke-width:7}
 #people .split{stroke:var(--gap);stroke-width:7}
 body.timesup #people .fig{fill:#fff}
-body.reveal #people{display:none}
+body.reveal #people,body.center #people{display:none}
+#centerMsg{position:absolute;left:570px;width:780px;top:330px;height:450px;display:none;align-items:center;justify-content:center;text-align:center;font-size:118px;font-weight:700;line-height:1.1;color:var(--navy)}
+body.center #centerMsg{display:flex}
+body.center,body.center #stage{animation:yellowPulse 1.6s ease-in-out infinite alternate}
+@keyframes yellowPulse{from{background-color:#efefef}to{background-color:#ffe777}}
 
 #reveal{position:absolute;left:560px;width:800px;top:250px;height:580px;padding-bottom:20px;display:none;align-items:flex-end;justify-content:center}
 body.reveal #reveal{display:flex}
@@ -130,6 +136,7 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
   <div id="desks"></div>
   <svg id="people" viewBox="0 0 380 450" aria-hidden="true"></svg>
   <div id="reveal"></div>
+  <div id="centerMsg">Back to the center!</div>
   <div id="cue"></div>
   <div id="toast"></div>
   <div id="toolbar">
@@ -721,15 +728,40 @@ async function scanClips(){
 }
 
 /* ================= GAME ================= */
-let phase = 'ready';       // ready | playing | countdown | timesup | reveal
+let phase = 'ready';       // ready | playing | countdown | timesup | reveal | center
 let round = null, nextRound = null, timer = null, remaining = 0;
 
 function playable(){ return INSTRUMENTS.filter(i => isOn(i) && i.clips.length); }
+/* Clip order: each instrument works through a shuffled "bag" of its clips,
+   so no clip repeats until every clip for that instrument has played.
+   Instrument order: random, but never the same instrument 3 times in a row. */
+const clipBags = {}, lastClip = {}, recentInst = [];
+function shuffle(a){ for (let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
+function peekClip(inst){
+  let bag = (clipBags[inst.slug] || []).filter(u => inst.clips.includes(u));
+  if (!bag.length){
+    bag = shuffle(inst.clips.slice());
+    if (bag.length > 1 && bag[0] === lastClip[inst.slug]){
+      const j = 1 + Math.floor(Math.random()*(bag.length-1));
+      [bag[0], bag[j]] = [bag[j], bag[0]];
+    }
+  }
+  clipBags[inst.slug] = bag;
+  return bag[0];
+}
+function commitRound(r){
+  const bag = clipBags[r.inst.slug] || [];
+  const i = bag.indexOf(r.url); if (i >= 0) bag.splice(i, 1);
+  lastClip[r.inst.slug] = r.url;
+  recentInst.push(r.inst.slug); if (recentInst.length > 2) recentInst.shift();
+}
 function pickRound(){
-  const pool = playable();
+  let pool = playable();
   if (!pool.length) return null;
+  if (recentInst.length === 2 && recentInst[0] === recentInst[1] && pool.length > 1)
+    pool = pool.filter(i => i.slug !== recentInst[1]);
   const inst = pool[Math.floor(Math.random()*pool.length)];
-  const url = inst.clips[Math.floor(Math.random()*inst.clips.length)];
+  const url = peekClip(inst);
   const audio = new Audio(); audio.preload = 'auto'; audio.src = url;
   const img = new Image(); img.src = embeddedFor(inst.slug) || `${IMAGE_DIR}${inst.slug}.png`;
   return {inst, url, audio, img};
@@ -741,6 +773,7 @@ function startRound(){
   if (!r){ round = null; phase = 'ready'; render(); return; }
   if (round) { round.audio.pause(); }
   round = r;
+  commitRound(r);
   phase = 'playing';
   playFromStart(round.audio);
   render();
@@ -768,7 +801,8 @@ function reveal(){ phase = 'reveal'; render(); }
 
 function advance(){
   getCtx();
-  if (phase === 'ready' || phase === 'reveal') startRound();
+  if (phase === 'ready' || phase === 'center') startRound();
+  else if (phase === 'reveal'){ phase = 'center'; render(); }
   else if (phase === 'playing') startCountdown();
   else if (phase === 'timesup') reveal();
 }
@@ -778,7 +812,7 @@ const SPEAKER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function render(){
-  document.body.classList.remove('ready','playing','countdown','timesup','reveal');
+  document.body.classList.remove('ready','playing','countdown','timesup','reveal','center');
   document.body.classList.add(phase);
   const cue = $('cue'), rev = $('reveal');
   const answer = (phase === 'reveal' && round) ? round.inst.families : null;
@@ -796,6 +830,8 @@ function render(){
     cue.innerHTML = `<div class="count">${remaining}</div>`;
   } else if (phase === 'timesup'){
     cue.innerHTML = `<div class="freeze">${esc(settings.freezeText || 'FREEZE!')}</div>`;
+  } else if (phase === 'center'){
+    cue.innerHTML = '';
   } else if (phase === 'reveal'){
     cue.innerHTML = `<div class="name">${esc(round.inst.name)}</div>`;
     const nm = cue.firstChild; let fs = 120;
