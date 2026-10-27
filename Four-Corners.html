@@ -51,7 +51,11 @@ body.reveal #famTitle{opacity:1;transition:none}
 #people .fig{fill:var(--navy);stroke:var(--gap);stroke-width:7}
 #people .split{stroke:var(--gap);stroke-width:7}
 body.timesup #people .fig{fill:#fff}
-body.reveal #people,body.center #people{display:none}
+body.reveal #people{display:none}
+#people{transition:opacity .8s ease}
+body.center #people{opacity:0;transition:none}
+#centerMsg{transition:opacity .6s ease}
+body.leaving #centerMsg{display:flex;opacity:0}
 #centerMsg{position:absolute;left:570px;width:780px;top:330px;height:450px;display:none;align-items:center;justify-content:center;text-align:center;font-size:118px;font-weight:700;line-height:1.1;color:var(--navy)}
 body.center #centerMsg{display:flex}
 body.center,body.center #stage{animation:yellowPulse 1.6s ease-in-out infinite alternate}
@@ -678,6 +682,19 @@ function chime(){
     });
   });
 }
+/* Short woodblock-style tick for the last 3 seconds of the countdown */
+function tick(){
+  const ctx = getCtx(), now = ctx.currentTime;
+  const out = ctx.createGain(); out.gain.value = 0.55; out.connect(ctx.destination);
+  [[1250,0.9,0.07],[2600,0.35,0.035]].forEach(([f,amp,dec]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(f, now); o.frequency.exponentialRampToValueAtTime(f*0.8, now+dec);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(amp, now+0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, now+dec);
+    o.connect(g); g.connect(out); o.start(now); o.stop(now+dec+0.02);
+  });
+}
 function fadeOut(a, ms){
   if (!a || a.paused) return;
   const t0 = performance.now(), v0 = a.volume;
@@ -789,11 +806,12 @@ function startCountdown(){
   remaining = Math.max(1, Math.round(settings.countdown));
   const end = performance.now() + remaining*1000;
   render();
+  if (remaining <= 3) tick();
   clearInterval(timer);
   timer = setInterval(() => {
     const left = Math.ceil((end - performance.now())/1000);
     if (left <= 0){ clearInterval(timer); timesUp(); }
-    else if (left !== remaining){ remaining = left; render(); }
+    else if (left !== remaining){ remaining = left; render(); if (left <= 3) tick(); }
   }, 50);
 }
 function timesUp(){
@@ -806,18 +824,44 @@ function reveal(){ phase = 'reveal'; render(); }
 
 function advance(){
   getCtx();
-  if (phase === 'ready' || phase === 'center') startRound();
+  if (phase === 'ready') startRound();
+  else if (phase === 'center') leaveCenter();
   else if (phase === 'reveal'){ phase = 'center'; render(); }
   else if (phase === 'playing') startCountdown();
   else if (phase === 'timesup') reveal();
 }
-function replay(){ if (round) playFromStart(round.audio); }
+function replay(){ if (round && phase !== 'leaving') playFromStart(round.audio); }
+
+/* Center -> Listen: fade yellow back to gray and wait for the title to be fully
+   visible before the next clip starts. Advances are ignored while this runs. */
+let leaveToken = 0;
+function leaveCenter(){
+  const token = ++leaveToken;
+  const els = [document.body, stage];
+  const bg = getComputedStyle(stage).backgroundColor;
+  els.forEach(el => { el.style.animation = 'none'; el.style.transition = 'none'; el.style.backgroundColor = bg; });
+  phase = 'leaving';
+  render();
+  void stage.offsetWidth;
+  els.forEach(el => { el.style.transition = 'background-color .8s ease'; el.style.backgroundColor = '#efefef'; });
+  const t0 = performance.now();
+  (function wait(){
+    if (token !== leaveToken || phase !== 'leaving') return;
+    const titleDone = parseFloat(getComputedStyle($('title')).opacity) >= 0.999;
+    if (performance.now() - t0 < 850 || !titleDone){ requestAnimationFrame(wait); return; }
+    clearLeaveStyles();
+    startRound();
+  })();
+}
+function clearLeaveStyles(){
+  [document.body, stage].forEach(el => { el.style.animation = ''; el.style.transition = ''; el.style.backgroundColor = ''; });
+}
 
 const SPEAKER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function render(){
-  document.body.classList.remove('ready','playing','countdown','timesup','reveal','center');
+  document.body.classList.remove('ready','playing','countdown','timesup','reveal','center','leaving');
   document.body.classList.add(phase);
   const cue = $('cue'), rev = $('reveal');
   const answer = (phase === 'reveal' && round) ? round.inst.families : null;
@@ -835,7 +879,7 @@ function render(){
     cue.innerHTML = `<div class="count">${remaining}</div>`;
   } else if (phase === 'timesup'){
     cue.innerHTML = `<div class="freeze">${esc(settings.freezeText || 'FREEZE!')}</div>`;
-  } else if (phase === 'center'){
+  } else if (phase === 'center' || phase === 'leaving'){
     cue.innerHTML = '';
   } else if (phase === 'reveal'){
     cue.innerHTML = `<div class="name">${esc(round.inst.name)}</div>`;
@@ -893,6 +937,7 @@ $('setupBtn').onclick = e => { e.currentTarget.blur(); openSetup(); };
 
 /* ================= SETUP ================= */
 function openSetup(){
+  leaveToken++; clearLeaveStyles();
   if (round) round.audio.pause();
   clearInterval(timer);
   if (phase === 'countdown') { phase = 'playing'; }
