@@ -64,6 +64,8 @@ body.center,body.center #stage{animation:yellowPulse 1.6s ease-in-out infinite a
 #reveal{position:absolute;left:560px;width:800px;top:250px;height:580px;padding-bottom:20px;display:none;align-items:flex-end;justify-content:center}
 body.reveal #reveal{display:flex}
 #reveal img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,.25))}
+#reveal .section{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-end;width:800px}
+#reveal .section .cell{display:flex;align-items:center;justify-content:center}
 #reveal .missing{width:420px;height:420px;border-radius:50%;background:#fff;border:8px dashed #b9c2cb;display:flex;align-items:center;justify-content:center;
   font-size:44px;color:#8593a1;text-align:center;padding:40px}
 
@@ -72,8 +74,12 @@ body.reveal #reveal{display:flex}
 #cue .small{font-size:40px;font-weight:500}
 #cue .listen{display:flex;align-items:center;gap:28px;font-size:96px;font-weight:700;color:var(--navy)}
 #cue .listen svg{width:110px;height:110px}
-#cue .count{font-size:250px;font-weight:700;line-height:1;color:var(--red);text-shadow:3px 5px 0 var(--red-dark)}
-#cue .freeze{font-size:170px;font-weight:700;line-height:1;color:#fff;text-shadow:3px 5px 0 #6d0910}
+#bigCue{position:absolute;left:460px;width:1000px;top:250px;height:620px;display:none;align-items:center;justify-content:center;text-align:center}
+body.countdown #bigCue,body.timesup #bigCue{display:flex}
+body.timesup #bigCue{align-items:flex-end;padding-bottom:70px}
+body.countdown #people,body.timesup #people{display:none}
+#bigCue .count{font-size:560px;font-weight:700;line-height:1;color:var(--red);text-shadow:5px 9px 0 var(--red-dark),0 16px 34px rgba(0,0,0,.18)}
+#bigCue .freeze{font-size:270px;font-weight:700;line-height:1;white-space:nowrap;color:#fff;text-shadow:5px 8px 0 #6d0910}
 #cue .name{font-size:120px;font-weight:700;line-height:1;color:var(--navy);white-space:nowrap}
 
 #toolbar{position:absolute;right:22px;bottom:18px;display:flex;gap:12px;opacity:.22}
@@ -145,6 +151,7 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
   <div id="desks"></div>
   <svg id="people" viewBox="0 0 380 450" aria-hidden="true"></svg>
   <div id="reveal"></div>
+  <div id="bigCue"></div>
   <div id="centerMsg">Back to the center!</div>
   <div id="cue"></div>
   <div id="toast"></div>
@@ -594,7 +601,12 @@ const INSTRUMENTS = [
   {name:'Woodblock', slug:'woodblock', families:['percussion']},
   {name:'Xylophone', slug:'xylophone', families:['percussion']},
   {name:'Triangle', slug:'triangle', families:['percussion']},
-  {name:'Piano', slug:'piano', families:['string','percussion']}
+  {name:'Piano', slug:'piano', families:['string','percussion']},
+  /* Full sections: one clip of the whole family; the reveal shows these instruments together */
+  {name:'Woodwind Section', slug:'woodwind-section', families:['woodwind'], section:['piccolo','flute','oboe','clarinet','bassoon']},
+  {name:'Brass Section', slug:'brass-section', families:['brass'], section:['french-horn','trumpet','trombone','tuba']},
+  {name:'String Section', slug:'string-section', families:['string'], section:['violin','viola','cello','double-bass']},
+  {name:'Percussion Section', slug:'percussion-section', families:['percussion'], section:['timpani','snare-drum','bass-drum','crash-cymbals','xylophone','triangle']}
 ];
 INSTRUMENTS.forEach(i => { i.clips = []; i.hasImage = null; });
 
@@ -743,7 +755,8 @@ async function scanClips(){
       if (await exists(url)) found.push(url); else break;
     }
     inst.clips = found;
-    inst.hasImage = !!embeddedFor(inst.slug) || await imageExists(`${IMAGE_DIR}${inst.slug}.png`);
+    inst.hasImage = inst.section ? inst.section.every(s => !!embeddedFor(s))
+      : (!!embeddedFor(inst.slug) || await imageExists(`${IMAGE_DIR}${inst.slug}.png`));
   }));
   scanning = false;
   renderSetupList(); updateClipNum(); render();
@@ -785,8 +798,10 @@ function pickRound(){
   const inst = pool[Math.floor(Math.random()*pool.length)];
   const url = peekClip(inst);
   const audio = new Audio(); audio.preload = 'auto'; audio.src = url;
-  const img = new Image(); img.src = embeddedFor(inst.slug) || `${IMAGE_DIR}${inst.slug}.png`;
-  return {inst, url, audio, img};
+  const mk = slug => { const im = new Image(); im.src = embeddedFor(slug) || `${IMAGE_DIR}${slug}.png`; im.dataset.slug = slug; return im; };
+  const img = inst.section ? null : mk(inst.slug);
+  const imgs = inst.section ? inst.section.map(mk) : null;
+  return {inst, url, audio, img, imgs};
 }
 function startRound(){
   if (scanning) return;
@@ -876,9 +891,13 @@ function render(){
   } else if (phase === 'playing'){
     cue.innerHTML = `<div class="listen">${SPEAKER}<span>Listen!</span></div>`;
   } else if (phase === 'countdown'){
-    cue.innerHTML = `<div class="count">${remaining}</div>`;
+    cue.innerHTML = '';
+    $('bigCue').innerHTML = `<div class="count">${remaining}</div>`;
   } else if (phase === 'timesup'){
-    cue.innerHTML = `<div class="freeze">${esc(settings.freezeText || 'FREEZE!')}</div>`;
+    cue.innerHTML = '';
+    $('bigCue').innerHTML = `<div class="freeze">${esc(settings.freezeText || 'FREEZE!')}</div>`;
+    const fz = $('bigCue').firstChild; let fs = 270;
+    while (fz.scrollWidth > 1000 && fs > 90){ fs -= 10; fz.style.fontSize = fs + 'px'; }
   } else if (phase === 'center' || phase === 'leaving'){
     cue.innerHTML = '';
   } else if (phase === 'reveal'){
@@ -893,6 +912,7 @@ function render(){
     while (ft.scrollWidth > 1300 && fs > 70){ fs -= 6; ft.style.fontSize = fs + 'px'; }
     ft.style.top = (8 + (168 - fs)*0.55) + 'px';
     rev.innerHTML = '';
+    if (round.imgs){ showSection(rev, round); return; }
     const img = round.img;
     const showMissing = () => { rev.innerHTML = '<div class="missing">Picture coming soon</div>'; };
     const place = () => {
@@ -906,6 +926,32 @@ function render(){
     else if (img.complete) showMissing();
     else { img.onload = () => { if (phase==='reveal') place(); }; img.onerror = showMissing; }
   }
+}
+
+/* Section reveal: the family's instruments in a grid (2x2 for 4, 3+2 for 5, 3+3 for 6) */
+function showSection(rev, r){
+  const imgs = r.imgs, n = imgs.length;
+  const cols = n <= 4 ? 2 : 3, rows = Math.ceil(n / cols), gap = 18;
+  const cw = (800 - gap*(cols-1)) / cols, ch = (560 - gap*(rows-1)) / rows;
+  const scaleOf = im => (IMAGE_ALIAS[im.dataset.slug] && IMAGE_ALIAS[im.dataset.slug].scale) || 1;
+  const maxSc = Math.max(...imgs.map(scaleOf));
+  Promise.all(imgs.map(im => im.decode ? im.decode().catch(() => {}) : Promise.resolve())).then(() => {
+    if (phase !== 'reveal' || round !== r) return;
+    const grid = document.createElement('div'); grid.className = 'section';
+    grid.style.gap = gap + 'px';
+    imgs.forEach(im => {
+      const cell = document.createElement('div'); cell.className = 'cell';
+      cell.style.width = cw + 'px'; cell.style.height = ch + 'px';
+      if (im.naturalWidth){
+        const k = Math.min(cw/im.naturalWidth, ch/im.naturalHeight) * scaleOf(im) / maxSc;
+        im.style.width = Math.round(im.naturalWidth*k) + 'px';
+        im.style.height = Math.round(im.naturalHeight*k) + 'px';
+        cell.appendChild(im);
+      }
+      grid.appendChild(cell);
+    });
+    rev.innerHTML = ''; rev.appendChild(grid);
+  });
 }
 
 let toastTimer = null;
@@ -958,11 +1004,12 @@ function closeSetup(){
 $('closeSetup').onclick = closeSetup;
 
 const GROUPS = [
-  {title:'Woodwind', test:i => i.families.length===1 && i.families[0]==='woodwind'},
-  {title:'Brass', test:i => i.families.length===1 && i.families[0]==='brass'},
-  {title:'String', test:i => i.families.length===1 && i.families[0]==='string'},
-  {title:'Percussion', test:i => i.families.length===1 && i.families[0]==='percussion'},
-  {title:'String or Percussion', test:i => i.families.length>1}
+  {title:'Woodwind', test:i => !i.section && i.families.length===1 && i.families[0]==='woodwind'},
+  {title:'Brass', test:i => !i.section && i.families.length===1 && i.families[0]==='brass'},
+  {title:'String', test:i => !i.section && i.families.length===1 && i.families[0]==='string'},
+  {title:'Percussion', test:i => !i.section && i.families.length===1 && i.families[0]==='percussion'},
+  {title:'String or Percussion', test:i => !i.section && i.families.length>1},
+  {title:'Full sections', test:i => !!i.section}
 ];
 function renderSetupList(){
   const box = $('families');
@@ -986,7 +1033,7 @@ function renderSetupList(){
     box.appendChild(fam);
   });
   const on = INSTRUMENTS.filter(isOn).length, ready = playable().length;
-  $('sumText').textContent = scanning ? 'Checking for clips...' : `${on} of ${INSTRUMENTS.length} instruments on, ${ready} ready to play`;
+  $('sumText').textContent = scanning ? 'Checking for clips...' : `${on} of ${INSTRUMENTS.length} choices on, ${ready} ready to play`;
 }
 function setOn(inst, val, quiet){
   settings.disabled = settings.disabled.filter(s => s !== inst.slug);
