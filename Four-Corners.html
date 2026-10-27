@@ -30,6 +30,10 @@ body.timesup{--bg:var(--alarm);--gap:var(--alarm)}
 #title{position:absolute;left:0;right:0;top:8px;text-align:center;font-weight:700;font-size:168px;line-height:1;color:var(--red);
   text-shadow:3px 5px 0 var(--red-dark),0 10px 24px rgba(0,0,0,.18);letter-spacing:1px;margin:0}
 body.timesup #title{color:#fff;text-shadow:3px 5px 0 #6d0910}
+#title{transition:opacity .6s ease .35s}
+#famTitle{position:absolute;left:310px;width:1300px;top:8px;margin:0;text-align:center;white-space:nowrap;font-weight:700;font-size:168px;line-height:1;color:var(--green);text-shadow:3px 5px 0 #0b6b2f,0 10px 24px rgba(0,0,0,.18);opacity:0;transition:opacity .6s ease;pointer-events:none}
+body.reveal #title{opacity:0;transition:none}
+body.reveal #famTitle{opacity:1;transition:none}
 
 #legs{position:absolute;inset:0;width:1920px;height:1080px}
 #legs .stand-legs{stroke:#2a2420;stroke-linecap:round;fill:none}
@@ -51,7 +55,7 @@ body.reveal #people,body.center #people{display:none}
 #centerMsg{position:absolute;left:570px;width:780px;top:330px;height:450px;display:none;align-items:center;justify-content:center;text-align:center;font-size:118px;font-weight:700;line-height:1.1;color:var(--navy)}
 body.center #centerMsg{display:flex}
 body.center,body.center #stage{animation:yellowPulse 1.6s ease-in-out infinite alternate}
-@keyframes yellowPulse{from{background-color:#efefef}to{background-color:#ffe777}}
+@keyframes yellowPulse{from{background-color:#ffe266}to{background-color:#fff4b8}}
 
 #reveal{position:absolute;left:560px;width:800px;top:250px;height:580px;padding-bottom:20px;display:none;align-items:flex-end;justify-content:center}
 body.reveal #reveal{display:flex}
@@ -132,6 +136,7 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
 
 <div id="stage">
   <h1 id="title">Four Corners</h1>
+  <div id="famTitle" aria-hidden="true"></div>
   <svg id="legs" viewBox="0 0 1920 1080" aria-hidden="true"></svg>
   <div id="desks"></div>
   <svg id="people" viewBox="0 0 380 450" aria-hidden="true"></svg>
@@ -838,6 +843,11 @@ function render(){
     while (nm.scrollWidth > 960 && fs > 60){ fs -= 6; nm.style.fontSize = fs + 'px'; }
   }
   if (phase === 'reveal' && round){
+    const ft = $('famTitle'); let fs = 168;
+    ft.textContent = round.inst.families.map(f => FAMILY_LABEL[f]).join(' or ');
+    ft.style.fontSize = fs + 'px';
+    while (ft.scrollWidth > 1300 && fs > 70){ fs -= 6; ft.style.fontSize = fs + 'px'; }
+    ft.style.top = (8 + (168 - fs)*0.55) + 'px';
     rev.innerHTML = '';
     const img = round.img;
     const showMissing = () => { rev.innerHTML = '<div class="missing">Picture coming soon</div>'; };
