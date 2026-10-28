@@ -1180,7 +1180,18 @@ function renderToolbar() {
   const pb = $("pBuzz"), tucked = $("play").classList.contains("sliver");
   pb.classList.toggle("hidden", !!g.preview);
   pb.classList.toggle("linked", bridge.on);
-  pb.textContent = (bridge.on ? (bridge.version === "1.0" ? "buzzin: connected (update extension for team names)" : "buzzin: connected") : "buzzin: not connected") + (tucked ? " - show" : " - tuck away");
+  const sres = bridge.settings ? Object.values(bridge.settings) : [];
+  const sBad = sres.some(v => v === "unknown" || v === "failed");
+  const oldExt = ["1.0", "1.1", "1.2"].includes(bridge.version);
+  pb.textContent = (bridge.on
+    ? (bridge.version === "1.0" ? "buzzin: connected (update extension for team names)"
+      : sBad ? "buzzin: connected (check One buzz / penalty settings)"
+      : "buzzin: connected")
+    : "buzzin: not connected") + (tucked ? " - show" : " - tuck away");
+  pb.title = !bridge.on ? "Show or tuck away the buzzin.live panel"
+    : oldExt ? "Update Buzzin Bridge to 1.3 to create the game and set One buzz only and Early buzz penalty automatically"
+    : !bridge.settings ? "Settings are applied once you create a buzzin game"
+    : "One buzz only: " + (bridge.settings.oneBuzzOnly || "?") + " / Early buzz penalty: " + (bridge.settings.earlyBuzzPenalty || "?");
   $("pEnd").classList.toggle("hidden", !(playing && g.screen === "board"));
   $("pUndo").disabled = !undoStack.length;
   $("pUndo").style.opacity = undoStack.length ? 1 : .5;
@@ -2372,10 +2383,12 @@ function lockAndClear() {
   sendBridge("clear");
   setTimeout(() => sendBridge("lock"), 150);
 }
-function sendBridge(cmd) {
+function sendBridge(cmd, extra) {
   const w = $("buzzFrame").contentWindow;
-  if (w) w.postMessage({ source: "jeopardy-board", cmd }, "https://buzzin.live");
+  if (w) w.postMessage(Object.assign({ source: "jeopardy-board", cmd }, extra || {}), "https://buzzin.live");
 }
+// Your standard buzzin setup, applied automatically whenever buzzin loads (extension 1.2 or newer)
+const BUZZIN_SETTINGS = { oneBuzzOnly: true, earlyBuzzPenalty: true };
 function helloBridge() {
   let n = 0;
   const t = setInterval(() => { if (bridge.on || ++n > 10) return clearInterval(t); sendBridge("hello"); }, 500);
@@ -2396,7 +2409,17 @@ window.addEventListener("message", e => {
     setBridgeStat();
     if (game && game.screen === "question") render();
   }
-  if (d.type === "ready") { bridge.version = d.version || "1.0"; setBridgeStat(); }
+  if (d.type === "ready") {
+    bridge.version = d.version || "1.0";
+    bridge.settings = null;
+    sendBridge("autocreate"); // extension 1.3+: skip buzzin's Join / Create choice
+    sendBridge("settings", { want: BUZZIN_SETTINGS });
+    setBridgeStat();
+  }
+  if (d.type === "settings") {
+    bridge.settings = d.result || {};
+    if (game) renderToolbar();
+  }
   if (d.type === "state") {
     bridge.locked = !!d.locked;
     if (!bridge.locked && Date.now() < bridge.holdUntil) { sendBridge("lock"); return; }
