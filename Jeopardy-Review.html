@@ -216,6 +216,18 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .cue.lockbar.open{background:var(--open);border-color:#0d6b30}
 .cue.lockbar svg{height:62%;width:auto;display:block}
 /* fill-in-the-blank: runs of 2+ underscores become one solid line */
+/* clue with a picture or video: text on the left, media on the right so the picture can be big */
+.card-body.has-media{flex-direction:row;align-items:center;justify-content:center;gap:3%;padding:10px 3%}
+.card-body.has-media > .q-text,.card-body.has-media > .a-text{flex:0 1 44%;max-width:44%;font-size:clamp(18px,var(--qsm,3.4cqw),56px)}
+.card-body.has-media > .a-text{font-size:clamp(24px,4.6cqw,72px)}
+.card-body.has-media > .q-img{flex:1 1 0;min-width:0;max-width:53%;height:100%;max-height:100%;object-fit:contain}
+.card-body.has-media > .vid-wrap{flex:1 1 0 !important;height:100%;max-width:56%}
+@container (aspect-ratio < 1.25){
+  .card-body.has-media{flex-direction:column}
+  .card-body.has-media > .q-text,.card-body.has-media > .a-text{max-width:95%;flex:0 0 auto;font-size:clamp(20px,var(--qs,4.6cqw),64px)}
+  .card-body.has-media > .q-img{max-width:90%;height:auto;flex:0 1 auto;min-height:0}
+  .card-body.has-media > .vid-wrap{max-width:100%;width:100%}
+}
 .blank{display:inline-block;width:var(--bw,4em);height:.9em;border-bottom:.09em solid currentColor;vertical-align:baseline;margin:0 .08em;filter:drop-shadow(.06em .06em 0 #000)}
 .cat-h.done{color:transparent;text-shadow:none}
 .cue.dd{background:var(--gold);color:#1a1a1a;border-color:#a88300}
@@ -1173,7 +1185,8 @@ function renderToolbar() {
   $("pFinal").classList.toggle("hidden", !(playing && g.board.final.enabled && g.screen === "board"));
   if (g.preview) { $("pRevealAll").classList.add("hidden"); $("pEnd").classList.add("hidden"); }
   const pp = $("pPractice");
-  pp.classList.toggle("hidden", !!g.preview || !(g.practice || g.screen === "board"));
+  // during practice the only way out is the End practice button at the bottom of the practice question
+  pp.classList.toggle("hidden", !!g.preview || !!g.practice || g.screen !== "board");
   pp.textContent = g.practice ? "End practice" : "Practice";
   pp.classList.toggle("on", !!g.practice);
   if (g.practice) ["pFinal", "pEnd", "pRevealAll"].forEach(id => $(id).classList.add("hidden"));
@@ -1818,6 +1831,11 @@ document.addEventListener("keydown", e => {
 function clueHTML(text) {
   return esc(text).replace(/_{2,}/g, m => `<span class="blank" style="--bw:${Math.min(8, Math.max(2.5, m.length * .55)).toFixed(2)}em" aria-label="blank"></span>`);
 }
+// Text size when the clue sits beside a picture or video (half the width)
+function qSizeSide(text) {
+  const n = (text || "").length;
+  return n < 50 ? "4.2cqw" : n < 100 ? "3.4cqw" : n < 170 ? "2.8cqw" : "2.3cqw";
+}
 function qSize(text) {
   const n = (text || "").length;
   return n < 50 ? "5.2cqw" : n < 100 ? "4.2cqw" : n < 170 ? "3.4cqw" : "2.7cqw";
@@ -1893,8 +1911,8 @@ function renderQuestion(stage) {
       ${game.preview ? "" : dd
         ? `<div class="cue dd">${esc(game.teams[dd.team].name)} wagered ${money(pointsNow())}</div>`
         : cueBarHTML()}
-      <div class="card-body">
-        ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)}">${clueHTML(t.q)}</div>` : ""}
+      <div class="card-body ${t.q && (t.qImg || videoSrc(t.video)) ? "has-media" : ""}">
+        ${t.q ? `<div class="q-text" style="--qs:${qSize(t.q)};--qsm:${qSizeSide(t.q)}">${clueHTML(t.q)}</div>` : ""}
         ${mediaHTML(t)}
       </div>
       <div class="controls">
@@ -1956,6 +1974,7 @@ function wireScoring(fromQuestion) {
     if (bridge.on) sendBridge("lock");
     snapshot();
     const before = game.teams[i].score, pts = pointsNow();
+    if (game.practice) game.practice.awarded = true;
     applyDelta(i, pts);
     game.active = i;
     playSfx("correct");
@@ -1992,7 +2011,7 @@ function renderAnswer(stage) {
   stage.innerHTML = `
     <div class="card">
       <div class="card-label">${esc(labelFor())} - Answer</div>
-      <div class="card-body">
+      <div class="card-body ${t.aImg ? "has-media" : ""}">
         <div class="a-text">${clueHTML(t.a || "(no answer entered)")}</div>
         ${t.aImg ? `<img class="q-img" src="${t.aImg}" alt="">` : ""}
       </div>
@@ -2099,8 +2118,8 @@ function renderFinalQuestion(stage) {
     <div class="card final-q">
       <div class="card-label">Final Jeopardy - ${esc(f.category)}</div>
       <div class="final-clock-row ${finalTimer ? "" : "idle"}" id="finalClockRow"><div class="final-clock" id="finalClock">${FINAL_SECONDS}</div></div>
-      <div class="card-body">
-        ${f.question ? `<div class="q-text" style="--qs:${qSize(f.question)}">${clueHTML(f.question)}</div>` : ""}
+      <div class="card-body ${f.question && f.image ? "has-media" : ""}">
+        ${f.question ? `<div class="q-text" style="--qs:${qSize(f.question)};--qsm:${qSizeSide(f.question)}">${clueHTML(f.question)}</div>` : ""}
         ${f.image ? `<img class="q-img" src="${f.image}" alt="">` : ""}
       </div>
       <div class="controls">
@@ -2269,7 +2288,7 @@ function practiceGo(i) {
   const p = game.practice;
   if (!p) return;
   if (i < 0) i = 0;
-  if (i >= p.slides.length) { endPractice(); return; }
+  if (i >= p.slides.length) return; // advancing never ends practice; use the End practice button
   p.step = i;
   const sl = p.slides[i];
   closeScoreZoom();
@@ -2330,6 +2349,17 @@ function decoratePractice(stage) {
   if (tb) tb.remove();
   const label = stage.querySelector(".card-label");
   if (label) label.classList.add("practice-label");
+  // End practice lives in the bottom bar of the practice question, and only after a team has won points
+  const controls = stage.querySelector(".card .controls");
+  if (controls && practiceSlide().kind === "question") {
+    const end = document.createElement("button");
+    end.className = "ctl gold";
+    end.id = "pcEnd";
+    end.textContent = "End practice";
+    if (!p.awarded) { end.disabled = true; end.style.opacity = ".4"; end.title = "Mark a team right first"; }
+    end.onclick = () => { if (game.practice && game.practice.awarded) endPractice(); };
+    controls.append(end);
+  }
   const n = document.createElement("div");
   n.className = "pc-num";
   n.textContent = (p.step + 1) + " / " + p.slides.length;
