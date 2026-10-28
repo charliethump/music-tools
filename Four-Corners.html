@@ -93,6 +93,7 @@ body.countdown #people,body.timesup #people{display:none}
 #gagBtn svg{width:36px;height:36px}
 #gag{position:absolute;left:710px;top:110px;width:499px;height:850px;pointer-events:none;display:none;z-index:20}
 #gag canvas{width:499px;height:850px;display:block;filter:drop-shadow(0 18px 30px rgba(0,0,0,.35))}
+#gagString{position:absolute;left:248px;top:-1400px;width:3px;height:1430px;background:#3a3330;display:none}
 #toolbar:hover{opacity:1}
 #toolbar button{width:64px;height:64px;border-radius:50%;border:0;background:var(--navy);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
 #toolbar svg{width:34px;height:34px}
@@ -166,7 +167,7 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
   <div id="centerMsg">Back to the center!</div>
   <div id="cue"></div>
   <div id="toast"></div>
-  <div id="gag"><canvas id="gagCanvas" width="576" height="980"></canvas></div>
+  <div id="gag"><div id="gagString"></div><canvas id="gagCanvas" width="576" height="980"></canvas></div>
   <button id="gagBtn" tabindex="-1" title="Elimination (E)" aria-label="Elimination">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><rect x="9" y="14" width="6" height="3.5" rx="1" fill="currentColor"/></svg>
   </button>
@@ -1083,8 +1084,8 @@ const GAG = {
   keys: [[0,0],[0.11,0],[0.19,1],[0.32,0.95],[0.40,0.12],
          [0.45,0.25],[0.58,0.55],[0.68,0.7],[0.74,0.04],
          [0.79,0.2],[0.86,0.75],[0.92,0.5],[0.96,0.08],
-         [1.00,0.9],[1.08,0.6],[1.18,0.5],[1.25,0.72],[1.32,0.05],[1.40,0]],
-  SPEECH_END: 1.40, HOLD: 0.7, FPS: 15
+         [1.00,0.9],[1.10,0.65],[1.25,0.55],[1.38,0.72],[1.50,0.05],[1.58,0]],
+  SPEECH_END: 1.58, HOLD: 0.7, FPS: 15
 };
 const gagImg = new Image(); gagImg.src = GAG_FACE;
 /* The sound is decoded once into Web Audio, which is unlocked by the key press or click
@@ -1135,16 +1136,46 @@ function mouthAt(t){
   }
   return 0;
 }
+/* Random entrances and exits (never the same one twice in a row) */
+const GAG_IN = {
+  rise:   {dur:750,  ease:'cubic-bezier(.2,.8,.25,1)', k:[{transform:'translateY(1000px) rotate(-8deg)'},{transform:'none'}]},
+  swoopL: {dur:950,  ease:'cubic-bezier(.25,.7,.3,1)', k:[{transform:'translate(-1400px,300px) rotate(-35deg)'},{transform:'translate(-260px,-90px) rotate(12deg)', offset:.6},{transform:'none'}]},
+  swoopR: {dur:950,  ease:'cubic-bezier(.25,.7,.3,1)', k:[{transform:'translate(1400px,300px) rotate(35deg)'},{transform:'translate(260px,-90px) rotate(-12deg)', offset:.6},{transform:'none'}]},
+  spin:   {dur:1000, ease:'cubic-bezier(.2,.8,.3,1)',  k:[{transform:'scale(.03) rotate(-720deg)', opacity:0},{opacity:1, offset:.15},{transform:'none', opacity:1}]},
+  string: {dur:950,  ease:'ease-in-out',               k:[{transform:'translateY(-1300px)'},{transform:'translateY(45px)', offset:.7},{transform:'translateY(-18px)', offset:.86},{transform:'none'}]}
+};
+const GAG_OUT = {
+  sink:   {dur:700, ease:'cubic-bezier(.5,0,.75,0)',  k:[{transform:'none'},{transform:'translateY(1050px) rotate(7deg)'}]},
+  shrink: {dur:800, ease:'cubic-bezier(.5,0,.8,.4)',  k:[{transform:'none', opacity:1},{transform:'scale(.02) rotate(25deg)', opacity:0}]},
+  yankL:  {dur:600, ease:'cubic-bezier(.6,0,.9,.3)',  k:[{transform:'none'},{transform:'translateX(60px) rotate(4deg)', offset:.3},{transform:'translateX(-2000px) rotate(-20deg)'}]},
+  yankR:  {dur:600, ease:'cubic-bezier(.6,0,.9,.3)',  k:[{transform:'none'},{transform:'translateX(-60px) rotate(-4deg)', offset:.3},{transform:'translateX(2000px) rotate(20deg)'}]},
+  spin:   {dur:900, ease:'cubic-bezier(.5,0,.8,.5)',  k:[{transform:'none', opacity:1},{transform:'translateY(-200px) scale(.05) rotate(900deg)', opacity:0}]},
+  rocket: {dur:750, ease:'cubic-bezier(.6,0,.9,.4)',  k:[{transform:'none'},{transform:'translateY(45px) scale(1.04,.9)', offset:.25},{transform:'translateY(-1400px) scale(.95,1.1)'}]}
+};
+let lastIn = '', lastOut = '';
+const pickNew = (obj, last) => { const keys = Object.keys(obj).filter(k => k !== last); return keys[Math.floor(Math.random()*keys.length)]; };
+
+/* Head jiggle: on each syllable the head hops up, stretches a little and tips,
+   alternating left and right, in step with the chin */
+const SYLLABLE_STARTS = [0.11, 0.42, 0.77, 0.97];
+function jiggle(cv, t, open){
+  let n = 0; SYLLABLE_STARTS.forEach((s, i) => { if (t >= s) n = i; });
+  const dir = n % 2 ? 1 : -1;
+  cv.style.transform = `translateY(${(-open*16).toFixed(1)}px) rotate(${(dir*open*3.5).toFixed(2)}deg) scale(${(1-open*.025).toFixed(3)}, ${(1+open*.05).toFixed(3)})`;
+}
+
 function eliminate(){
   if (gagRunning || !gagImg.complete) return;
   gagRunning = true;
-  const wrap = $('gag'), cv = $('gagCanvas');
+  const wrap = $('gag'), cv = $('gagCanvas'), str = $('gagString');
   const duck = round && !round.audio.paused ? round.audio : null;
   if (duck) duck.volume = 0.25;
-  drawGag(0); applyFloat(cv);
+  const inName = lastIn = pickNew(GAG_IN, lastIn), outName = lastOut = pickNew(GAG_OUT, lastOut);
+  const IN = GAG_IN[inName], OUT = GAG_OUT[outName];
+  drawGag(0); applyFloat(cv); cv.style.transformOrigin = '50% 85%'; cv.style.transform = '';
+  str.style.display = inName === 'string' ? 'block' : 'none';
   wrap.style.display = 'block';
-  wrap.animate([{transform:'translateY(1000px) rotate(-8deg)'},{transform:'translateY(0) rotate(0deg)'}],
-               {duration:750, easing:'cubic-bezier(.2,.8,.25,1)'});
+  wrap.animate(IN.k, {duration:IN.dur, easing:IN.ease});
   let leaving = false;
   const ctx = getCtx();                              // unlock audio during the press
   loadGagSound();
@@ -1159,20 +1190,21 @@ function eliminate(){
     }
     (function tick(){
       if (!gagRunning) return;
-      const t = clock();
-      drawGag(mouthAt(t));
+      const t = clock(), open = mouthAt(t);
+      drawGag(open); jiggle(cv, t, open);
       if (!leaving && t >= GAG.SPEECH_END + GAG.HOLD){
         leaving = true;
-        const out = wrap.animate([{transform:'translateY(0) rotate(0deg)'},{transform:'translateY(1050px) rotate(7deg)'}],
-                                 {duration:700, easing:'cubic-bezier(.5,0,.75,0)', fill:'forwards'});
+        if (outName !== 'rocket') str.style.display = 'none';      // the string snaps unless pulled up
+        const out = wrap.animate(OUT.k, {duration:OUT.dur, easing:OUT.ease, fill:'forwards'});
         out.onfinish = () => {
           wrap.style.display = 'none'; out.cancel(); gagRunning = false;
+          cv.style.transform = '';
           if (duck && !duck.paused) duck.volume = 1;
         };
       }
       requestAnimationFrame(tick);
     })();
-  }, 550);
+  }, Math.round(IN.dur * 0.75));
 }
 $('gagBtn').onclick = e => { e.currentTarget.blur(); eliminate(); };
 ['keydown','pointerdown'].forEach(ev => addEventListener(ev, () => loadGagSound(), {once:true}));
