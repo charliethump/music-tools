@@ -322,7 +322,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
 .card.final-q::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 45%,#b3121a 0%,#7a0710 55%,#3d0207 100%)}
 .card.final-q.timeup::before{animation:timeup-pulse 1.1s ease-in-out infinite alternate}
 @keyframes timeup-pulse{from{opacity:.25}to{opacity:.95}}
-#play.preview .toolbar .tb:not(#pPrevBack):not(#pFinal):not(#pStop){display:none}
+#play.preview .toolbar .tb:not(#pPrevBack):not(#pFinal):not(#pStop):not(#pFull){display:none}
 .preview-tag{color:var(--gold);font-weight:700;font-size:13px;margin-right:6px}
 /* practice round */
 .pc-slide{position:relative}
@@ -434,6 +434,7 @@ dialog::backdrop{background:rgba(4,16,74,.6)}
       <button class="tb" id="pMute">Sounds: on</button>
       <button class="tb hidden" id="pRevealAll">Reveal all categories</button>
       <span class="spacer"></span>
+      <button class="tb" id="pFull" title="Fill the whole screen (Esc to exit)">Full screen</button>
       <button class="tb hidden" id="pPractice">Practice</button>
       <button class="tb hidden" id="pBuzz" title="Show or tuck away the buzzin.live panel"></button>
       <button class="tb hidden" id="pFinal">Final Jeopardy</button>
@@ -1116,6 +1117,17 @@ function applyDelta(i, delta) {
 /* ---------- toolbar ---------- */
 $("pHome").onclick = async () => { await writeGame(); stopAllSound(); closeIntro(); if (fjIntro) { fjIntro.remove(); fjIntro = null; } show("home"); };
 $("pUndo").onclick = undo;
+// Full screen: hides Chrome's tabs, address bar and the taskbar (Esc or the button again to exit)
+$("pFull").onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => appAlert("This browser wouldn't switch to full screen. Press F11 instead."));
+};
+document.addEventListener("fullscreenchange", () => {
+  const on = !!document.fullscreenElement;
+  $("pFull").textContent = on ? "Exit full screen" : "Full screen";
+  $("pFull").classList.toggle("on", on);
+  if (game && game.screen === "board") fitBoard();
+});
 $("pRedo").onclick = redo;
 $("pStop").onclick = stopAllSound;
 $("pFloor").onclick = () => { game.floorZero = !game.floorZero; persistGame(); renderToolbar(); };
