@@ -1182,14 +1182,14 @@ function renderToolbar() {
   pb.classList.toggle("linked", bridge.on);
   const sres = bridge.settings ? Object.values(bridge.settings) : [];
   const sBad = sres.some(v => v === "unknown" || v === "failed");
-  const oldExt = ["1.0", "1.1", "1.2"].includes(bridge.version);
+  const oldExt = ["1.0", "1.1", "1.2", "1.3"].includes(bridge.version);
   pb.textContent = (bridge.on
     ? (bridge.version === "1.0" ? "buzzin: connected (update extension for team names)"
       : sBad ? "buzzin: connected (check One buzz / penalty settings)"
       : "buzzin: connected")
     : "buzzin: not connected") + (tucked ? " - show" : " - tuck away");
   pb.title = !bridge.on ? "Show or tuck away the buzzin.live panel"
-    : oldExt ? "Update Buzzin Bridge to 1.3 to create the game and set One buzz only and Early buzz penalty automatically"
+    : oldExt ? "Update Buzzin Bridge to 1.4 to create the game and set One buzz only and Early buzz penalty automatically"
     : !bridge.settings ? "Settings are applied once you create a buzzin game"
     : "One buzz only: " + (bridge.settings.oneBuzzOnly || "?") + " / Early buzz penalty: " + (bridge.settings.earlyBuzzPenalty || "?");
   $("pEnd").classList.toggle("hidden", !(playing && g.screen === "board"));
