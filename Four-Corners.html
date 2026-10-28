@@ -64,10 +64,13 @@ body.center,body.center #stage{animation:yellowPulse 1.6s ease-in-out infinite a
 #reveal{position:absolute;left:560px;width:800px;top:250px;height:580px;padding-bottom:20px;display:none;align-items:flex-end;justify-content:center}
 body.reveal #reveal{display:flex}
 #reveal img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,.25))}
-#reveal .section{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-end;width:800px}
-#reveal .section .cell{display:flex;align-items:center;justify-content:center}
-.float{animation:bob 2.4s ease-in-out infinite alternate}
-@keyframes bob{from{transform:translateY(-12px)}to{transform:translateY(12px)}}
+#lineup{position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none;display:none}
+body.reveal #lineup{display:block}
+#lineup .item{position:absolute}
+#lineup img{filter:drop-shadow(0 10px 18px rgba(0,0,0,.25))}
+.float{--sway:4deg;animation:bob 2.4s ease-in-out infinite alternate,sway 4s ease-in-out infinite alternate}
+@keyframes bob{from{translate:0 -12px}to{translate:0 12px}}
+@keyframes sway{from{rotate:calc(var(--sway) * -1)}to{rotate:var(--sway)}}
 #reveal .missing{width:420px;height:420px;border-radius:50%;background:#fff;border:8px dashed #b9c2cb;display:flex;align-items:center;justify-content:center;
   font-size:44px;color:#8593a1;text-align:center;padding:40px}
 
@@ -153,6 +156,7 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
   <div id="desks"></div>
   <svg id="people" viewBox="0 0 380 450" aria-hidden="true"></svg>
   <div id="reveal"></div>
+  <div id="lineup"></div>
   <div id="bigCue"></div>
   <div id="centerMsg">Back to the center!</div>
   <div id="cue"></div>
@@ -613,6 +617,23 @@ const INSTRUMENTS = [
 ];
 INSTRUMENTS.forEach(i => { i.clips = []; i.hasImage = null; });
 
+/* Approximate real size of each instrument as pictured (corner-to-corner of the picture, in cm).
+   Whole-family reveals use these so instruments appear in proportion to each other. */
+const REAL_CM = {
+  'piccolo':33, 'flute':68, 'oboe':66, 'clarinet':67, 'bassoon':135,
+  'trumpet':55, 'french-horn':70, 'trombone':120, 'tuba':110,
+  'violin':75, 'viola':86, 'cello':133, 'double-bass':198,
+  'triangle':28, 'snare-drum':45, 'crash-cymbals':50, 'bass-drum':135, 'xylophone':175, 'timpani':220
+};
+/* Whole-family lineups: left-to-right order, and the stage area they may use
+   (kept clear of that family's own stand). Percussion uses a back row and a front row. */
+const FAMILY_LAYOUT = {
+  woodwind:   {span:[320, 1600], rows:[['piccolo','oboe','clarinet','flute','bassoon']]},
+  brass:      {span:[320, 1600], rows:[['trumpet','french-horn','tuba','trombone']]},
+  string:     {span:[40, 1360],  rows:[['violin','viola','cello','double-bass']]},
+  percussion: {span:[580, 1880], rows:[['bass-drum','xylophone','timpani'], ['triangle','snare-drum','crash-cymbals']]}
+};
+
 /* Stand layout on the 1920x1080 stage */
 const STANDS = [
   {family:'woodwind',  cx:175,  deskTop:28,  w:205, h:175, rot:-7, floor:545,  spread:82,  font:36},
@@ -920,7 +941,7 @@ function render(){
     ft.style.fontSize = fs + 'px';
     while (ft.scrollWidth > 1300 && fs > 70){ fs -= 6; ft.style.fontSize = fs + 'px'; }
     ft.style.top = (8 + (168 - fs)*0.55) + 'px';
-    rev.innerHTML = '';
+    rev.innerHTML = ''; $('lineup').innerHTML = '';
     if (round.imgs){ showSection(rev, round); return; }
     const img = round.img;
     const showMissing = () => { rev.innerHTML = '<div class="missing">Picture coming soon</div>'; };
@@ -929,7 +950,7 @@ function render(){
       const k = Math.min(800/img.naturalWidth, 560/img.naturalHeight, 1.6*sc);
       img.style.width = Math.round(img.naturalWidth*k) + 'px';
       img.style.height = Math.round(img.naturalHeight*k) + 'px';
-      img.alt = round.inst.name; img.className = 'float'; rev.innerHTML = ''; rev.appendChild(img);
+      img.alt = round.inst.name; applyFloat(img); rev.innerHTML = ''; rev.appendChild(img);
     };
     if (img.complete && img.naturalWidth) place();
     else if (img.complete) showMissing();
@@ -937,34 +958,55 @@ function render(){
   }
 }
 
-/* Section reveal: the family's instruments in a grid (2x2 for 4, 3+2 for 5, 3+3 for 6) */
+/* Whole-family reveal: instruments lined up smallest to largest, sized in proportion
+   to each other using REAL_CM. The lineup is fit to the space beside the correct stand. */
 function showSection(rev, r){
-  const imgs = r.imgs, n = imgs.length;
-  const cols = n <= 4 ? 2 : 3, rows = Math.ceil(n / cols), gap = 18;
-  const cw = (800 - gap*(cols-1)) / cols, ch = (560 - gap*(rows-1)) / rows;
-  const scaleOf = im => (IMAGE_ALIAS[im.dataset.slug] && IMAGE_ALIAS[im.dataset.slug].scale) || 1;
-  const maxSc = Math.max(...imgs.map(scaleOf));
-  Promise.all(imgs.map(im => im.decode ? im.decode().catch(() => {}) : Promise.resolve())).then(() => {
+  const lay = FAMILY_LAYOUT[r.inst.families[0]];
+  const bySlug = {}; r.imgs.forEach(im => bySlug[im.dataset.slug] = im);
+  Promise.all(r.imgs.map(im => im.decode ? im.decode().catch(() => {}) : Promise.resolve())).then(() => {
     if (phase !== 'reveal' || round !== r) return;
-    const grid = document.createElement('div'); grid.className = 'section';
-    grid.style.gap = gap + 'px';
-    imgs.forEach(im => {
-      const cell = document.createElement('div'); cell.className = 'cell';
-      cell.style.width = cw + 'px'; cell.style.height = ch + 'px';
-      if (im.naturalWidth){
-        const k = Math.min(cw/im.naturalWidth, ch/im.naturalHeight) * scaleOf(im) / maxSc;
-        im.style.width = Math.round(im.naturalWidth*k) + 'px';
-        im.style.height = Math.round(im.naturalHeight*k) + 'px';
-        im.className = 'float';
-        im.style.animationDuration = (2 + Math.random()*0.9).toFixed(2) + 's';
-        im.style.animationDelay = (-Math.random()*3).toFixed(2) + 's';
-        cell.appendChild(im);
-      }
-      grid.appendChild(cell);
+    const BASE = 850, TOP = 195, GAP = 34, LIFT = lay.rows.length > 1 ? 120 : 0, MIN_DIAG = 75;
+    const rows = lay.rows.map(row => row.filter(s => bySlug[s] && bySlug[s].naturalWidth).map(s => {
+      const im = bySlug[s], k = REAL_CM[s] / Math.hypot(im.naturalWidth, im.naturalHeight);
+      return {im, w: im.naturalWidth*k, h: im.naturalHeight*k};      // size at 1 px per cm
+    }));
+    const spanW = lay.span[1] - lay.span[0], mid = (lay.span[0] + lay.span[1]) / 2;
+    let s = Infinity;                                                   // px per cm, shared by the family
+    rows.forEach((row, ri) => {
+      if (!row.length) return;
+      s = Math.min(s, (spanW - GAP*(row.length-1)) / row.reduce((a, u) => a + u.w, 0));
+      s = Math.min(s, (BASE - (ri === 0 ? LIFT : 0) - TOP) / Math.max(...row.map(u => u.h)));
     });
-    rev.innerHTML = ''; rev.appendChild(grid);
-    flyIn([...grid.children]);
+    const box = $('lineup'); box.innerHTML = ''; rev.innerHTML = '';
+    rows.forEach((row, ri) => {
+      const base = BASE - (ri === 0 ? LIFT : 0);
+      const sized = row.map(u => {
+        const f = Math.max(1, MIN_DIAG / (Math.hypot(u.w, u.h) * s));    // keep tiny ones visible
+        return {im: u.im, w: u.w*s*f, h: u.h*s*f};
+      });
+      let x = mid - (sized.reduce((a, u) => a + u.w, 0) + GAP*(sized.length-1)) / 2;
+      sized.forEach(u => {
+        const item = document.createElement('div'); item.className = 'item';
+        Object.assign(item.style, {left: x+'px', top: (base - u.h)+'px', width: u.w+'px', height: u.h+'px'});
+        u.im.style.width = u.w + 'px'; u.im.style.height = u.h + 'px';
+        applyFloat(u.im);
+        item.appendChild(u.im); box.appendChild(item);
+        x += u.w + GAP;
+      });
+    });
+    flyIn([...box.children]);
   });
+}
+
+/* Zero-gravity float: an up-down bob and a slow tilt with different, random timings,
+   each starting at a random point in its motion. Tilt stays within about 5 degrees. */
+function applyFloat(im){
+  const bob = 2 + Math.random()*0.9, sway = 3.4 + Math.random()*1.8;
+  im.className = 'float';
+  im.style.setProperty('--sway', (2.5 + Math.random()*2.5).toFixed(2) + 'deg');
+  im.style.animationDuration = `${bob.toFixed(2)}s, ${sway.toFixed(2)}s`;
+  im.style.animationDelay = `${(-Math.random()*bob).toFixed(2)}s, ${(-Math.random()*sway).toFixed(2)}s`;
+  im.style.animationDirection = `${Math.random() < .5 ? 'alternate' : 'alternate-reverse'}, ${Math.random() < .5 ? 'alternate' : 'alternate-reverse'}`;
 }
 
 /* Each cell flies in from a random point beyond the edge of the screen */
