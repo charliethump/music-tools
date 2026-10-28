@@ -769,7 +769,7 @@ let round = null, nextRound = null, timer = null, remaining = 0;
 function playable(){ return INSTRUMENTS.filter(i => isOn(i) && i.clips.length); }
 /* Clip order: each instrument works through a shuffled "bag" of its clips,
    so no clip repeats until every clip for that instrument has played.
-   Instrument order: random, but never the same instrument 3 times in a row. */
+   Instrument order: family first, then instrument; never the same instrument 3 times in a row. */
 const clipBags = {}, lastClip = {}, recentInst = [];
 function shuffle(a){ for (let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 function peekClip(inst){
@@ -795,7 +795,13 @@ function pickRound(){
   if (!pool.length) return null;
   if (recentInst.length === 2 && recentInst[0] === recentInst[1] && pool.length > 1)
     pool = pool.filter(i => i.slug !== recentInst[1]);
-  const inst = pool[Math.floor(Math.random()*pool.length)];
+  /* Pick a family first (equal odds for each family that has clips), then an
+     instrument within it, so families with more instruments don't come up more.
+     Piano is in both the String and Percussion pools. */
+  const fams = ['woodwind','brass','string','percussion'].filter(f => pool.some(i => i.families.includes(f)));
+  const fam = fams[Math.floor(Math.random()*fams.length)];
+  const famPool = pool.filter(i => i.families.includes(fam));
+  const inst = famPool[Math.floor(Math.random()*famPool.length)];
   const url = peekClip(inst);
   const audio = new Audio(); audio.preload = 'auto'; audio.src = url;
   const mk = slug => { const im = new Image(); im.src = embeddedFor(slug) || `${IMAGE_DIR}${slug}.png`; im.dataset.slug = slug; return im; };
