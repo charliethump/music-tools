@@ -625,13 +625,13 @@ const REAL_CM = {
   'violin':75, 'viola':86, 'cello':133, 'double-bass':198,
   'triangle':28, 'snare-drum':45, 'crash-cymbals':50, 'bass-drum':135, 'xylophone':175, 'timpani':220
 };
-/* Whole-family lineups: left-to-right order, and the stage area they may use
-   (kept clear of that family's own stand). Percussion uses a back row and a front row. */
+/* Whole-family lineups, back row first. Each lineup is centered on the screen and kept
+   clear of the words and the correct stand. Percussion stands in three rows. */
 const FAMILY_LAYOUT = {
-  woodwind:   {span:[310, 1900], rows:[['piccolo','oboe','clarinet','flute','bassoon']]},
-  brass:      {span:[20, 1610],  rows:[['trumpet','french-horn','tuba','trombone']]},
-  string:     {span:[20, 1365],  rows:[['violin','viola','cello','double-bass']]},
-  percussion: {span:[565, 1900], gap:-10, rows:[['bass-drum','xylophone','timpani'], ['triangle','snare-drum','crash-cymbals']]}
+  woodwind:   {rows:[['piccolo','oboe','clarinet','flute','bassoon']]},
+  brass:      {rows:[['trumpet','french-horn','tuba','trombone']]},
+  string:     {rows:[['violin','viola','cello','double-bass']]},
+  percussion: {gap:8, lift:150, rows:[['timpani'], ['bass-drum','xylophone'], ['triangle','snare-drum','crash-cymbals']]}
 };
 
 /* Stand layout on the 1920x1080 stage */
@@ -965,12 +965,11 @@ function showSection(rev, r){
   const bySlug = {}; r.imgs.forEach(im => bySlug[im.dataset.slug] = im);
   Promise.all(r.imgs.map(im => im.decode ? im.decode().catch(() => {}) : Promise.resolve())).then(() => {
     if (phase !== 'reveal' || round !== r) return;
-    const GAP = lay.gap != null ? lay.gap : 16, LIFT = lay.rows.length > 1 ? 120 : 0, MIN_DIAG = 75;
+    const GAP = lay.gap != null ? lay.gap : 16, LIFT = lay.lift || 120, MIN_DIAG = 75;
     const rowsFwd = lay.rows.map(row => row.filter(s => bySlug[s] && bySlug[s].naturalWidth).map(s => {
       const im = bySlug[s], k = REAL_CM[s] / Math.hypot(im.naturalWidth, im.naturalHeight);
       return {im, w: im.naturalWidth*k, h: im.naturalHeight*k};      // size at 1 px per cm
     }));
-    const spanW = lay.span[1] - lay.span[0];
     /* Keep clear of the words: measure the green family title and the instrument name */
     const sr = stage.getBoundingClientRect(), sc = sr.width / 1920;
     const textBox = el => {
@@ -979,25 +978,29 @@ function showSection(rev, r){
       return {l:(b.left-sr.left)/sc, r:(b.right-sr.left)/sc, t:(b.top-sr.top)/sc, b:(b.bottom-sr.top)/sc};
     };
     const tb = textBox($('famTitle'));
+    /* Keep clear of the correct stand (its sign and legs, plus a margin) */
+    const st = STANDS.find(x => x.family === r.inst.families[0]);
+    const keep = {l: st.cx - st.w/2 - 30, r: st.cx + st.w/2 + 30, t: st.deskTop - 30, b: st.floor + 20};
     const nameEl = document.querySelector('#cue .name');
     const BASE = (nameEl ? textBox(nameEl).t : 880) - 30;            // room for the float below
     const rowsRev = rowsFwd.map(r => r.slice().reverse());
     let rows = rowsFwd;
-    const layout = (s, shift) => {                                      // s = px per cm; shift 0..1 = left..right
+    const layout = (s, off) => {                                        // s = px per cm; off = px from screen center
       const out = [];
       for (let ri = 0; ri < rows.length; ri++){
-        const base = BASE - (ri === 0 ? LIFT : 0);
+        const base = BASE - (rows.length - 1 - ri) * LIFT;   // back rows sit higher
         const sized = rows[ri].map(u => {
           const f = Math.max(1, MIN_DIAG / (Math.hypot(u.w, u.h) * s));  // keep tiny ones visible
           return {im: u.im, w: u.w*s*f, h: u.h*s*f};
         });
         const total = sized.reduce((a, u) => a + u.w, 0) + GAP*(sized.length-1);
-        if (total > spanW) return null;
-        let x = lay.span[0] + (spanW - total) * shift;
+        let x = 960 - total/2 + off;
+        if (x < 20 || x + total > 1900) return null;
         for (const u of sized){
           const top = base - u.h;
           const underTitle = x < tb.r + 20 && x + u.w > tb.l - 20;
           if (top < (underTitle ? tb.b + 24 : 28)) return null;
+          if (x < keep.r && x + u.w > keep.l && top < keep.b && top + u.h > keep.t) return null;
           out.push({...u, x, top}); x += u.w + GAP;
         }
       }
@@ -1005,15 +1008,15 @@ function showSection(rev, r){
     };
     /* Biggest scale that fits, sliding the lineup sideways (centered when possible) so tall
        instruments can rise beside the title instead of under it */
-    const SHIFTS = [0.5,0.45,0.55,0.4,0.6,0.35,0.65,0.3,0.7,0.25,0.75,0.2,0.8,0.15,0.85,0.1,0.9,0.05,0.95,0,1];
-    /* Smallest-to-largest is tried first; largest-to-smallest only if it allows a bigger lineup */
-    const best = s => {
-      for (const order of [rowsFwd, rowsRev]){ rows = order; for (const sh of SHIFTS){ const o = layout(s, sh); if (o) return o; } }
+    /* Always centered on the screen, at the biggest size that fits.
+       Smallest-to-largest is tried before largest-to-smallest. */
+    const fit = s => {
+      for (const order of [rowsFwd, rowsRev]){ rows = order; const o = layout(s, 0); if (o) return o; }
       return null;
     };
     let lo = 0.3, hi = 15;
-    for (let i = 0; i < 30; i++){ const m = (lo + hi) / 2; if (best(m)) lo = m; else hi = m; }
-    const placed = best(lo) || (rows = rowsFwd, layout(lo, 0.5)) || [];
+    for (let i = 0; i < 30; i++){ const m = (lo + hi) / 2; if (fit(m)) lo = m; else hi = m; }
+    const placed = fit(lo) || [];
     const box = $('lineup'); box.innerHTML = ''; rev.innerHTML = '';
     placed.forEach(u => {
       const item = document.createElement('div'); item.className = 'item';
