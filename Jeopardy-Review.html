@@ -1042,7 +1042,8 @@ function startSetup(b) {
     active: 0,
     used: {},
     revealed: Array(b.numCats).fill(false),
-    floorZero: false,
+    floorZero: true,
+    lifelines: true,
     screen: "setup",
     current: null,
     cue: false,
@@ -1077,6 +1078,7 @@ function enterPlay() {
   const fr = $("buzzFrame");
   if (!game.preview && !fr.src) { fr.src = "https://buzzin.live/"; fr.addEventListener("load", helloBridge); }
   render();
+  prewarmVideos(game.board); // new game setup, resume, preview: always warm up the clue videos
 }
 
 /* ---------- preview: playable board with no scoring, buzzers, fill or category intro ---------- */
@@ -1417,7 +1419,6 @@ function renderSetup(stage) {
     await DB.set("gameBoard", g.board);
     persistGame();
     startBoardFill();
-    prewarmVideos(g.board);
     if (bridge.on) setPanelMode("sliver");
     render();
   };
@@ -1425,12 +1426,16 @@ function renderSetup(stage) {
 
 /* ---------- video prewarm: load each clue's YouTube player once, off screen, at game start ---------- */
 // This puts YouTube's player files and thumbnails in the browser cache, so clue videos appear faster later
+let warmedKey = "";
 function prewarmVideos(b) {
   const srcs = [];
   b.categories.slice(0, b.numCats).forEach(cat => cat.tiles.slice(0, b.numRows).forEach(t => {
     const src = videoSrc(t.video, t.vStart, t.vEnd, false);
     if (src && !srcs.includes(src)) srcs.push(src);
   }));
+  const key = srcs.join("|");
+  if (!srcs.length || key === warmedKey) return; // already warmed these in this page
+  warmedKey = key;
   let box = $("vidWarm");
   if (!box) {
     box = document.createElement("div");
