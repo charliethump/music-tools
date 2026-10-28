@@ -2242,6 +2242,13 @@ function practiceAdvance(dir) {
   const sl = practiceSlide();
   // a wrong team buzzed: advancing resets the buzzers so the right team can try
   if (dir > 0 && sl.kind === "team" && p.status === "wrong") { practiceOpenTeam(); return; }
+  // practice question: the first advance unlocks the buzzers (like Space); the next one ends practice
+  if (dir > 0 && sl.kind === "question" && game.screen === "question" && p.qPhase !== "open" && !game.cue) {
+    p.qPhase = "open";
+    bridge.holdUntil = 0; bridge.awaitClear = false;
+    if (bridge.on) sendBridge("unlock"); else setCue(true);
+    return;
+  }
   practiceGo(p.step + dir);
 }
 function practiceOpenTeam() {
@@ -2272,6 +2279,7 @@ function practiceGo(i) {
     game.current = { c: -1, r: -1, value: PRACTICE_VALUE, practice: true };
     game.tried = []; game.cue = false; game.dd = null;
     game.screen = "question";
+    p.qPhase = "locked";
     if (bridge.on) lockAndClear();
   }
   render();
