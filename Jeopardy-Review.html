@@ -1778,6 +1778,12 @@ document.addEventListener("keydown", e => {
   if (!game || $("play").classList.contains("hidden")) return;
   if (document.querySelector("dialog[open]")) return; // pop-up boxes handle their own keys
   if (fjIntro) { e.preventDefault(); closeFinalIntro(); return; }
+  // Final Jeopardy question: a clicker press (or right/down arrow) starts the music and 30-second timer
+  if (game.screen === "finalQuestion" && ["PageDown", "ArrowRight", "ArrowDown"].includes(e.key)) {
+    e.preventDefault();
+    if (!finalTimer) startFinalTimer();
+    return;
+  }
   if (game.practice && ["ArrowRight", "ArrowDown", "PageDown", "ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) {
     e.preventDefault();
     practiceAdvance(["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key) ? -1 : 1);
