@@ -621,7 +621,7 @@ const SOUND_SLOTS = [
   ["incorrect", "Wrong answer", "Plays when you mark a team wrong"],
   ["gameOver", "Final standings", "Plays on the final standings screen"]
 ];
-function blankTile() { return { q: "", qImg: "", qAudio: "", video: "", vStart: "", vEnd: "", a: "", aImg: "", dd: false }; }
+function blankTile() { return { q: "", qImg: "", qAudio: "", video: "", vStart: "", vEnd: "", a: "", aImg: "", aKeepQ: false, dd: false }; }
 function newBoard() {
   return {
     version: 1,
@@ -903,7 +903,13 @@ function drawTileEditor() {
     mediaField("Question picture (optional)", "image", t.qImg, v => { t.qImg = v; changed(); }),
     mediaField("Question audio (optional)", "audio", t.qAudio, v => { t.qAudio = v; changed(); })
   );
-  $("tdAMedia").append(mediaField("Answer picture (optional)", "image", t.aImg, v => { t.aImg = v; changed(); }));
+  const keep = document.createElement("label");
+  keep.className = "check";
+  keep.innerHTML = `<input type="checkbox" id="tdKeep" ${t.aKeepQ ? "checked" : ""}> Keep question picture on the answer screen`;
+  const aPic = mediaField("Answer picture (optional)", "image", t.aImg, v => { t.aImg = v; changed(); });
+  aPic.classList.toggle("hidden", !!t.aKeepQ);
+  $("tdAMedia").append(keep, aPic);
+  $("tdKeep").onchange = e => { t.aKeepQ = e.target.checked; aPic.classList.toggle("hidden", t.aKeepQ); changed(); };
   $("tdDD").onchange = e => { t.dd = e.target.checked; changed(); };
   $("tdQ").oninput = e => { t.q = e.target.value; changed(); };
   $("tdA").oninput = e => { t.a = e.target.value; changed(); };
@@ -1991,7 +1997,7 @@ function wireScoring(fromQuestion) {
     game.active = i;
     playSfx("correct");
     persistGame();
-    if (fromQuestion) { game.screen = "answer"; render(); }
+    if (fromQuestion) { captureAnswerLayout(); game.screen = "answer"; render(); }
     else { renderScores(); renderToolbar(); }
     if (game.practice) showScoreZoom(i, before); else scoreFx(i, before, pts);
   });
@@ -2014,12 +2020,43 @@ function wireScoring(fromQuestion) {
 
 function showAnswer() {
   stopAllSound();
+  captureAnswerLayout();
   game.screen = "answer";
   render();
+}
+// "Keep question picture": remember the question screen's layout so the answer screen matches it exactly
+function keepsPicture(t) { return !!(t && t.aKeepQ && t.qImg && t.q); }
+function captureAnswerLayout() {
+  if (game.screen !== "question" || !keepsPicture(currentTile())) return;
+  const cue = document.querySelector(".card .cue"), ctr = document.querySelector(".card .controls");
+  game.ansLayout = { cue: cue ? cue.outerHTML : "", ctrlH: ctr ? ctr.offsetHeight : 0 };
 }
 
 function renderAnswer(stage) {
   const t = currentTile();
+  if (keepsPicture(t)) {
+    // same structure as the question screen (hidden copy of the buzzer bar, same controls height),
+    // so the picture stays exactly where it was
+    const lay = game.ansLayout || {};
+    stage.innerHTML = `
+      <div class="card">
+        <div class="card-label">${esc(labelFor())} - Answer</div>
+        ${lay.cue ? `<div style="visibility:hidden" aria-hidden="true">${lay.cue}</div>` : ""}
+        <div class="card-body has-media">
+          <div class="a-text">${clueHTML(t.a || "(no answer entered)")}</div>
+          <img class="q-img" src="${t.qImg}" alt="">
+        </div>
+        <div class="controls" style="${lay.ctrlH ? `min-height:${lay.ctrlH}px` : ""}">
+          ${game.preview ? "" : teamButtons(game.dd ? game.dd.team : null)}
+          <button class="ctl" id="toQuestion">Show question again</button>
+          <button class="ctl gold" id="toBoard">Back to board</button>
+        </div>
+      </div>`;
+    wireScoring(false);
+    $("toQuestion").onclick = () => { game.screen = "question"; render(); };
+    $("toBoard").onclick = backToBoard;
+    return;
+  }
   stage.innerHTML = `
     <div class="card">
       <div class="card-label">${esc(labelFor())} - Answer</div>
