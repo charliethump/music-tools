@@ -66,6 +66,8 @@ body.reveal #reveal{display:flex}
 #reveal img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,.25))}
 #reveal .section{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-end;width:800px}
 #reveal .section .cell{display:flex;align-items:center;justify-content:center}
+.float{animation:bob 2.4s ease-in-out infinite alternate}
+@keyframes bob{from{transform:translateY(-12px)}to{transform:translateY(12px)}}
 #reveal .missing{width:420px;height:420px;border-radius:50%;background:#fff;border:8px dashed #b9c2cb;display:flex;align-items:center;justify-content:center;
   font-size:44px;color:#8593a1;text-align:center;padding:40px}
 
@@ -602,11 +604,12 @@ const INSTRUMENTS = [
   {name:'Xylophone', slug:'xylophone', families:['percussion']},
   {name:'Triangle', slug:'triangle', families:['percussion']},
   {name:'Piano', slug:'piano', families:['string','percussion']},
-  /* Full sections: one clip of the whole family; the reveal shows these instruments together */
-  {name:'Woodwind Section', slug:'woodwind-section', families:['woodwind'], section:['piccolo','flute','oboe','clarinet','bassoon']},
-  {name:'Brass Section', slug:'brass-section', families:['brass'], section:['french-horn','trumpet','trombone','tuba']},
-  {name:'String Section', slug:'string-section', families:['string'], section:['violin','viola','cello','double-bass']},
-  {name:'Percussion Section', slug:'percussion-section', families:['percussion'], section:['timpani','snare-drum','bass-drum','crash-cymbals','xylophone','triangle']}
+  /* Whole families: one clip of the whole family; the reveal shows these instruments together.
+     File names keep the -section slug (e.g. woodwind-section-1.mp3). */
+  {name:'Woodwind Family', slug:'woodwind-section', families:['woodwind'], section:['piccolo','flute','oboe','clarinet','bassoon']},
+  {name:'Brass Family', slug:'brass-section', families:['brass'], section:['french-horn','trumpet','trombone','tuba']},
+  {name:'String Family', slug:'string-section', families:['string'], section:['violin','viola','cello','double-bass']},
+  {name:'Percussion Family', slug:'percussion-section', families:['percussion'], section:['timpani','snare-drum','bass-drum','crash-cymbals','xylophone','triangle']}
 ];
 INSTRUMENTS.forEach(i => { i.clips = []; i.hasImage = null; });
 
@@ -926,7 +929,7 @@ function render(){
       const k = Math.min(800/img.naturalWidth, 560/img.naturalHeight, 1.6*sc);
       img.style.width = Math.round(img.naturalWidth*k) + 'px';
       img.style.height = Math.round(img.naturalHeight*k) + 'px';
-      img.alt = round.inst.name; rev.innerHTML = ''; rev.appendChild(img);
+      img.alt = round.inst.name; img.className = 'float'; rev.innerHTML = ''; rev.appendChild(img);
     };
     if (img.complete && img.naturalWidth) place();
     else if (img.complete) showMissing();
@@ -952,11 +955,33 @@ function showSection(rev, r){
         const k = Math.min(cw/im.naturalWidth, ch/im.naturalHeight) * scaleOf(im) / maxSc;
         im.style.width = Math.round(im.naturalWidth*k) + 'px';
         im.style.height = Math.round(im.naturalHeight*k) + 'px';
+        im.className = 'float';
+        im.style.animationDuration = (2 + Math.random()*0.9).toFixed(2) + 's';
+        im.style.animationDelay = (-Math.random()*3).toFixed(2) + 's';
         cell.appendChild(im);
       }
       grid.appendChild(cell);
     });
     rev.innerHTML = ''; rev.appendChild(grid);
+    flyIn([...grid.children]);
+  });
+}
+
+/* Each cell flies in from a random point beyond the edge of the screen */
+function flyIn(cells){
+  const sr = stage.getBoundingClientRect(), s = sr.width / 1920;
+  const order = shuffle(cells.map((c, i) => i));
+  cells.forEach((cell, i) => {
+    const r = cell.getBoundingClientRect();
+    const cx = (r.left + r.width/2 - sr.left) / s, cy = (r.top + r.height/2 - sr.top) / s;
+    const a = Math.random() * Math.PI * 2;
+    const sx = 960 + Math.cos(a) * 1250, sy = 540 + Math.sin(a) * 800;
+    const rot = (Math.random()*50 - 25).toFixed(1);
+    cell.animate([
+      {transform:`translate(${sx-cx}px, ${sy-cy}px) rotate(${rot}deg) scale(.55)`, opacity:0},
+      {opacity:1, offset:0.2},
+      {transform:'translate(0,0) rotate(0deg) scale(1)', opacity:1}
+    ], {duration:1100, delay:order[i]*130, easing:'cubic-bezier(.2,.8,.25,1)', fill:'backwards'});
   });
 }
 
@@ -1015,7 +1040,7 @@ const GROUPS = [
   {title:'String', test:i => !i.section && i.families.length===1 && i.families[0]==='string'},
   {title:'Percussion', test:i => !i.section && i.families.length===1 && i.families[0]==='percussion'},
   {title:'String or Percussion', test:i => !i.section && i.families.length>1},
-  {title:'Full sections', test:i => !!i.section}
+  {title:'Whole families', test:i => !!i.section}
 ];
 function renderSetupList(){
   const box = $('families');
