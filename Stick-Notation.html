@@ -44,13 +44,10 @@
     font-size: 16px;
     line-height: 1.45;
   }
-  main {
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 28px 20px 48px;
-  }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 20px 48px; }
   header { margin-bottom: 18px; }
   h1 { font-size: 1.75rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 1.05rem; margin: 0 0 12px; }
   header p { margin: 0; color: var(--muted); }
 
   /* Preview stage: dotted paper shows the transparent area */
@@ -80,18 +77,13 @@
   }
   .symbols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .sym {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
     padding: 14px 10px 12px;
     border: 2px solid var(--line);
     border-radius: 12px;
     background: var(--surface);
     color: var(--ink);
-    font: inherit;
-    font-weight: 700;
-    font-size: 1.1rem;
+    font: inherit; font-weight: 700; font-size: 1.1rem;
     cursor: pointer;
   }
   .sym:hover { border-color: var(--accent); }
@@ -100,47 +92,41 @@
   .sym svg * { fill: currentColor; stroke: currentColor; }
   .sym kbd { font-weight: 400; font-size: 0.8rem; color: var(--muted); font-family: inherit; }
 
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px 28px;
-    align-items: flex-end;
-    justify-content: space-between;
-  }
-  .settings { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+  .groups { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; }
+  .group + .group { border-left: 1px solid var(--line); padding-left: 28px; }
+  .fields { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 0.92rem; color: var(--muted); }
+  label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); padding-bottom: 6px; }
+  label.check input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
   input[type="number"], select {
-    font: inherit;
-    color: var(--ink);
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 8px;
-    min-width: 90px;
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 8px; min-width: 90px;
   }
   input[type="range"] { width: 140px; accent-color: var(--accent); }
-  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  select:disabled, label.check input:disabled + span { opacity: 0.5; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .actions .spacer { flex: 1; }
   .btn {
-    font: inherit;
-    font-weight: 700;
-    padding: 9px 16px;
-    border-radius: 10px;
+    font: inherit; font-weight: 700;
+    padding: 9px 16px; border-radius: 10px;
     border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--ink);
+    background: var(--surface); color: var(--ink);
     cursor: pointer;
   }
   .btn:hover { border-color: var(--accent); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .btn.danger { color: var(--danger); }
   .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 3px solid var(--accent);
-    outline-offset: 2px;
-  }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .status { min-height: 1.4em; margin-top: 10px; color: var(--muted); font-size: 0.95rem; }
-  .hint { color: var(--muted); font-size: 0.88rem; margin-top: 14px; }
+  .hint { color: var(--muted); font-size: 0.88rem; margin: 10px 0 0; }
 
+  @media (max-width: 720px) {
+    .groups { grid-template-columns: 1fr; }
+    .group + .group { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 16px; }
+  }
   @media (max-width: 560px) {
     .sym { font-size: 1rem; }
     .sym svg { height: 36px; }
@@ -178,29 +164,58 @@
   </section>
 
   <section class="panel" aria-label="Settings and export">
-    <div class="controls">
-      <div class="settings">
-        <label>Beats per row
-          <input type="number" id="perRow" min="1" max="32" value="4">
-        </label>
-        <label>Line thickness
-          <input type="range" id="weight" min="2" max="10" step="1" value="4">
-        </label>
-        <label>Export size
-          <select id="size">
-            <option value="1">Small</option>
-            <option value="2">Medium</option>
-            <option value="4" selected>Large</option>
-            <option value="6">Extra large</option>
-          </select>
-        </label>
+    <div class="groups">
+      <div class="group">
+        <h2>Layout</h2>
+        <div class="fields">
+          <label>Beats per row
+            <input type="number" id="perRow" min="1" max="32" value="8">
+          </label>
+          <label>Meter
+            <select id="meter">
+              <option value="2">2/4</option>
+              <option value="3">3/4</option>
+              <option value="4" selected>4/4</option>
+              <option value="5">5/4</option>
+              <option value="6">6/4</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="bars" checked><span>Bar lines</span></label>
+          <label>Line thickness
+            <input type="range" id="weight" min="2" max="10" step="1" value="4">
+          </label>
+        </div>
       </div>
-      <div class="actions">
-        <button class="btn" id="undo" type="button">Undo</button>
-        <button class="btn danger" id="clear" type="button">Clear</button>
-        <button class="btn" id="copy" type="button">Copy image</button>
-        <button class="btn primary" id="export" type="button">Export</button>
+      <div class="group">
+        <h2>Show and export</h2>
+        <div class="fields">
+          <label>Include
+            <select id="mode">
+              <option value="both">Notation and syllables</option>
+              <option value="notes">Notation only</option>
+              <option value="syl">Syllables only</option>
+            </select>
+          </label>
+          <label>Export size
+            <select id="size">
+              <option value="1">Small</option>
+              <option value="2">Medium</option>
+              <option value="4" selected>Large</option>
+              <option value="6">Extra large</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="color" checked><span>Colored syllables</span></label>
+          <label class="check"><input type="checkbox" id="match" checked><span>Same size for every export</span></label>
+        </div>
+        <p class="hint">Same size keeps notation, syllables and both lined up when you stack them in Slides.</p>
       </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="undo" type="button">Undo</button>
+      <button class="btn danger" id="clear" type="button">Clear</button>
+      <span class="spacer"></span>
+      <button class="btn" id="copy" type="button">Copy image</button>
+      <button class="btn primary" id="export" type="button">Export</button>
     </div>
     <div class="status" id="status" aria-live="polite"></div>
     <p class="hint">Keys: 1 du, 2 du-de, 3 shh, Backspace undo.</p>
@@ -215,25 +230,44 @@
   const HALF = 30;      // half the gap between du-de sticks
   const ZW = 44;        // shh Z width
   const ROWGAP = 60;    // space between rows
-  const PAD = 30;       // drawing margin before crop
+  const SYL = 56;       // extra row space reserved for syllables
+  const SYL_GAP = 16;   // gap between stick bottoms and syllable tops
+  const SYL_SIZE = 30;  // syllable font size
+  const BARGAP = 24;    // extra space added where a bar line sits
+  const BAR_W = 1.5;    // bar line thickness
+  const BAR_EXT = 12;   // bar line overhang above and below the sticks
+  const BAR_COLOR = "#9E9E9E";
+  const PAD = 40;       // drawing margin before crop
   const MARGIN = 8;     // margin kept around the cropped image
+
+  const SYLLABLES = {
+    du:   { text: "du",    color: "#0000FF", italic: false },
+    dude: { text: "du-de", color: "#CC0000", italic: false },
+    shh:  { text: "shh!",  color: "#6AA84F", italic: true }
+  };
 
   const notes = [];
   const $ = id => document.getElementById(id);
   const preview = $("preview");
-  const perRowEl = $("perRow");
-  const weightEl = $("weight");
-  const sizeEl = $("size");
   const statusEl = $("status");
 
-  function perRow() {
-    const v = parseInt(perRowEl.value, 10);
-    return Number.isFinite(v) && v > 0 ? Math.min(v, 32) : 4;
-  }
-  function weight() { return parseInt(weightEl.value, 10) || 4; }
+  const opts = () => {
+    const per = parseInt($("perRow").value, 10);
+    return {
+      per: Number.isFinite(per) && per > 0 ? Math.min(per, 32) : 4,
+      meter: parseInt($("meter").value, 10) || 4,
+      bars: $("bars").checked,
+      w: parseInt($("weight").value, 10) || 4,
+      mode: $("mode").value,
+      color: $("color").checked,
+      match: $("match").checked
+    };
+  };
 
   function drawNote(ctx, type, cx, top, w) {
     const beam = 11 + w;
+    ctx.fillStyle = "#000";
+    ctx.strokeStyle = "#000";
     if (type === "du") {
       ctx.fillRect(cx - w / 2, top, w, H);
     } else if (type === "dude") {
@@ -255,36 +289,61 @@
     }
   }
 
-  // Draws the rhythm at the given scale and returns a canvas cropped to the ink
-  function render(scale) {
-    if (!notes.length) return null;
-    const per = perRow(), w = weight();
-    const cols = Math.min(notes.length, per);
-    const rows = Math.ceil(notes.length / per);
-    const fullW = cols * CELL + PAD * 2;
-    const fullH = rows * H + (rows - 1) * ROWGAP + PAD * 2;
-
-    const c = document.createElement("canvas");
-    c.width = Math.ceil(fullW * scale);
-    c.height = Math.ceil(fullH * scale);
-    const ctx = c.getContext("2d");
-    ctx.scale(scale, scale);
-    ctx.fillStyle = "#000";
-    ctx.strokeStyle = "#000";
-
-    notes.forEach((type, i) => {
-      const row = Math.floor(i / per), col = i % per;
-      const cx = PAD + col * CELL + CELL / 2;
-      const top = PAD + row * (H + ROWGAP);
-      drawNote(ctx, type, cx, top, w);
-    });
-    return crop(c, Math.round(MARGIN * scale));
+  function drawSyllable(ctx, type, cx, top, colored) {
+    const s = SYLLABLES[type];
+    ctx.font = `${s.italic ? "italic " : ""}bold ${SYL_SIZE}px Arial, Helvetica, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = colored ? s.color : "#000";
+    ctx.fillText(s.text, cx, top + H + SYL_GAP);
   }
 
-  function crop(c, m) {
+  // Works out x positions for every beat and where bar lines fall.
+  // Measures count from the start of the piece, so they carry across rows.
+  function layout(o, reserveSyl) {
+    const pitch = H + ROWGAP + (reserveSyl ? SYL : 0);
+    const beats = [], barLines = [];
+    let maxW = 0;
+    for (let rowStart = 0, row = 0; rowStart < notes.length; rowStart += o.per, row++) {
+      const top = PAD + row * pitch;
+      let x = PAD;
+      const end = Math.min(rowStart + o.per, notes.length);
+      for (let i = rowStart; i < end; i++) {
+        if (o.bars && i > rowStart && i % o.meter === 0) {
+          barLines.push({ x: x + BARGAP / 2, top });
+          x += BARGAP;
+        }
+        beats.push({ type: notes[i], cx: x + CELL / 2, top });
+        x += CELL;
+      }
+      maxW = Math.max(maxW, x);
+    }
+    const rows = Math.ceil(notes.length / o.per);
+    return { beats, barLines, width: maxW + PAD, height: PAD * 2 + rows * pitch };
+  }
+
+  // Draws one version of the rhythm (both, notes or syl) without cropping
+  function drawFull(scale, o, mode, reserveSyl) {
+    const L = layout(o, reserveSyl);
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(L.width * scale);
+    c.height = Math.ceil(L.height * scale);
     const ctx = c.getContext("2d");
+    ctx.scale(scale, scale);
+    if (mode !== "syl") {
+      ctx.fillStyle = BAR_COLOR;
+      L.barLines.forEach(b => ctx.fillRect(b.x - BAR_W / 2, b.top - BAR_EXT, BAR_W, H + BAR_EXT * 2));
+      L.beats.forEach(b => drawNote(ctx, b.type, b.cx, b.top, o.w));
+    }
+    if (mode !== "notes") {
+      L.beats.forEach(b => drawSyllable(ctx, b.type, b.cx, b.top, o.color));
+    }
+    return c;
+  }
+
+  function inkBox(c) {
     const { width, height } = c;
-    const data = ctx.getImageData(0, 0, width, height).data;
+    const data = c.getContext("2d").getImageData(0, 0, width, height).data;
     let minX = width, minY = height, maxX = -1, maxY = -1;
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -296,12 +355,26 @@
         }
       }
     }
-    if (maxX < 0) return c;
+    return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+
+  function cropTo(c, box, m) {
     const out = document.createElement("canvas");
-    out.width = maxX - minX + 1 + m * 2;
-    out.height = maxY - minY + 1 + m * 2;
-    out.getContext("2d").drawImage(c, minX, minY, maxX - minX + 1, maxY - minY + 1, m, m, maxX - minX + 1, maxY - minY + 1);
+    out.width = box.w + m * 2;
+    out.height = box.h + m * 2;
+    out.getContext("2d").drawImage(c, box.x, box.y, box.w, box.h, m, m, box.w, box.h);
     return out;
+  }
+
+  function render(scale) {
+    if (!notes.length) return null;
+    const o = opts();
+    // With "same size" on, every mode uses the layout and crop of the full version
+    const reserveSyl = o.match || o.mode !== "notes";
+    const full = drawFull(scale, o, o.mode, reserveSyl);
+    const ref = o.match && o.mode !== "both" ? drawFull(scale, o, "both", true) : full;
+    const box = inkBox(ref) || { x: 0, y: 0, w: full.width, h: full.height };
+    return cropTo(full, box, Math.round(MARGIN * scale));
   }
 
   function update() {
@@ -309,8 +382,18 @@
     $("empty").hidden = has;
     preview.hidden = !has;
     ["undo", "clear", "copy", "export"].forEach(id => $(id).disabled = !has);
-    $("count").textContent = has ? `${notes.length} beat${notes.length === 1 ? "" : "s"}` : "";
-    if (!has) return;
+    $("meter").disabled = !$("bars").checked;
+    $("color").disabled = $("mode").value === "notes";
+
+    if (has) {
+      const o = opts();
+      const measures = Math.ceil(notes.length / o.meter);
+      $("count").textContent = `${notes.length} beat${notes.length === 1 ? "" : "s"}` +
+        (o.bars ? `, ${measures} measure${measures === 1 ? "" : "s"} of ${o.meter}/4` : "");
+    } else {
+      $("count").textContent = "";
+      return;
+    }
 
     const scale = 2;
     const img = render(scale);
@@ -322,19 +405,22 @@
     preview.style.width = (img.width / scale) + "px";
   }
 
+  function setStatus(msg) { statusEl.textContent = msg; }
   function add(type) { notes.push(type); setStatus(""); update(); }
   function undo() { notes.pop(); setStatus(""); update(); }
   function clearAll() { notes.length = 0; setStatus(""); update(); }
-  function setStatus(msg) { statusEl.textContent = msg; }
 
   function fileName() {
     const names = { du: "du", dude: "du-de", shh: "shh" };
-    if (notes.length <= 12) return "rhythm_" + notes.map(n => names[n]).join("_") + ".png";
-    return `rhythm_${notes.length}-beats.png`;
+    const suffix = { both: "", notes: "_notation", syl: "_syllables" }[$("mode").value];
+    const base = notes.length <= 12
+      ? "rhythm_" + notes.map(n => names[n]).join("_")
+      : `rhythm_${notes.length}-beats`;
+    return base + suffix + ".png";
   }
 
   function toBlob() {
-    const img = render(parseFloat(sizeEl.value) || 4);
+    const img = render(parseFloat($("size").value) || 4);
     return new Promise(res => img.toBlob(res, "image/png"));
   }
 
@@ -370,8 +456,8 @@
   $("clear").addEventListener("click", clearAll);
   $("export").addEventListener("click", exportPng);
   $("copy").addEventListener("click", copyPng);
-  perRowEl.addEventListener("input", update);
-  weightEl.addEventListener("input", update);
+  ["perRow", "weight"].forEach(id => $(id).addEventListener("input", update));
+  ["meter", "bars", "mode", "color", "match"].forEach(id => $(id).addEventListener("change", update));
 
   document.addEventListener("keydown", e => {
     const tag = (e.target.tagName || "").toLowerCase();
