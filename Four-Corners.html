@@ -37,15 +37,20 @@ body.reveal #famTitle{opacity:1;transition:none}
 
 #legs{position:absolute;inset:0;width:1920px;height:1080px}
 #legs .stand-legs{stroke:#2a2420;stroke-linecap:round;fill:none}
-#legs .stand-legs.wrong{opacity:.28}
+#legs .stand-legs{transition:stroke .35s ease}
+#legs .stand-legs.wrong{stroke:#cbcbcb}
 
 .desk{position:absolute;background:#fff;border:6px solid var(--wood);border-bottom-width:16px;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;box-shadow:5px 8px 14px rgba(0,0,0,.28)}
+  display:flex;align-items:center;justify-content:center;padding:0 16px;box-shadow:5px 8px 14px rgba(0,0,0,.28)}
 .desk span{font-family:var(--serif);font-weight:700;color:#111}
 .desk.correct{background:#e9ffef;border-color:var(--green);box-shadow:0 0 0 10px var(--green-glow),0 0 70px 30px rgba(63,220,117,.9);animation:halo 1.2s ease-in-out infinite alternate}
 @keyframes halo{from{box-shadow:0 0 0 10px var(--green-glow),0 0 70px 30px rgba(63,220,117,.9)}to{box-shadow:0 0 0 5px rgba(63,220,117,.6),0 0 30px 10px rgba(63,220,117,.35)}}
 .desk.correct span{color:#0b6b2f}
-.desk.wrong{opacity:.28;filter:grayscale(1)}
+/* Dimmed stands use solid light colors instead of see-through, so overlapping parts don't double up */
+.desk{transition:background-color .35s ease,border-color .35s ease,box-shadow .35s ease}
+.desk span{transition:color .35s ease}
+.desk.wrong{background:#f6f6f6;border-color:#d2d2d2;box-shadow:3px 5px 10px rgba(0,0,0,.07)}
+.desk.wrong span{color:#c2c2c2}
 
 #people{position:absolute;left:770px;top:330px;width:380px;height:450px}
 #people .fig{fill:var(--navy);stroke:var(--gap);stroke-width:7}
@@ -90,6 +95,23 @@ body.countdown #people,body.timesup #people{display:none}
 #toolbar{position:absolute;right:22px;bottom:18px;display:flex;gap:12px;opacity:.22}
 #gagBtn{position:absolute;left:22px;bottom:18px;width:64px;height:64px;border-radius:50%;border:0;background:var(--navy);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.22}
 #gagBtn:hover{opacity:1}
+#tutBtn{position:absolute;left:98px;bottom:18px;width:64px;height:64px;border-radius:50%;border:0;background:var(--navy);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.22}
+#tutBtn:hover,body.tutorial #tutBtn{opacity:1}
+#tutBtn svg{width:36px;height:36px}
+body.tutorial #people,body.tutorial #cue{display:none}
+#tutText{position:absolute;left:570px;width:780px;top:230px;height:600px;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;z-index:5}
+body.tutorial #tutText{display:flex}
+#tutText .line{font-weight:700;line-height:1.08;color:var(--navy);text-shadow:0 3px 0 #fff,0 0 18px var(--bg)}
+#tutText{transition:opacity .3s ease}
+#tutStep{position:absolute;left:0;right:0;bottom:34px;text-align:center;font-size:30px;font-weight:600;color:#8593a1;opacity:0;transition:opacity .3s ease;pointer-events:none}
+body.tutorial #tutStep.on{opacity:.45}
+.desk::after{content:'';position:absolute;inset:-6px -6px -16px;border-radius:6px;border:6px solid var(--green);border-bottom-width:16px;background:rgba(200,255,215,.45);box-shadow:0 0 0 10px var(--green-glow),0 0 70px 30px rgba(63,220,117,.9);opacity:0;transition:opacity .5s ease;pointer-events:none;animation:halo 1.2s ease-in-out infinite alternate}
+body.tutorial.tut1 .desk::after{opacity:1}
+#notes{position:absolute;inset:0;width:1920px;height:1080px;pointer-events:none;display:none;overflow:hidden;opacity:0;transition:opacity .5s ease}
+body.tutorial #notes{display:block}
+body.tutorial.tut1 #notes{opacity:1}
+#notes svg{position:absolute;bottom:-160px;animation:noteRise linear infinite}
+@keyframes noteRise{0%{translate:0 0;rotate:-12deg;opacity:0}8%{opacity:1}25%{translate:40px -320px;rotate:10deg}50%{translate:-30px -640px;rotate:-10deg}75%{translate:35px -960px;rotate:12deg;opacity:1}88%{opacity:0}100%{translate:-20px -1300px;rotate:-8deg;opacity:0}}
 #gagBtn svg{width:36px;height:36px}
 #gag{position:absolute;left:710px;top:110px;width:499px;height:850px;pointer-events:none;display:none;z-index:20}
 #gag canvas{width:499px;height:850px;display:block;filter:drop-shadow(0 18px 30px rgba(0,0,0,.35))}
@@ -159,6 +181,7 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
   <h1 id="title">Four Corners</h1>
   <div id="famTitle" aria-hidden="true"></div>
   <svg id="legs" viewBox="0 0 1920 1080" aria-hidden="true"></svg>
+  <div id="notes"></div>
   <div id="desks"></div>
   <svg id="people" viewBox="0 0 380 450" aria-hidden="true"></svg>
   <div id="reveal"></div>
@@ -167,7 +190,12 @@ input[type=number],input[type=text],select{font:15px system-ui,sans-serif;paddin
   <div id="centerMsg">Back to the center!</div>
   <div id="cue"></div>
   <div id="toast"></div>
+  <div id="tutText"></div>
+  <div id="tutStep"></div>
   <div id="gag"><div id="gagString"></div><canvas id="gagCanvas" width="576" height="980"></canvas></div>
+  <button id="tutBtn" tabindex="-1" title="How to play (H)" aria-label="How to play">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/></svg>
+  </button>
   <button id="gagBtn" tabindex="-1" title="Elimination (E)" aria-label="Elimination">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><rect x="9" y="14" width="6" height="3.5" rx="1" fill="currentColor"/></svg>
   </button>
@@ -651,10 +679,10 @@ const FAMILY_LAYOUT = {
 
 /* Stand layout on the 1920x1080 stage */
 const STANDS = [
-  {family:'woodwind',  cx:175,  deskTop:28,  w:205, h:175, rot:-7, floor:545,  spread:82,  font:36},
-  {family:'brass',     cx:1745, deskTop:28,  w:205, h:175, rot:7,  floor:545,  spread:82,  font:36},
-  {family:'percussion',cx:420,  deskTop:325, w:240, h:235, rot:-5, floor:1050, spread:125, font:42},
-  {family:'string',    cx:1500, deskTop:325, w:240, h:235, rot:5,  floor:1050, spread:125, font:42}
+  {family:'woodwind',  cx:175,  deskTop:28,  w:275, h:175, rot:-7, floor:545,  spread:82,  font:36},
+  {family:'brass',     cx:1745, deskTop:28,  w:275, h:175, rot:7,  floor:545,  spread:82,  font:36},
+  {family:'percussion',cx:420,  deskTop:325, w:315, h:235, rot:-5, floor:1050, spread:125, font:42},
+  {family:'string',    cx:1500, deskTop:325, w:315, h:235, rot:5,  floor:1050, spread:125, font:42}
 ];
 
 /* ================= SETTINGS ================= */
@@ -884,13 +912,74 @@ function reveal(){ phase = 'reveal'; render(); }
 
 function advance(){
   getCtx();
+  if (phase === 'tutorial'){ if (tutStep < TUTORIAL.length - 1){ tutStep++; render(); } else endTutorial(); return; }
   if (phase === 'ready') startRound();
   else if (phase === 'center') leaveCenter();
   else if (phase === 'reveal'){ phase = 'center'; render(); }
   else if (phase === 'playing') startCountdown();
   else if (phase === 'timesup') reveal();
 }
-function replay(){ if (round && phase !== 'leaving') playFromStart(round.audio); }
+function replay(){
+  if (phase === 'tutorial'){ if (tutStep > 0){ tutStep--; render(); } return; }
+  if (round && phase !== 'leaving') playFromStart(round.audio);
+}
+
+/* ================= TUTORIAL =================
+   Next goes forward through the steps (and back to the game after the last one),
+   Back goes to the previous step. */
+const TUTORIAL = [
+  'Move to the corner that has the instrument family that you hear.',
+  'Think for yourself!',
+  'Make your best guess if you’re not sure.',
+  'Sit on the stage steps if you are eliminated.'
+];
+let tutStep = 0;
+function startTutorial(){
+  leaveToken++; clearLeaveStyles();
+  if (round) round.audio.pause();
+  clearInterval(timer);
+  round = null; nextRound = null;
+  tutStep = 0; phase = 'tutorial';
+  $('tutText').innerHTML = ''; $('tutText').style.opacity = 0;
+  buildNotes(); render();
+}
+/* Steps cross-fade: the words fade out, change, then fade back in */
+let tutFade = 0;
+function endTutorial(){
+  const tok = ++tutFade;
+  $('tutText').style.opacity = 0; $('tutStep').classList.remove('on');
+  document.body.classList.remove('tut1');                       // notes and glow fade out
+  setTimeout(() => { if (tok !== tutFade || phase !== 'tutorial') return; phase = 'ready'; render(); }, 320);
+}
+function renderTutorial(){
+  const box = $('tutText'), num = $('tutStep'), tok = ++tutFade;
+  const show = () => {
+    if (tok !== tutFade || phase !== 'tutorial') return;
+    box.innerHTML = `<div class="line">${esc(TUTORIAL[tutStep])}</div>`;
+    num.textContent = `${tutStep + 1} of ${TUTORIAL.length}`;
+    const line = box.firstChild; let fs = 104;
+    line.style.fontSize = fs + 'px';
+    while ((line.scrollHeight > 520 || line.scrollWidth > 780) && fs > 50){ fs -= 4; line.style.fontSize = fs + 'px'; }
+    box.style.opacity = 1; num.classList.add('on');
+  };
+  box.style.opacity = 0; num.classList.remove('on');
+  setTimeout(show, box.textContent ? 320 : 30);
+}
+function buildNotes(){
+  const box = $('notes'); if (box.childElementCount) return;
+  const NOTE1 = '<svg viewBox="0 0 40 64"><path d="M26 4v40a10 8 0 1 1-4-6.4V4z" fill="currentColor"/><path d="M26 4c4 6 12 9 12 20-2-6-6-9-12-10z" fill="currentColor"/></svg>';
+  const NOTE2 = '<svg viewBox="0 0 64 64"><path d="M16 14l38-8v40a10 8 0 1 1-4-6.4V18l-30 6v26a10 8 0 1 1-4-6.4z" fill="currentColor"/></svg>';
+  const colors = ['#d4141c','#1c2b3a','#18a849','#d4141c','#1c2b3a'];
+  for (let i = 0; i < 18; i++){
+    const w = document.createElement('div'); w.innerHTML = Math.random() < .5 ? NOTE1 : NOTE2;
+    const sv = w.firstChild, size = 60 + Math.random()*70, dur = 7 + Math.random()*5;
+    const x = i % 2 ? 1390 + Math.random()*440 : 20 + Math.random()*440;     // side lanes, clear of the words
+    Object.assign(sv.style, {left: x + 'px', width: size + 'px', height: size + 'px',
+      color: colors[i % colors.length], animationDuration: dur.toFixed(1) + 's', animationDelay: (-Math.random()*dur).toFixed(1) + 's'});
+    box.appendChild(sv);
+  }
+}
+$('tutBtn').onclick = e => { e.currentTarget.blur(); if (phase === 'tutorial') endTutorial(); else startTutorial(); };
 
 /* Center -> Listen: fade yellow back to gray and wait for the title to be fully
    visible before the next clip starts. Advances are ignored while this runs. */
@@ -921,8 +1010,9 @@ const SPEAKER = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function render(){
-  document.body.classList.remove('ready','playing','countdown','timesup','reveal','center','leaving');
+  document.body.classList.remove('ready','playing','countdown','timesup','reveal','center','leaving','tutorial','tut1','tut2','tut3','tut4');
   document.body.classList.add(phase);
+  if (phase === 'tutorial') document.body.classList.add('tut' + (tutStep + 1));
   const cue = $('cue'), rev = $('reveal');
   const answer = (phase === 'reveal' && round) ? round.inst.families : null;
   document.querySelectorAll('.desk, .stand-legs').forEach(el => {
@@ -943,6 +1033,8 @@ function render(){
     $('bigCue').innerHTML = `<div class="freeze">${esc(settings.freezeText || 'FREEZE!')}</div>`;
     const fz = $('bigCue').firstChild; let fs = 270;
     while (fz.scrollWidth > 1000 && fs > 90){ fs -= 10; fz.style.fontSize = fs + 'px'; }
+  } else if (phase === 'tutorial'){
+    cue.innerHTML = ''; renderTutorial();
   } else if (phase === 'center' || phase === 'leaving'){
     cue.innerHTML = '';
   } else if (phase === 'reveal'){
@@ -1227,6 +1319,8 @@ document.addEventListener('keydown', e => {
   if (['PageDown','ArrowRight','ArrowDown',' ','Enter'].includes(k)){ e.preventDefault(); if (!e.repeat) advance(); }
   else if (['PageUp','ArrowLeft','ArrowUp'].includes(k)){ e.preventDefault(); if (!e.repeat) replay(); }
   else if (k === 's' || k === 'S'){ e.preventDefault(); openSetup(); }
+  else if (k === 'h' || k === 'H'){ if (phase === 'tutorial') endTutorial(); else startTutorial(); }
+  else if (k === 'Escape' && phase === 'tutorial'){ endTutorial(); }
   else if (k === 'f' || k === 'F'){ toggleFs(); }
   else if (k === 'e' || k === 'E'){ if (!e.repeat) eliminate(); }
 });
@@ -1240,6 +1334,7 @@ $('setupBtn').onclick = e => { e.currentTarget.blur(); openSetup(); };
 /* ================= SETUP ================= */
 function openSetup(){
   leaveToken++; clearLeaveStyles();
+  if (phase === 'tutorial') phase = 'ready';
   if (round) round.audio.pause();
   clearInterval(timer);
   if (phase === 'countdown') { phase = 'playing'; }
