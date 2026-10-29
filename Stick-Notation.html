@@ -234,8 +234,7 @@
   // Geometry in base units (stick height = 100)
   const H = 100;        // stick height
   const CELL = 140;     // width of one beat
-  const CELL4 = 190;    // wider beat for du-ta-de-ta so its sticks and syllable fit
-  const QSTEP = 40;     // space between du-ta-de-ta sticks
+  const QSTEP = 28;     // space between du-ta-de-ta sticks (tight so it fits one beat)
   const BEAM_GAP = 8;   // space between the two du-ta-de-ta beams
   const HALF = 30;      // half the gap between du-de sticks
   const ZW = 44;        // shh Z width
@@ -305,15 +304,19 @@
     }
   }
 
-  const cellWidth = type => type === "dutadeta" ? CELL4 : CELL;
-
   function drawSyllable(ctx, type, cx, top, colored) {
     const s = SYLLABLES[type];
-    ctx.font = `${s.italic ? "italic " : ""}bold ${SYL_SIZE}px Arial, Helvetica, sans-serif`;
+    const font = size => `${s.italic ? "italic " : ""}bold ${size}px Arial, Helvetica, sans-serif`;
+    // Shrink a long syllable (du-ta-de-ta) so it fits inside one beat
+    const maxW = CELL - 12;
+    ctx.font = font(SYL_SIZE);
+    const tw = ctx.measureText(s.text).width;
+    if (tw > maxW) ctx.font = font(SYL_SIZE * maxW / tw);
     ctx.textAlign = "center";
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "alphabetic";
     ctx.fillStyle = colored ? s.color : "#000";
-    ctx.fillText(s.text, cx, top + H + SYL_GAP, cellWidth(type) - 12);
+    // Shared baseline so every syllable in a row sits on the same line
+    ctx.fillText(s.text, cx, top + H + SYL_GAP + SYL_SIZE * 0.8);
   }
 
   // Works out x positions for every beat and where bar lines fall.
@@ -331,9 +334,8 @@
           barLines.push({ x: x + BARGAP / 2, top });
           x += BARGAP;
         }
-        const cw = cellWidth(notes[i]);
-        beats.push({ type: notes[i], cx: x + cw / 2, top });
-        x += cw;
+        beats.push({ type: notes[i], cx: x + CELL / 2, top });
+        x += CELL;
       }
       maxW = Math.max(maxW, x);
     }
