@@ -89,7 +89,8 @@
   .sym:hover { border-color: var(--accent); }
   .sym:active { transform: translateY(1px); }
   .sym svg { height: 46px; width: auto; }
-  .sym svg * { fill: currentColor; stroke: currentColor; }
+  .sym svg rect { fill: currentColor; }
+  .sym svg path { fill: none; stroke: currentColor; stroke-linejoin: miter; stroke-linecap: butt; stroke-miterlimit: 10; }
   .sym kbd { font-weight: 400; font-size: 0.8rem; color: var(--muted); font-family: inherit; }
 
   .groups { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; }
@@ -162,7 +163,7 @@
         du-ta-de-ta <kbd>key 3</kbd>
       </button>
       <button class="sym" data-note="shh" type="button">
-        <svg viewBox="0 0 40 60" aria-hidden="true"><path d="M8 7 H32 L8 53 H32" fill="none" stroke-width="4" stroke-linejoin="miter"/></svg>
+        <svg viewBox="0 0 40 60" aria-hidden="true"><path d="M9 7 H31 L9 53 H31" stroke-width="4"/></svg>
         shh <kbd>key 4</kbd>
       </button>
     </div>
@@ -250,7 +251,7 @@
 
   const SYLLABLES = {
     du:   { text: "du",    color: "#0000FF", italic: false },
-    dude: { text: "du-de", color: "#CC0000", italic: false },
+    dude: { text: "du–de", color: "#CC0000", italic: false },
     dutadeta: { text: "du-ta-de-ta", color: "#8E44AD", italic: false },
     shh:  { text: "shh!",  color: "#6AA84F", italic: true }
   };
