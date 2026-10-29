@@ -36,6 +36,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     background: var(--bg);
@@ -410,6 +411,9 @@
         (o.bars ? `, ${measures} measure${measures === 1 ? "" : "s"} of ${o.meter}/4` : "");
     } else {
       $("count").textContent = "";
+      preview.getContext("2d").clearRect(0, 0, preview.width, preview.height);
+      preview.width = 0;
+      preview.height = 0;
       return;
     }
 
