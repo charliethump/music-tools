@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stick Notation</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232B4C7E'/%3E%3Crect x='17' y='13' width='6' height='38' fill='white'/%3E%3Crect x='41' y='13' width='6' height='38' fill='white'/%3E%3Crect x='17' y='13' width='30' height='10' fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #E9EDF2;
+    --surface: #FFFFFF;
+    --ink: #1B2430;
+    --muted: #5A6676;
+    --accent: #2B4C7E;
+    --accent-ink: #FFFFFF;
+    --line: #C9D1DB;
+    --paper: #FBFCFD;
+    --dot: #D3DAE3;
+    --danger: #A33A3A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #151B23;
+      --surface: #1F2731;
+      --ink: #E7ECF2;
+      --muted: #9AA6B5;
+      --accent: #8FB0E0;
+      --accent-ink: #0F1620;
+      --line: #354252;
+      --danger: #E08A8A;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 20px 48px;
+  }
+  header { margin-bottom: 18px; }
+  h1 { font-size: 1.75rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+
+  /* Preview stage: dotted paper shows the transparent area */
+  .stage {
+    background-color: var(--paper);
+    background-image: radial-gradient(var(--dot) 1.2px, transparent 1.4px);
+    background-size: 18px 18px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    min-height: 240px;
+    padding: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-x: auto;
+  }
+  #preview { display: block; max-width: 100%; height: auto; }
+  .empty { color: #5A6676; font-size: 1.05rem; text-align: center; }
+  .count { color: var(--muted); font-size: 0.95rem; margin: 8px 2px 0; min-height: 1.4em; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    margin-top: 16px;
+  }
+  .symbols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .sym {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 10px 12px;
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 700;
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+  .sym:hover { border-color: var(--accent); }
+  .sym:active { transform: translateY(1px); }
+  .sym svg { height: 46px; width: auto; }
+  .sym svg * { fill: currentColor; stroke: currentColor; }
+  .sym kbd { font-weight: 400; font-size: 0.8rem; color: var(--muted); font-family: inherit; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 28px;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+  .settings { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 0.92rem; color: var(--muted); }
+  input[type="number"], select {
+    font: inherit;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 8px;
+    min-width: 90px;
+  }
+  input[type="range"] { width: 140px; accent-color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn {
+    font: inherit;
+    font-weight: 700;
+    padding: 9px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.danger { color: var(--danger); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .status { min-height: 1.4em; margin-top: 10px; color: var(--muted); font-size: 0.95rem; }
+  .hint { color: var(--muted); font-size: 0.88rem; margin-top: 14px; }
+
+  @media (max-width: 560px) {
+    .sym { font-size: 1rem; }
+    .sym svg { height: 36px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Stick notation</h1>
+    <p>Build a rhythm, then export it as a transparent PNG.</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <p class="empty" id="empty">Add a du, du-de or shh to start.</p>
+    <canvas id="preview" hidden></canvas>
+  </div>
+  <p class="count" id="count"></p>
+
+  <section class="panel" aria-label="Add symbols">
+    <div class="symbols">
+      <button class="sym" data-note="du" type="button">
+        <svg viewBox="0 0 40 60" aria-hidden="true"><rect x="18" y="5" width="4" height="50"/></svg>
+        du <kbd>key 1</kbd>
+      </button>
+      <button class="sym" data-note="dude" type="button">
+        <svg viewBox="0 0 40 60" aria-hidden="true"><rect x="6" y="5" width="4" height="50"/><rect x="30" y="5" width="4" height="50"/><rect x="6" y="5" width="28" height="8"/></svg>
+        du-de <kbd>key 2</kbd>
+      </button>
+      <button class="sym" data-note="shh" type="button">
+        <svg viewBox="0 0 40 60" aria-hidden="true"><path d="M8 7 H32 L8 53 H32" fill="none" stroke-width="4" stroke-linejoin="miter"/></svg>
+        shh <kbd>key 3</kbd>
+      </button>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Settings and export">
+    <div class="controls">
+      <div class="settings">
+        <label>Beats per row
+          <input type="number" id="perRow" min="1" max="32" value="4">
+        </label>
+        <label>Line thickness
+          <input type="range" id="weight" min="2" max="10" step="1" value="4">
+        </label>
+        <label>Export size
+          <select id="size">
+            <option value="1">Small</option>
+            <option value="2">Medium</option>
+            <option value="4" selected>Large</option>
+            <option value="6">Extra large</option>
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn" id="undo" type="button">Undo</button>
+        <button class="btn danger" id="clear" type="button">Clear</button>
+        <button class="btn" id="copy" type="button">Copy image</button>
+        <button class="btn primary" id="export" type="button">Export</button>
+      </div>
+    </div>
+    <div class="status" id="status" aria-live="polite"></div>
+    <p class="hint">Keys: 1 du, 2 du-de, 3 shh, Backspace undo.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  // Geometry in base units (stick height = 100)
+  const H = 100;        // stick height
+  const CELL = 140;     // width of one beat
+  const HALF = 30;      // half the gap between du-de sticks
+  const ZW = 44;        // shh Z width
+  const ROWGAP = 60;    // space between rows
+  const PAD = 30;       // drawing margin before crop
+  const MARGIN = 8;     // margin kept around the cropped image
+
+  const notes = [];
+  const $ = id => document.getElementById(id);
+  const preview = $("preview");
+  const perRowEl = $("perRow");
+  const weightEl = $("weight");
+  const sizeEl = $("size");
+  const statusEl = $("status");
+
+  function perRow() {
+    const v = parseInt(perRowEl.value, 10);
+    return Number.isFinite(v) && v > 0 ? Math.min(v, 32) : 4;
+  }
+  function weight() { return parseInt(weightEl.value, 10) || 4; }
+
+  function drawNote(ctx, type, cx, top, w) {
+    const beam = 11 + w;
+    if (type === "du") {
+      ctx.fillRect(cx - w / 2, top, w, H);
+    } else if (type === "dude") {
+      const l = cx - HALF, r = cx + HALF;
+      ctx.fillRect(l - w / 2, top, w, H);
+      ctx.fillRect(r - w / 2, top, w, H);
+      ctx.fillRect(l - w / 2, top, (r - l) + w, beam);
+    } else if (type === "shh") {
+      ctx.lineWidth = w;
+      ctx.lineJoin = "miter";
+      ctx.miterLimit = 10;
+      ctx.lineCap = "butt";
+      ctx.beginPath();
+      ctx.moveTo(cx - ZW / 2, top + w / 2);
+      ctx.lineTo(cx + ZW / 2, top + w / 2);
+      ctx.lineTo(cx - ZW / 2, top + H - w / 2);
+      ctx.lineTo(cx + ZW / 2, top + H - w / 2);
+      ctx.stroke();
+    }
+  }
+
+  // Draws the rhythm at the given scale and returns a canvas cropped to the ink
+  function render(scale) {
+    if (!notes.length) return null;
+    const per = perRow(), w = weight();
+    const cols = Math.min(notes.length, per);
+    const rows = Math.ceil(notes.length / per);
+    const fullW = cols * CELL + PAD * 2;
+    const fullH = rows * H + (rows - 1) * ROWGAP + PAD * 2;
+
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(fullW * scale);
+    c.height = Math.ceil(fullH * scale);
+    const ctx = c.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#000";
+    ctx.strokeStyle = "#000";
+
+    notes.forEach((type, i) => {
+      const row = Math.floor(i / per), col = i % per;
+      const cx = PAD + col * CELL + CELL / 2;
+      const top = PAD + row * (H + ROWGAP);
+      drawNote(ctx, type, cx, top, w);
+    });
+    return crop(c, Math.round(MARGIN * scale));
+  }
+
+  function crop(c, m) {
+    const ctx = c.getContext("2d");
+    const { width, height } = c;
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 0) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return c;
+    const out = document.createElement("canvas");
+    out.width = maxX - minX + 1 + m * 2;
+    out.height = maxY - minY + 1 + m * 2;
+    out.getContext("2d").drawImage(c, minX, minY, maxX - minX + 1, maxY - minY + 1, m, m, maxX - minX + 1, maxY - minY + 1);
+    return out;
+  }
+
+  function update() {
+    const has = notes.length > 0;
+    $("empty").hidden = has;
+    preview.hidden = !has;
+    ["undo", "clear", "copy", "export"].forEach(id => $(id).disabled = !has);
+    $("count").textContent = has ? `${notes.length} beat${notes.length === 1 ? "" : "s"}` : "";
+    if (!has) return;
+
+    const scale = 2;
+    const img = render(scale);
+    preview.width = img.width;
+    preview.height = img.height;
+    const pctx = preview.getContext("2d");
+    pctx.clearRect(0, 0, img.width, img.height);
+    pctx.drawImage(img, 0, 0);
+    preview.style.width = (img.width / scale) + "px";
+  }
+
+  function add(type) { notes.push(type); setStatus(""); update(); }
+  function undo() { notes.pop(); setStatus(""); update(); }
+  function clearAll() { notes.length = 0; setStatus(""); update(); }
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  function fileName() {
+    const names = { du: "du", dude: "du-de", shh: "shh" };
+    if (notes.length <= 12) return "rhythm_" + notes.map(n => names[n]).join("_") + ".png";
+    return `rhythm_${notes.length}-beats.png`;
+  }
+
+  function toBlob() {
+    const img = render(parseFloat(sizeEl.value) || 4);
+    return new Promise(res => img.toBlob(res, "image/png"));
+  }
+
+  async function exportPng() {
+    if (!notes.length) return;
+    const blob = await toBlob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(`Exported ${a.download}`);
+  }
+
+  async function copyPng() {
+    if (!notes.length) return;
+    try {
+      if (!navigator.clipboard || typeof ClipboardItem === "undefined") throw new Error("unsupported");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": toBlob() })]);
+      setStatus("Copied image. Paste it into Slides or Docs.");
+    } catch (e) {
+      setStatus("This browser blocked copying. Use Export instead.");
+    }
+  }
+
+  document.querySelectorAll(".sym").forEach(btn =>
+    btn.addEventListener("click", () => add(btn.dataset.note))
+  );
+  $("undo").addEventListener("click", undo);
+  $("clear").addEventListener("click", clearAll);
+  $("export").addEventListener("click", exportPng);
+  $("copy").addEventListener("click", copyPng);
+  perRowEl.addEventListener("input", update);
+  weightEl.addEventListener("input", update);
+
+  document.addEventListener("keydown", e => {
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "select" || tag === "textarea") return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "1") add("du");
+    else if (e.key === "2") add("dude");
+    else if (e.key === "3") add("shh");
+    else if (e.key === "Backspace") { e.preventDefault(); undo(); }
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>
