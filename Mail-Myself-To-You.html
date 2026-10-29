@@ -77,6 +77,7 @@
   .env svg, .face svg { display: block; width: 100%; height: 100%; }
   .frontImg { display: block; width: 100%; height: 100%; border: 1px solid #b5b5b5; }
   .env.gone { display: none; }
+  .envTilt { width: 100%; height: 100%; }
 
   #doneMsg {
     position: absolute; inset: 0;
@@ -347,6 +348,7 @@ const T = {
 };
 
 const ENV_RATIO = 1000 / 560;
+const MAX_TILT = 3;   // degrees; each envelope gets a random hand-placed tilt within this range
 const LETTER_RATIO = 2.3;
 
 const titleEl   = document.getElementById('title');
@@ -411,7 +413,10 @@ function buildGrid() {
     const d = document.createElement('div');
     d.className = 'env';
     d.dataset.num = n;
-    d.innerHTML = frontSVG(n);
+    // Bell-curve tilt: average of three randoms, picked once per round
+    const tilt = ((Math.random() + Math.random() + Math.random()) / 3 * 2 - 1) * MAX_TILT;
+    d.dataset.tilt = tilt.toFixed(2);
+    d.innerHTML = `<div class="envTilt" style="transform: rotate(${tilt.toFixed(2)}deg)">${frontSVG(n)}</div>`;
     d.addEventListener('click', e => { e.stopPropagation(); openEnvelope(n); });
     gridEl.appendChild(d);
   }
@@ -526,9 +531,11 @@ async function openEnvelope(num) {
 
   // 1. Fly from grid spot to center, growing
   const s = from.width / W;
+  const tilt = Number(envEl.dataset.tilt) || 0;
+  // Start at the envelope's tilt (rotating around its center) and straighten while flying
   await anim(stage, [
-    { transform: `translate(${from.left - left}px, ${from.top - top}px) scale(${s})` },
-    { transform: 'translate(0,0) scale(1)' }
+    { transform: `translate(${from.left - left}px, ${from.top - top}px) scale(${s}) translate(${W / 2}px, ${H / 2}px) rotate(${tilt}deg) translate(${-W / 2}px, ${-H / 2}px)` },
+    { transform: `translate(0px, 0px) scale(1) translate(${W / 2}px, ${H / 2}px) rotate(0deg) translate(${-W / 2}px, ${-H / 2}px)` }
   ], { duration: T.toCenter, easing: 'cubic-bezier(.2,.8,.2,1)' });
 
   // 2. Flip around
