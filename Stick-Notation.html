@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stick Notation</title>
+<title>Stick Notation Tool</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232B4C7E'/%3E%3Crect x='17' y='13' width='6' height='38' fill='white'/%3E%3Crect x='41' y='13' width='6' height='38' fill='white'/%3E%3Crect x='17' y='13' width='30' height='10' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -76,6 +76,16 @@
     padding: 18px;
     margin-top: 16px;
   }
+  /* Palette stays put above the preview and sticks to the top when scrolling */
+  .palette {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin: 0 0 16px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  }
+  .build-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+  .keys { color: var(--muted); font-size: 0.88rem; margin-left: auto; }
   .symbols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .sym {
     display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -139,17 +149,11 @@
 <body>
 <main>
   <header>
-    <h1>Stick notation</h1>
+    <h1>Stick Notation Tool</h1>
     <p>Build a rhythm, then export it as a transparent PNG.</p>
   </header>
 
-  <div class="stage" id="stage">
-    <p class="empty" id="empty">Add a du, du-de, du-ta-de-ta or shh to start.</p>
-    <canvas id="preview" hidden></canvas>
-  </div>
-  <p class="count" id="count"></p>
-
-  <section class="panel" aria-label="Add symbols">
+  <section class="panel palette" aria-label="Add symbols">
     <div class="symbols">
       <button class="sym" data-note="du" type="button">
         <svg viewBox="0 0 40 60" aria-hidden="true"><rect x="18" y="5" width="4" height="50"/></svg>
@@ -168,7 +172,19 @@
         shh <kbd>key 4</kbd>
       </button>
     </div>
+    <div class="build-actions">
+      <button class="btn" id="undo" type="button">Undo</button>
+      <button class="btn danger" id="clear" type="button">Clear</button>
+      <span class="keys">Keys: 1 du, 2 du-de, 3 du-ta-de-ta, 4 shh, Backspace undo</span>
+    </div>
   </section>
+
+  <div class="stage" id="stage">
+    <p class="empty" id="empty">Add a du, du-de, du-ta-de-ta or shh to start.</p>
+    <canvas id="preview" hidden></canvas>
+  </div>
+  <p class="count" id="count"></p>
+
 
   <section class="panel" aria-label="Settings and export">
     <div class="groups">
@@ -218,14 +234,11 @@
       </div>
     </div>
     <div class="actions">
-      <button class="btn" id="undo" type="button">Undo</button>
-      <button class="btn danger" id="clear" type="button">Clear</button>
       <span class="spacer"></span>
       <button class="btn" id="copy" type="button">Copy image</button>
       <button class="btn primary" id="export" type="button">Export</button>
     </div>
     <div class="status" id="status" aria-live="polite"></div>
-    <p class="hint">Keys: 1 du, 2 du-de, 3 du-ta-de-ta, 4 shh, Backspace undo.</p>
   </section>
 </main>
 
@@ -257,6 +270,7 @@
   };
 
   const notes = [];
+  const history = [];   // snapshots of notes before each change, for Undo
   const $ = id => document.getElementById(id);
   const preview = $("preview");
   const statusEl = $("status");
@@ -402,7 +416,8 @@
     const has = notes.length > 0;
     $("empty").hidden = has;
     preview.hidden = !has;
-    ["undo", "clear", "copy", "export"].forEach(id => $(id).disabled = !has);
+    ["clear", "copy", "export"].forEach(id => $(id).disabled = !has);
+    $("undo").disabled = history.length === 0;
     $("meter").disabled = !$("bars").checked;
     $("color").disabled = $("mode").value === "notes";
 
@@ -430,9 +445,26 @@
   }
 
   function setStatus(msg) { statusEl.textContent = msg; }
-  function add(type) { notes.push(type); setStatus(""); update(); }
-  function undo() { notes.pop(); setStatus(""); update(); }
-  function clearAll() { notes.length = 0; setStatus(""); update(); }
+  function snapshot() {
+    history.push(notes.slice());
+    if (history.length > 500) history.shift();
+  }
+  function add(type) { snapshot(); notes.push(type); setStatus(""); update(); }
+  function undo() {
+    if (!history.length) return;
+    const prev = history.pop();
+    notes.length = 0;
+    notes.push(...prev);
+    setStatus("");
+    update();
+  }
+  function clearAll() {
+    if (!notes.length) return;
+    snapshot();
+    notes.length = 0;
+    setStatus("Cleared. Press Undo to bring it back.");
+    update();
+  }
 
   function fileName() {
     const names = { du: "du", dude: "du-de", dutadeta: "du-ta-de-ta", shh: "shh" };
