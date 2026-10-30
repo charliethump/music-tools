@@ -428,6 +428,7 @@ const PATTERNS = {
   9: [0, 0.5, 1, 2, 2.5, 3]                         // du-de, du, du-de, du
 };
 const PATTERN_BEATS = 4;
+const SFX_VOLUME = 0.25;   // envelope sound effects (0 turns them off; 1 is louder)
 // Beats where a "shh" rest happens (Mingus shows his shh pose for that beat)
 const RESTS = {
   1: [2],
@@ -568,6 +569,8 @@ async function flyIn() {
   const R = Math.hypot(innerWidth, innerHeight) * 0.75;
   const cx = innerWidth / 2, cy = innerHeight / 2;
   const order = envs.map((e, i) => i).sort(() => Math.random() - 0.5);
+  const flyDur = envs.map(() => 900 + Math.random() * 250);
+  sfx.deal((envs.length - 1) * 90 / 1000 + 0.9);
   const runs = envs.map((e, i) => {
     const r = e.getBoundingClientRect();
     const ang = Math.random() * Math.PI * 2;
@@ -578,7 +581,7 @@ async function flyIn() {
       { transform: `translate(${sx - r.left}px, ${sy - r.top}px) rotate(${spin}deg) scale(.7)` },
       { transform: 'translate(0,0) rotate(0deg) scale(1)' }
     ], {
-      duration: 900 + Math.random() * 250,
+      duration: flyDur[i],
       delay: order.indexOf(i) * 90,
       easing: 'cubic-bezier(.2,.8,.25,1)',
       fill: 'backwards'
@@ -644,6 +647,7 @@ async function openEnvelope(num) {
   ], { duration: T.toCenter, easing: 'cubic-bezier(.2,.8,.2,1)' });
 
   // 2. Flip around
+  sfx.flip();
   const card = stage.querySelector('.card');
   await anim(card, [
     { transform: 'rotateY(0deg)' },
@@ -665,6 +669,7 @@ async function openEnvelope(num) {
   ], { duration: T.flapHalf, easing: 'ease-out' });
 
   // 4. Slide the letter up out of the envelope
+  sfx.slide(T.slide / 1000);
   const letter = stage.querySelector('.letter');
   const lh = letter.getBoundingClientRect().height;
   const rise = H * 0.12 + lh + H * 0.03;
@@ -716,6 +721,7 @@ async function closeEnvelope() {
   skipBtn.classList.remove('show');
   if (mingus.phase !== 'down') mingusFall(true);
 
+  sfx.close();
   const startTf = getComputedStyle(bigLetter).transform;
   bigLetter.getAnimations().forEach(a => a.cancel());
   await anim(bigLetter, [
@@ -892,16 +898,88 @@ function tick(when, accent) {
 const mingus = { phase: 'down', played: false, timers: [], sources: [] };
 let audioCtx = null, clapBuffer = null, lastClap = -1;
 
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+let clapDecode = null;
 async function initAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  getCtx();
+  if (!clapDecode) {
     const bin = atob(CLAP_AUDIO.split(',')[1]);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    clapBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+    clapDecode = audioCtx.decodeAudioData(bytes.buffer).then(b => { clapBuffer = b; });
   }
+  await clapDecode;
   if (audioCtx.state === 'suspended') await audioCtx.resume();
 }
+
+/* ---------- Sound effects (generated in the browser) ---------- */
+let noiseBuf = null;
+function noiseBuffer() {
+  if (!noiseBuf) {
+    const ctx = getCtx();
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noiseBuf;
+}
+
+// One shaped burst of filtered noise
+function noiseHit(when, { dur, type = 'bandpass', from, to, q = 1, peak = 1, attack = 0.01 }) {
+  if (SFX_VOLUME <= 0) return;
+  const ctx = getCtx();
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer();
+  const f = ctx.createBiquadFilter();
+  f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(from, when);
+  f.frequency.exponentialRampToValueAtTime(to, when + dur);
+  const g = ctx.createGain();
+  const v = peak * SFX_VOLUME;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(v, when + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  src.connect(f).connect(g).connect(ctx.destination);
+  src.start(when, Math.random() * 0.5, dur + 0.05);
+}
+
+const sfx = {
+  // Envelopes dealt: one quiet swoosh across the whole fly-in
+  deal(totalSec) {
+    const t = getCtx().currentTime;
+    const dur = Math.min(Math.max(totalSec, 0.8), 1.8);
+    noiseHit(t, { dur, from: 500, to: 2400, q: 0.7, peak: 0.22, attack: dur * 0.45 });
+  },
+  // Envelope turning over: soft swish that rises then falls
+  flip() {
+    const t = getCtx().currentTime;
+    noiseHit(t, { dur: 0.22, from: 900, to: 3800, q: 0.9, peak: 0.35, attack: 0.08 });
+    noiseHit(t + 0.2, { dur: 0.28, from: 3800, to: 1100, q: 0.9, peak: 0.3, attack: 0.03 });
+  },
+  // Flap lifting: a few tiny paper crinkles
+  flap() {
+    const t = getCtx().currentTime;
+    for (let i = 0; i < 5; i++) {
+      noiseHit(t + i * 0.035 + Math.random() * 0.02,
+        { dur: 0.03 + Math.random() * 0.02, type: 'highpass', from: 3500, to: 2500, q: 0.7, peak: 0.28 + Math.random() * 0.15, attack: 0.002 });
+    }
+  },
+  // Letter sliding out: smooth paper slide
+  slide(durSec) {
+    const t = getCtx().currentTime;
+    noiseHit(t, { dur: durSec, type: 'lowpass', from: 1600, to: 3200, q: 0.5, peak: 0.22, attack: durSec * 0.4 });
+  },
+  // Card closing: soft falling whoosh
+  close() {
+    const t = getCtx().currentTime;
+    noiseHit(t, { dur: 0.4, from: 2600, to: 500, q: 0.8, peak: 0.35, attack: 0.05 });
+  }
+};
 // Unlock audio on the first click or key press anywhere
 ['pointerdown', 'keydown'].forEach(ev =>
   addEventListener(ev, () => { initAudio().catch(() => {}); }, { once: true }));

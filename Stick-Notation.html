@@ -116,6 +116,16 @@
     padding: 6px 8px; min-width: 90px;
   }
   input[type="range"] { width: 140px; accent-color: var(--accent); }
+  .colors { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; }
+  .colors-title { width: 100%; font-size: 0.92rem; color: var(--muted); }
+  label.swatch { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-weight: 700; }
+  input[type="color"] {
+    width: 42px; height: 32px; padding: 2px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); cursor: pointer;
+  }
+  input[type="color"]:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.small { padding: 5px 12px; font-size: 0.9rem; }
   select:disabled, label.check input:disabled + span { opacity: 0.5; }
 
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
@@ -230,6 +240,14 @@
           <label class="check"><input type="checkbox" id="color" checked><span>Colored syllables</span></label>
           <label class="check"><input type="checkbox" id="match" checked><span>Same size for every export</span></label>
         </div>
+        <div class="colors" aria-label="Syllable colors">
+          <span class="colors-title">Syllable colors</span>
+          <label class="swatch"><input type="color" data-type="du"><span>du</span></label>
+          <label class="swatch"><input type="color" data-type="dude"><span>du–de</span></label>
+          <label class="swatch"><input type="color" data-type="dutadeta"><span>du-ta-de-ta</span></label>
+          <label class="swatch"><input type="color" data-type="shh"><span>shh!</span></label>
+          <button class="btn small" id="resetColors" type="button">Reset colors</button>
+        </div>
         <p class="hint">Same size keeps notation, syllables and both lined up when you stack them in Slides.</p>
       </div>
     </div>
@@ -268,6 +286,21 @@
     dutadeta: { text: "du-ta-de-ta", color: "#8E44AD", italic: false },
     shh:  { text: "shh!",  color: "#6AA84F", italic: true }
   };
+
+  // Syllable colors: start from the defaults, then any colors saved in this browser
+  const COLOR_KEY = "stickNotationColors";
+  const colors = {};
+  Object.keys(SYLLABLES).forEach(t => colors[t] = SYLLABLES[t].color.toLowerCase());
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLOR_KEY) || "{}");
+    Object.keys(colors).forEach(t => {
+      if (/^#[0-9a-f]{6}$/i.test(saved[t] || "")) colors[t] = saved[t];
+    });
+  } catch (e) { /* storage unavailable, use defaults */ }
+  function saveColors() {
+    try { localStorage.setItem(COLOR_KEY, JSON.stringify(colors)); } catch (e) {}
+  }
+  const colorInputs = document.querySelectorAll('input[type="color"]');
 
   const notes = [];
   const history = [];   // snapshots of notes before each change, for Undo
@@ -328,7 +361,7 @@
     if (tw > maxW) ctx.font = font(SYL_SIZE * maxW / tw);
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = colored ? s.color : "#000";
+    ctx.fillStyle = colored ? colors[type] : "#000";
     // Shared baseline so every syllable in a row sits on the same line
     ctx.fillText(s.text, cx, top + H + SYL_GAP + SYL_SIZE * 0.8);
   }
@@ -420,6 +453,9 @@
     $("undo").disabled = history.length === 0;
     $("meter").disabled = !$("bars").checked;
     $("color").disabled = $("mode").value === "notes";
+    const colorsOff = $("mode").value === "notes" || !$("color").checked;
+    colorInputs.forEach(inp => inp.disabled = colorsOff);
+    $("resetColors").disabled = colorsOff;
 
     if (has) {
       const o = opts();
@@ -514,6 +550,21 @@
   $("copy").addEventListener("click", copyPng);
   ["perRow", "weight"].forEach(id => $(id).addEventListener("input", update));
   ["meter", "bars", "mode", "color", "match"].forEach(id => $(id).addEventListener("change", update));
+
+  colorInputs.forEach(inp => {
+    inp.value = colors[inp.dataset.type];
+    inp.addEventListener("input", () => {
+      colors[inp.dataset.type] = inp.value;
+      saveColors();
+      update();
+    });
+  });
+  $("resetColors").addEventListener("click", () => {
+    Object.keys(SYLLABLES).forEach(t => colors[t] = SYLLABLES[t].color.toLowerCase());
+    colorInputs.forEach(inp => inp.value = colors[inp.dataset.type]);
+    saveColors();
+    update();
+  });
 
   document.addEventListener("keydown", e => {
     const tag = (e.target.tagName || "").toLowerCase();
