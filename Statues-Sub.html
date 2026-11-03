@@ -39,11 +39,11 @@ body.playing.last #lastOne{display:block}
 
 body.freeze #cardView{display:flex}
 #cardView{flex-direction:column;align-items:center;justify-content:center;gap:22px}
-#cardLabel{font-family:var(--serif);font-weight:700;font-size:96px;line-height:1;color:#111;display:none}
+/* Partner and group labels sit in the space to the left of the card, so the card never shrinks */
+#cardLabel{position:absolute;left:40px;width:480px;top:50%;transform:translateY(-50%);text-align:center;font-family:var(--serif);font-weight:700;font-size:104px;line-height:1.08;color:#111;display:none}
 #cardView.labeled #cardLabel{display:block}
 #cardFrame{border:18px solid var(--blue);border-radius:10px;background:#fff;line-height:0}
 #cardFrame img{height:1000px;width:773px;display:block}
-#cardView.labeled #cardFrame img{height:850px;width:657px}
 
 /* ---------- guide box ---------- */
 #guide{position:fixed;left:0;right:0;bottom:0;height:var(--guideH);background:#fff;border-top:.7vh solid var(--navy);
@@ -294,7 +294,7 @@ let CLIPS = {
 
 /* "Last one!" shows on the music note during the final part of each 'song', or only of the whole 'set' */
 const LAST_ONE_FOR = 'set';
-/* The game always ends on this card (position in CARDS, counting from 0). It never comes up before the end. */
+/* The game always ends on this card (position in CARDS, counting from 0). It can also come up during the game. */
 const FINAL_CARD = 11;   // Sit, hands on head
 const FADE_IN = 0.04;     // seconds the music takes to fade in at each start point (just enough to avoid a click)
 const FADE_OUT = 0;       // no fade: the music cuts off instantly at each stop point
@@ -321,10 +321,10 @@ const CARDS = [
 ];
 
 /* ---------- wording the sub sees ---------- */
-const SUMMARY = 'Music plays and students move or dance however the music makes them feel. When the music stops, a stick figure statue appears on the screen, and everyone freezes in that pose like a statue. There are no outs: it’s just for fun. You don’t need to do anything with the music. It starts when you click and stops by itself.';
+const SUMMARY = 'Music plays and students move or dance however the music makes them feel (as long as they are being safe). When the music stops, a stick figure statue appears on the screen, and everyone freezes in that pose like a statue. There are no outs: it’s just for fun. You don’t need to do anything with the music. It starts when you click and stops by itself.';
 const GUIDE_STEPS = [
   '<b>Spread out.</b> Students find their own space where they can move without bumping anyone. Click <b>Start the music</b>.',
-  '<b>Move to the music.</b> Students move however the music makes them feel. The music stops by itself.',
+  '<b>Move to the music.</b> Students move however the music makes them feel (as long as they are being safe). The music will stop by itself.',
   '<b>Freeze!</b> A statue appears. Everyone copies the pose and holds still. Then click <b>Start the music</b> for the next part.'
 ];
 const BEFORE = [
@@ -509,7 +509,7 @@ let pile = [], lastCard = -1;
 function shuffle(a){ for (let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 function drawCard(){
   if (!pile.length){
-    pile = shuffle(CARDS.map((c,i) => i).filter(i => i !== FINAL_CARD));
+    pile = shuffle(CARDS.map((c,i) => i));
     if (pile.length > 1 && pile[pile.length-1] === lastCard) [pile[0], pile[pile.length-1]] = [pile[pile.length-1], pile[0]];
   }
   lastCard = pile.pop();
@@ -675,7 +675,7 @@ function guideState(){
     case 'playing':
       return {key:'playing' + songI + '-' + partI, n:2, meta:where(),
         title:'Move to the music!',
-        body:'Students move however the music makes them feel. The music stops by itself and a statue appears.' + (document.body.classList.contains('last') ? ' This is the last one before the game ends.' : ''),
+        body:'Students move however the music makes them feel (as long as they are being safe). The music will stop by itself and a statue will appear.' + (document.body.classList.contains('last') ? ' This is the last one before the game ends.' : ''),
         btns:[['Stop the music now', IC.stop, stopNow]]};
     case 'freeze': {
       const c = CARDS[card] || {};
