@@ -18,7 +18,6 @@
   --round:'Fredoka','Arial Rounded MT Bold','Nunito','Segoe UI',system-ui,sans-serif;
   --serif:Georgia,'Times New Roman',Times,serif;
   --guideH:19vh;
-  --u:min(1vh, .5625vw);   /* guide box sizing: 1vh on 16:9 screens, smaller on squarer ones so text always fits */
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);font-family:var(--round);color:var(--navy)}
@@ -47,44 +46,47 @@ body.freeze #cardView{display:flex}
 #cardFrame img{height:1000px;width:773px;display:block}
 
 /* ---------- guide box ---------- */
-#guide{position:fixed;left:0;right:0;bottom:0;height:var(--guideH);background:#fff;border-top:calc(.7*var(--u)) solid var(--navy);
-  display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-rows:auto minmax(0,1fr);align-items:center;column-gap:2.2vw;row-gap:calc(.3*var(--u));padding:calc(.8*var(--u)) 1.6vw calc(1.1*var(--u)) 2vw;z-index:30;color:var(--navy)}
+#guide{position:fixed;left:0;right:0;bottom:0;height:var(--guideH);background:#fff;border-top:.7vh solid var(--navy);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:1.6vw;padding:1.2vh 1.6vw 1.2vh 2vw;z-index:30;color:var(--navy)}
 body.start-open #guide,body.mark-open #guide{display:none}
-.gStep{display:flex;flex-direction:column;align-items:center;gap:calc(.6*var(--u));min-width:calc(9*var(--u))}
+.gStep{display:flex;flex-direction:column;align-items:center;gap:.6vh;min-width:9vh}
 /* status badge: what is happening right now (instead of step numbers) */
-.gNum{width:calc(9*var(--u));height:calc(9*var(--u));border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 calc(.4*var(--u)) 0 #0d1620}
-.gNum svg{width:calc(5*var(--u));height:calc(5*var(--u))}
-.gNum.music{background:var(--red);box-shadow:0 calc(.4*var(--u)) 0 var(--red-dark)}
-.gNum.freeze{background:var(--blue);box-shadow:0 calc(.4*var(--u)) 0 #2d5fb3}
-.gNum.done{background:#18a849;box-shadow:0 calc(.4*var(--u)) 0 #0e6e2f}
+.gNum{width:9vh;height:9vh;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 .4vh 0 #0d1620}
+.gNum svg{width:5vh;height:5vh}
+.gNum.music{background:var(--red);box-shadow:0 .4vh 0 var(--red-dark)}
+.gNum.freeze{background:var(--blue);box-shadow:0 .4vh 0 #2d5fb3}
+.gNum.done{background:#18a849;box-shadow:0 .4vh 0 #0e6e2f}
 .gNum:empty{display:none}
-.gLbl{font-size:calc(1.7*var(--u));font-weight:600;color:#5c6b7a;white-space:nowrap}
+.gLbl{font-size:1.7vh;font-weight:600;color:#5c6b7a;white-space:nowrap}
 .gText{min-width:0}
-.gMeta{font-size:calc(1.9*var(--u));font-weight:600;color:#5c6b7a;margin:0 0 calc(.4*var(--u));display:flex;flex-wrap:wrap;align-items:center;gap:calc(.4*var(--u)) 1.2vw}
-/* progress dots: their own row, always centered on the screen so they never shift */
-.gDots{grid-column:1/-1;justify-self:center;line-height:0;min-height:calc(1.9*var(--u))}
+.gMeta{font-size:1.9vh;font-weight:600;color:#5c6b7a;margin:0 0 .4vh;display:flex;align-items:center;gap:1.2vw}
+.gMeta > span:first-child{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 5vh),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 5vh),transparent)}
+.gMeta .dots{flex:none;margin-left:auto}
 .dots{display:inline-flex;align-items:center;gap:.9vw}
 .dots .song{display:inline-flex;gap:.35vw}
-.dots i{width:calc(1.5*var(--u));height:calc(1.5*var(--u));border-radius:50%;border:calc(.25*var(--u)) solid #9aa7b4;display:inline-block}
+.dots i{width:1.5vh;height:1.5vh;border-radius:50%;border:.25vh solid #9aa7b4;display:inline-block}
 .dots i.past{background:var(--navy);border-color:var(--navy)}
 .dots i.now{background:var(--red);border-color:var(--red);transform:scale(1.3)}
 .dots i.now.frz{background:var(--blue);border-color:var(--blue)}
 .gMeta:empty{display:none}
-.gTitle{font-size:calc(3.5*var(--u));font-weight:700;line-height:1.12;margin:0 0 calc(.6*var(--u))}
-.gBody{font-size:calc(2.3*var(--u));font-weight:500;line-height:1.3;color:#33475b;max-width:70ch}
-.gBtns{display:flex;flex-direction:column;align-items:stretch;gap:calc(1*var(--u))}
+.gTitle{font-size:3.5vh;font-weight:700;line-height:1.12;margin:0 0 .6vh}
+.gBody{font-size:2.3vh;font-weight:500;line-height:1.3;color:#33475b;max-width:70ch}
+.gBtns{display:flex;flex-direction:column;align-items:stretch;gap:1vh}
 .gBtns .row2{display:flex;gap:.8vw;justify-content:flex-end}
-.gb{display:flex;align-items:center;justify-content:center;gap:.6em;border-radius:calc(1.4*var(--u));cursor:pointer;font-weight:600;white-space:nowrap;border:calc(.35*var(--u)) solid var(--navy);background:#fff;color:var(--navy);font-size:calc(2.1*var(--u));padding:calc(.8*var(--u)) 1.1vw}
-.gb.main{background:var(--red);border-color:var(--red);color:#fff;font-size:calc(3.1*var(--u));font-weight:700;padding:calc(1.4*var(--u)) 1.8vw;box-shadow:0 calc(.5*var(--u)) 0 var(--red-dark)}
-.gb.main:active{translate:0 calc(.4*var(--u));box-shadow:0 calc(.1*var(--u)) 0 var(--red-dark)}
+.gb{display:flex;align-items:center;justify-content:center;gap:.6em;border-radius:1.4vh;cursor:pointer;font-weight:600;white-space:nowrap;border:.35vh solid var(--navy);background:#fff;color:var(--navy);font-size:2.1vh;padding:.8vh 1.1vw}
+.gb.main{background:var(--red);border-color:var(--red);color:#fff;font-size:3.1vh;font-weight:700;padding:1.4vh 1.2vw;box-shadow:0 .5vh 0 var(--red-dark)}
+.gb.main:active{translate:0 .4vh;box-shadow:0 .1vh 0 var(--red-dark)}
 .gb:disabled{opacity:.35;cursor:default}
 /* how far through the part the music is, filling along the bottom of Stop the music now */
-.gb.timed{position:relative;overflow:hidden;padding-bottom:calc(1.1*var(--u))}
-.gb.timed .pbar{position:absolute;left:0;right:0;bottom:0;height:calc(.4*var(--u));background:#eef1f4}
+.gb.timed{position:relative;overflow:hidden;font-size:3.1vh;font-weight:700;padding:1.4vh 1.2vw;border-color:var(--navy)}
+/* big buttons share one width (the width of Stop the music now), so the button never changes size */
+.gBtns > .gb.main,.gBtns > .gb.timed{min-width:calc(41vh + 2.4vw);box-sizing:border-box}
+.gb.timed .pbar{position:absolute;left:0;right:0;bottom:0;height:.4vh;background:#eef1f4}
 .gb.timed .pbar i{display:block;height:100%;width:100%;background:var(--red);transform-origin:left center;transform:scaleX(0)}
 .gb:hover:not(:disabled){filter:brightness(1.08)}
-.gSide{display:flex;flex-direction:column;gap:calc(.8*var(--u));border-left:calc(.25*var(--u)) solid #e3e7eb;padding-left:1.4vw}
-.gSide .gb{font-size:calc(1.75*var(--u));padding:calc(.6*var(--u)) .9vw;justify-content:flex-start;border-width:calc(.25*var(--u))}
+.gSide{display:flex;flex-direction:column;gap:.8vh;border-left:.25vh solid #e3e7eb;padding-left:1.4vw}
+.gSide .gb{font-size:1.75vh;padding:.6vh .9vw;justify-content:flex-start;border-width:.25vh}
 
 /* ---------- start screen ---------- */
 #start{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;overflow:auto;color:var(--navy)}
@@ -170,7 +172,6 @@ body.mark-open #stage{display:none}
 </div>
 
 <div id="guide" aria-live="polite">
-  <div class="gDots" id="gDots"></div>
   <div class="gStep"><div class="gNum" id="gNum"></div><div class="gLbl" id="gLbl"></div></div>
   <div class="gText"><p class="gMeta" id="gMeta"></p><p class="gTitle" id="gTitle"></p><div class="gBody" id="gBody"></div></div>
   <div class="gBtns" id="gBtns"></div>
@@ -789,16 +790,17 @@ function guideState(){
       const newSong = nxt && nxt.s !== songI;
       const label = !nxt ? 'All done' : newSong ? 'Next song' : 'Start the music';
       const fn = !nxt ? (() => { phase = 'done'; render(); }) : startMusic;
-      const title = c.group === 'partner' ? 'Find a partner and freeze like the statue!'
-                  : c.group === 'three' ? 'Find a group and freeze like the statue!'
+      const title = c.group === 'partner' ? 'Find a partner and freeze!'
+                  : c.group === 'three' ? 'Find a group and freeze!'
                   : 'Freeze like the statue!';
-      const extra = c.group === 'partner' ? 'This statue needs partners: students pair up with someone close by. '
-                  : c.group === 'three' ? 'This statue needs a group: students team up with a few people close by. ' : '';
+      const how = c.group === 'partner' ? 'Students pair up with someone close by, copy the statue on the screen and hold still for a few seconds.'
+                : c.group === 'three' ? 'Students team up with a few people close by, copy the statue on the screen and hold still for a few seconds.'
+                : 'Everyone copies the statue on the screen and holds still for a few seconds.';
       if (!nxt) return {key:'freeze-final', n:'freeze', meta:where(), title:'Last statue: everyone sit down and freeze!',
         body:'Everyone sits and copies the statue on the screen, then holds still. That’s the end of the game. Click <b>All done</b>.',
         btns:[['All done', IC.check, fn, true]]};
       return {key:'freeze' + songI + '-' + partI + '-' + card, n:'freeze', meta:where(), title,
-        body:`${extra}Everyone copies the statue on the screen and holds still for a few seconds. Then click <b>${label}</b>.`,
+        body:`${how} Then click <b>${label}</b>.`,
         btns:[[label, IC.play, fn, true], ['Different statue', IC.shuffle, otherCard]]};
     }
     case 'done':
@@ -833,8 +835,7 @@ function updateGuide(){
   $('gNum').className = 'gNum' + (bd && bd.cls ? ' ' + bd.cls : '');
   $('gNum').innerHTML = bd ? IC[bd.icon].replace(' class="ico"', '') : '';
   $('gLbl').textContent = bd ? bd.label : '';
-  $('gMeta').innerHTML = g.meta || '';
-  $('gDots').innerHTML = phase === 'error' || phase === 'none' ? '' : progressDots();
+  $('gMeta').innerHTML = (g.meta || '') + (g.meta && phase !== 'error' ? progressDots() : '');
   $('gTitle').textContent = g.title;
   $('gBody').innerHTML = g.body;
   const box = $('gBtns'); box.innerHTML = '';
