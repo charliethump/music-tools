@@ -115,7 +115,7 @@ body.mark-open #stage{display:none}
 #mark .mb.main{background:var(--red);border-color:var(--red);color:#fff}
 #mark .mb.small{padding:4px 8px;font-size:14px;border-width:1.5px}
 #mark .mb:disabled{opacity:.35;cursor:default}
-#wave{display:block;width:100%;height:150px;cursor:pointer;border-radius:8px;background:#f7f8fa;margin:12px 0 8px}
+#wave{display:block;width:100%;height:150px;cursor:pointer;touch-action:none;user-select:none;border-radius:8px;background:#f7f8fa;margin:12px 0 8px}
 #mTime{font:600 22px var(--round);min-width:190px}
 #mTap{min-width:150px;justify-content:center}
 #mWaveMsg{color:#8593a1;font-size:14px}
@@ -212,7 +212,7 @@ body.mark-open #stage{display:none}
       </div>
       <canvas id="wave" width="1800" height="150"></canvas>
       <div class="row"><span id="mWaveMsg"></span></div>
-      <div class="keys"><kbd>Space</kbd> tap a start, then tap a stop. <kbd>P</kbd> play or pause. <kbd>&larr;</kbd> <kbd>&rarr;</kbd> back or forward 5 seconds. Click the waveform to jump there.</div>
+      <div class="keys"><kbd>Space</kbd> tap a start, then tap a stop. <kbd>P</kbd> play or pause. <kbd>&larr;</kbd> <kbd>&rarr;</kbd> back or forward 5 seconds. Click the waveform to jump there. Drag a part to move it, or drag its red edge to change where it starts or stops.</div>
     </div>
     <div class="panel">
       <div class="row" style="justify-content:space-between">
@@ -714,7 +714,7 @@ function enterMark(){
   $('mCopy').onclick = () => { const o = $('mOut'); o.select(); navigator.clipboard ? navigator.clipboard.writeText(o.value) : document.execCommand('copy'); $('mCopy').textContent = 'Copied!'; setTimeout(() => $('mCopy').textContent = 'Copy', 1500); };
   $('mReset').onclick = () => { if (!confirm('Throw away your changes on this computer and go back to the points in the file?')) return; CLIPS = JSON.parse(JSON.stringify(FILE_CLIPS)); try { localStorage.removeItem(DRAFT_KEY); } catch(e) {} mRows(); mOut(); mDraw(); };
   $('mTry').onclick = () => { mStopAll(); document.body.classList.remove('mark-open'); document.body.classList.add('start-open'); };
-  $('wave').onclick = e => { const r = e.target.getBoundingClientRect(); mSeek((e.clientX - r.left)/r.width * (mDur || 0)); };
+  mWaveDrag();
   document.addEventListener('keydown', e => {
     if (!document.body.classList.contains('mark-open')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
@@ -813,6 +813,63 @@ function mOut(){
   });
   $('mOut').value = `let CLIPS = {\n${lines.join(',\n')}\n};`;
 }
+/* Waveform: drag a part to move it, drag its red edge to change a start or stop,
+   or click anywhere without dragging to jump there. */
+let mDrag = null;
+function mWaveDrag(){
+  const cv = $('wave');
+  const timeAt = e => { const r = cv.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left)/r.width)) * (mDur || 0); };
+  const hit = e => {
+    const r = cv.getBoundingClientRect(), dur = mDur || 1, px = e.clientX - r.left;
+    const xOf = t => t / dur * r.width;
+    const a = clipsHere();
+    for (let i = 0; i < a.length; i++){                         // edges first, 7 px either side
+      if (Math.abs(px - xOf(a[i][0])) <= 7) return {i, part:'start'};
+      if (Math.abs(px - xOf(a[i][1])) <= 7) return {i, part:'stop'};
+    }
+    for (let i = 0; i < a.length; i++) if (px > xOf(a[i][0]) && px < xOf(a[i][1])) return {i, part:'body'};
+    return null;
+  };
+  cv.addEventListener('pointermove', e => {
+    if (mDrag) return;
+    const h = hit(e);
+    cv.style.cursor = !h ? 'pointer' : h.part === 'body' ? 'grab' : 'ew-resize';
+  });
+  cv.addEventListener('pointerdown', e => {
+    if (!mDur) return;
+    const h = hit(e), a = clipsHere();
+    mDrag = {h, x0:e.clientX, t0:timeAt(e), moved:false, orig: h ? a[h.i].slice() : null, clip: h ? a[h.i] : null};
+    cv.setPointerCapture(e.pointerId);
+    if (h && h.part === 'body') cv.style.cursor = 'grabbing';
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!mDrag) return;
+    if (Math.abs(e.clientX - mDrag.x0) > 3) mDrag.moved = true;
+    if (!mDrag.moved || !mDrag.h) return;
+    const a = clipsHere(), c = mDrag.clip, o = mDrag.orig, i = a.indexOf(c);
+    const prevEnd = i > 0 ? a[i-1][1] : 0, nextStart = i < a.length - 1 ? a[i+1][0] : mDur;
+    const d = timeAt(e) - mDrag.t0, MIN = 1;
+    if (mDrag.h.part === 'body'){
+      const len = o[1] - o[0];
+      const s = Math.max(prevEnd, Math.min(nextStart - len, o[0] + d));
+      c[0] = round1(s); c[1] = round1(s + len);
+    } else if (mDrag.h.part === 'start'){
+      c[0] = round1(Math.max(prevEnd, Math.min(o[1] - MIN, o[0] + d)));
+    } else {
+      c[1] = round1(Math.min(nextStart, Math.max(o[0] + MIN, o[1] + d)));
+    }
+    mDraw();
+  });
+  const end = e => {
+    if (!mDrag) return;
+    const dr = mDrag; mDrag = null;
+    cv.style.cursor = '';
+    if (!dr.moved) mSeek(timeAt(e));
+    else if (dr.h) changed();
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+}
 function mDraw(){
   const cv = $('wave'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
   g.clearRect(0, 0, W, H);
@@ -827,6 +884,13 @@ function mDraw(){
     const bw = W / mPeaks.length;
     for (let i = 0; i < mPeaks.length; i++){ const h = Math.max(1, mPeaks[i] * (H - 20)); g.fillRect(i*bw, (H - h)/2, Math.max(1, bw - 0.6), h); }
   } else { g.fillStyle = '#d7dde3'; g.fillRect(0, H/2 - 2, W, 4); }
+  if (mDrag && mDrag.clip && mDrag.moved){              // times of the part being dragged, on white tags
+    const c = mDrag.clip; g.font = '600 22px Fredoka, sans-serif';
+    const tag = (s, xx) => { const w = g.measureText(s).width + 14; xx = Math.max(2, Math.min(W - w - 2, xx)); g.fillStyle = '#fff'; g.fillRect(xx, H - 34, w, 28); g.strokeStyle = '#d4141c'; g.lineWidth = 2; g.strokeRect(xx, H - 34, w, 28); g.fillStyle = '#1c2b3a'; g.fillText(s, xx + 7, H - 13); };
+    const s0 = fmt(c[0]), s1 = fmt(c[1]);
+    tag(s0, x(c[0]) - g.measureText(s0).width - 20);
+    tag(s1, x(c[1]) + 6);
+  }
   if (mPending != null){ g.fillStyle = '#18a849'; g.fillRect(x(mPending) - 2, 0, 4, H); }
   if (mAudio){ g.fillStyle = '#4a86e8'; g.fillRect(x(mAudio.currentTime) - 2, 0, 4, H); }
 }
