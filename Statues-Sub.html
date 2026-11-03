@@ -75,10 +75,10 @@ body.start-open #guide,body.mark-open #guide{display:none}
 .gb.main{background:var(--red);border-color:var(--red);color:#fff;font-size:3.1vh;font-weight:700;padding:1.4vh 1.8vw;box-shadow:0 .5vh 0 var(--red-dark)}
 .gb.main:active{translate:0 .4vh;box-shadow:0 .1vh 0 var(--red-dark)}
 .gb:disabled{opacity:.35;cursor:default}
-/* time left before the statue, shrinking along the bottom of Stop the music now */
+/* how far through the part the music is, filling along the bottom of Stop the music now */
 .gb.timed{position:relative;overflow:hidden;padding-bottom:1.5vh}
 .gb.timed .pbar{position:absolute;left:0;right:0;bottom:0;height:.9vh;background:#e3e7eb}
-.gb.timed .pbar i{display:block;height:100%;width:100%;background:var(--red);transform-origin:left center}
+.gb.timed .pbar i{display:block;height:100%;width:100%;background:var(--red);transform-origin:left center;transform:scaleX(0)}
 .gb:hover:not(:disabled){filter:brightness(1.08)}
 .gSide{display:flex;flex-direction:column;gap:.8vh;border-left:.25vh solid #e3e7eb;padding-left:1.4vw}
 .gSide .gb{font-size:1.75vh;padding:.6vh .9vw;justify-content:flex-start;border-width:.25vh}
@@ -1115,12 +1115,12 @@ function mLoop(){
   mRaf = requestAnimationFrame(mLoop);
 }
 
-/* Keeps the time-left bar moving while the music plays */
+/* Keeps the progress bar filling while the music plays */
 (function tick(){
   const f = document.getElementById('pbarFill');
   if (f && phase === 'playing' && part && part.player){
     const d = part.player.duration || 1;
-    f.style.transform = `scaleX(${Math.max(0, 1 - part.player.currentTime / d)})`;
+    f.style.transform = `scaleX(${Math.min(1, part.player.currentTime / d)})`;
   }
   requestAnimationFrame(tick);
 })();
