@@ -293,8 +293,8 @@ let CLIPS = {
 
 /* "Last one!" shows on the music note during the final part of each 'song', or only of the whole 'set' */
 const LAST_ONE_FOR = 'song';
-const FADE_IN = 0.25;     // seconds the music takes to fade in at each start point
-const FADE_OUT = 0.12;    // seconds the music takes to fade out at each stop point
+const FADE_IN = 0.04;     // seconds the music takes to fade in at each start point (just enough to avoid a click)
+const FADE_OUT = 0;       // no fade: the music cuts off instantly at each stop point
 
 /* Statue cards. A label shows above cards with two people ("Find a partner!") or three ("Find a group!"). */
 const CARDS = [
@@ -367,32 +367,82 @@ function chime(){
   });
 }
 
-/* One audio element per song, loaded when needed */
-const audios = {};
-function audioFor(slug){
-  let a = audios[slug];
-  if (!a){
-    a = audios[slug] = new Audio();
-    a.preload = 'auto';
-    a._ok = false; a._bad = false;
-    a.addEventListener('canplay', () => { a._ok = true; a._bad = false; if (a._waiting) { const w = a._waiting; a._waiting = null; w(); } });
-    a.addEventListener('error', () => { a._bad = true; if (a._waiting) { a._waiting = null; musicFailed(); } });
-    a.src = AUDIO_DIR + slug + '.mp3';
+/* Sample-accurate playback. The MP3s are variable bitrate, and an audio element can only
+   estimate where to jump in them, so parts started late. Instead each song is decoded once
+   and its parts are copied into short buffers that play exactly from their marked points. */
+class BufPlayer {
+  constructor(buf){
+    this.buf = buf; this.ctx = getCtx();
+    this.gain = this.ctx.createGain(); this.gain.connect(this.ctx.destination);
+    this.src = null; this._pos = 0; this.offset = 0; this.startedAt = 0; this.onended = null;
   }
-  return a;
+  get duration(){ return this.buf.duration; }
+  get paused(){ return !this.src; }
+  get volume(){ return this.gain.gain.value; }
+  set volume(v){ this.gain.gain.value = v; }
+  /* the point in the song you are hearing right now (allows for the sound card's delay) */
+  get currentTime(){
+    if (!this.src) return this._pos;
+    const lag = (this.ctx.outputLatency || 0) + (this.ctx.baseLatency || 0);
+    return Math.min(this.buf.duration, Math.max(this.offset, this.offset + this.ctx.currentTime - this.startedAt - lag));
+  }
+  set currentTime(t){
+    const was = !!this.src;
+    this._kill();
+    this._pos = Math.max(0, Math.min(t, this.buf.duration));
+    if (was) this.play();
+  }
+  play(){
+    if (this.src) return Promise.resolve();
+    const s = this.src = this.ctx.createBufferSource();
+    s.buffer = this.buf; s.connect(this.gain);
+    this.offset = this._pos; this.startedAt = this.ctx.currentTime;
+    s.onended = () => { if (this.src !== s) return; this.src = null; this._pos = this.buf.duration; if (this.onended) this.onended(); };
+    s.start(0, this.offset);
+    return Promise.resolve();
+  }
+  pause(){ if (!this.src) return; this._pos = this.currentTime; this._kill(); }
+  _kill(){ if (this.src){ const s = this.src; this.src = null; s.onended = null; try { s.stop(); } catch(e) {} } }
 }
-function retryAudio(slug){
-  const a = audios[slug]; if (!a) return audioFor(slug);
-  a._bad = false; a._ok = false; a.src = AUDIO_DIR + slug + '.mp3?r=' + Date.now(); a.load();
-  return a;
+function decodeSong(slug){
+  return fetch(AUDIO_DIR + slug + '.mp3')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+    .then(buf => getCtx().decodeAudioData(buf));
 }
+function sliceBuffer(ab, s, t){
+  const sr = ab.sampleRate, a = Math.max(0, Math.floor(s*sr)), b = Math.min(ab.length, Math.ceil(t*sr));
+  const out = getCtx().createBuffer(ab.numberOfChannels, Math.max(1, b - a), sr);
+  for (let c = 0; c < ab.numberOfChannels; c++) out.copyToChannel(ab.getChannelData(c).subarray(a, b), c);
+  return out;
+}
+/* Game songs: only the current and next song are kept, and only their parts */
+const songs = {};   // slug -> {state:'loading'|'ok'|'bad', parts:[AudioBuffer], key, waiting}
+function loadSong(slug){
+  const key = JSON.stringify(partsOf(slug));
+  let e = songs[slug];
+  if (e && e.key === key && e.state !== 'bad') return e;
+  e = songs[slug] = {state:'loading', parts:null, key, waiting:null};
+  decodeSong(slug).then(ab => {
+    if (songs[slug] !== e) return;
+    e.parts = partsOf(slug).map(([s, t]) => sliceBuffer(ab, s, t));
+    e.state = 'ok';
+    const w = e.waiting; e.waiting = null; if (w) w();
+  }).catch(() => {
+    if (songs[slug] !== e) return;
+    e.state = 'bad';
+    if (e.waiting){ e.waiting = null; musicFailed(); }
+  });
+  return e;
+}
+function keepOnly(list){ Object.keys(songs).forEach(k => { if (!list.includes(k)) delete songs[k]; }); }
 
 /* Plays one part: fades in at start, fades out just before stop, then calls done().
    Returns a handle whose stop(fade) ends it early. */
 function playPart(a, start, stop, done){
-  const h = {live:true};
+  const h = {live:true, player:a};
   let raf = 0;
   const finish = () => { if (!h.live) return; h.live = false; cancelAnimationFrame(raf); a.pause(); a.volume = 1; if (done) done(); };
+  h.kill = () => { h.live = false; cancelAnimationFrame(raf); a.pause(); a.volume = 1; };
   h.stop = (fade = FADE_OUT) => {
     if (!h.live) return;
     if (fade <= 0){ finish(); return; }
@@ -475,25 +525,29 @@ function startMusic(){
 }
 function playAt(s, p){
   songI = s; partI = p;
-  /* load the song after this one too, so it is ready in time */
-  if (curSet().songs[s+1]) audioFor(curSet().songs[s+1]);
-  const slug = songSlug(s), a = audioFor(slug);
+  const slug = songSlug(s), nextSlug = curSet().songs[s+1];
+  keepOnly([slug, nextSlug].filter(Boolean));
+  const e = loadSong(slug);
+  if (nextSlug) loadSong(nextSlug);          // the next song loads while this one plays
   const go = () => {
-    const [st, sp] = partsOf(slug)[p];
+    getCtx();
+    const buf = e.parts[p];
     phase = 'playing'; render();
-    part = playPart(a, st, sp, freeze);
+    part = playPart(new BufPlayer(buf), 0, buf.duration, freeze);
     part.onfail = musicFailed;
     if (part.failed) musicFailed();
   };
-  if (a._bad){ musicFailed(); return; }
-  if (a._ok) go();
-  else { phase = 'loading'; render(); a._waiting = go; }
+  if (e.state === 'bad'){ musicFailed(); return; }
+  if (e.state === 'ok') go();
+  else { phase = 'loading'; render(); e.waiting = go; }
 }
-function musicFailed(){ if (part) { part.live = false; } part = null; phase = 'error'; render(); }
+function musicFailed(){ if (part) part.kill(); part = null; phase = 'error'; render(); }
 function tryAgain(){
-  const slug = songSlug(songI), a = retryAudio(slug);
+  const slug = songSlug(songI);
+  delete songs[slug];
   phase = 'loading'; render();
-  a._waiting = () => playAt(songI, partI);
+  const e = loadSong(slug);
+  e.waiting = () => playAt(songI, partI);
 }
 function stopNow(){ if (part) part.stop(FADE_OUT); }
 function freeze(){
@@ -503,8 +557,8 @@ function freeze(){
 }
 function otherCard(){ card = drawCard(); guideKey = ''; render(); }
 function stopAll(){
-  if (part){ const h = part; part = null; h.live = false; }
-  Object.values(audios).forEach(a => { a._waiting = null; a.pause(); a.volume = 1; });
+  if (part){ const h = part; part = null; h.kill(); }
+  Object.values(songs).forEach(e => { e.waiting = null; });
 }
 function playSetAgain(){ stopAll(); songI = 0; partI = -1; phase = 'title'; render(); }
 
@@ -577,7 +631,7 @@ $('testBtn').onclick = () => chime();
 $('startBtn').onclick = () => {
   getCtx();
   stopAll();
-  curSet().songs.slice(0, 2).forEach(audioFor);          // start loading the first songs
+  keepOnly(curSet().songs.slice(0, 2)); curSet().songs.slice(0, 2).forEach(loadSong);   // start loading the first songs
   songI = 0; partI = -1; phase = 'title'; guideKey = '';
   document.body.classList.remove('start-open');
   render();
@@ -706,8 +760,8 @@ function enterMark(){
   sel.value = mSlug;
   sel.onchange = () => pickSong(sel.value);
   $('mPlay').onclick = mToggle;
-  $('mBack5').onclick = () => mSeek(mAudio.currentTime - 5);
-  $('mFwd5').onclick = () => mSeek(mAudio.currentTime + 5);
+  $('mBack5').onclick = () => mAudio && mSeek(mAudio.currentTime - 5);
+  $('mFwd5').onclick = () => mAudio && mSeek(mAudio.currentTime + 5);
   $('mTap').onclick = mTap;
   $('mCancelTap').onclick = () => { mPending = null; mDraw(); mLabels(); };
   $('mAdd').onclick = () => { const t = round1(mAudio ? mAudio.currentTime : 0); addClip([t, round1(t + 20)]); };
@@ -718,6 +772,7 @@ function enterMark(){
   document.addEventListener('keydown', e => {
     if (!document.body.classList.contains('mark-open')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    if (!mAudio) return;
     if (e.key === ' '){ e.preventDefault(); mTap(); }
     else if (e.key === 'p' || e.key === 'P'){ e.preventDefault(); mToggle(); }
     else if (e.key === 'ArrowLeft'){ e.preventDefault(); mSeek(mAudio.currentTime - 5); }
@@ -730,28 +785,26 @@ function enterMark(){
 function mStopAll(){ if (mPart){ mPart.stop(0); mPart = null; } if (mAudio) mAudio.pause(); mLabels(); }
 function pickSong(slug){
   mStopAll();
-  mSlug = slug; mPending = null; mPeaks = null; mDur = 0;
-  mAudio = new Audio(AUDIO_DIR + slug + '.mp3'); mAudio.preload = 'auto';
-  mAudio.addEventListener('loadedmetadata', () => { mDur = mAudio.duration; mDraw(); });
-  mAudio.addEventListener('error', () => { $('mWaveMsg').textContent = 'This song did not load. Check that its MP3 is in statues/audio/ on GitHub with this exact name: ' + slug + '.mp3'; });
-  mAudio.addEventListener('play', mLabels); mAudio.addEventListener('pause', mLabels);
-  $('mWaveMsg').textContent = 'Loading the waveform...';
-  fetch(AUDIO_DIR + slug + '.mp3').then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
-    .then(buf => getCtx().decodeAudioData(buf))
-    .then(ab => {
-      if (slug !== mSlug) return;
-      mDur = ab.duration;
-      const ch = ab.getChannelData(0), N = 900, step = Math.floor(ch.length / N);
-      mPeaks = new Float32Array(N);
-      for (let i = 0; i < N; i++){ let m = 0; for (let j = i*step, e = j+step; j < e; j += 4){ const v = Math.abs(ch[j]); if (v > m) m = v; } mPeaks[i] = m; }
-      $('mWaveMsg').textContent = ''; mDraw();
-    })
-    .catch(() => { if (slug === mSlug) $('mWaveMsg').textContent = 'The waveform only shows when this page is opened from GitHub Pages. Tapping and typing still work.'; });
+  mSlug = slug; mPending = null; mPeaks = null; mDur = 0; mAudio = null;
+  $('mWaveMsg').textContent = 'Loading the song...';
+  decodeSong(slug).then(ab => {
+    if (slug !== mSlug) return;
+    mDur = ab.duration;
+    mAudio = new BufPlayer(ab);
+    const ch = ab.getChannelData(0), N = 900, step = Math.floor(ch.length / N);
+    mPeaks = new Float32Array(N);
+    for (let i = 0; i < N; i++){ let m = 0; for (let j = i*step, e = j+step; j < e; j += 4){ const v = Math.abs(ch[j]); if (v > m) m = v; } mPeaks[i] = m; }
+    $('mWaveMsg').textContent = ''; mLabels(); mDraw();
+  }).catch(() => {
+    if (slug === mSlug) $('mWaveMsg').textContent = 'This song did not load. Open this page from GitHub Pages, and check that statues/audio/ has this exact file: ' + slug + '.mp3';
+  });
   mRows(); mLabels(); mDraw();
 }
 function mToggle(){
-  if (mPart){ mPart.stop(0.08); mPart = null; return; }
-  if (mAudio.paused) mAudio.play().catch(()=>{}); else mAudio.pause();
+  if (!mAudio) return;
+  if (mPart){ mPart.stop(0); mPart = null; mLabels(); return; }
+  if (mAudio.paused) mAudio.play(); else mAudio.pause();
+  mLabels();
 }
 function mSeek(t){ if (!mAudio) return; if (mPart){ mPart.stop(0); mPart = null; } mAudio.currentTime = Math.max(0, Math.min(t, (mDur || 9999) - 0.05)); mDraw(); }
 function mTap(){
@@ -799,6 +852,7 @@ function mRows(){
   });
 }
 function mPlayPart(st, sp){
+  if (!mAudio) return;
   if (mPart){ mPart.stop(0); mPart = null; }
   mAudio.pause();
   mPart = playPart(mAudio, st, sp, () => { mPart = null; mLabels(); });
@@ -894,8 +948,11 @@ function mDraw(){
   if (mPending != null){ g.fillStyle = '#18a849'; g.fillRect(x(mPending) - 2, 0, 4, H); }
   if (mAudio){ g.fillStyle = '#4a86e8'; g.fillRect(x(mAudio.currentTime) - 2, 0, 4, H); }
 }
+let mWasPlaying = false;
 function mLoop(){
   if (document.body.classList.contains('mark-open') && mAudio){
+    const playing = !mAudio.paused || !!mPart;
+    if (playing !== mWasPlaying){ mWasPlaying = playing; mLabels(); }
     $('mTime').textContent = `${fmt(mAudio.currentTime)} / ${fmt(mDur)}`;
     mDraw();
   }
