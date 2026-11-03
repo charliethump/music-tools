@@ -126,6 +126,7 @@ body.mark-open #stage{display:none}
 #clipTable .len{color:#5c6b7a;font-weight:500}
 #mOut{width:100%;height:220px;font:13px/1.4 Consolas,Menlo,monospace;color:var(--navy);border:2px solid #cfd6dd;border-radius:8px;padding:8px;resize:vertical}
 #mark .keys{font-size:14px;color:#5c6b7a;margin-top:6px}
+#mLast{color:#5c6b7a;font-size:14px;font-weight:500;margin-right:4px}
 #mark kbd{font:600 13px var(--round);border:1.5px solid #b8c2cc;border-bottom-width:3px;border-radius:5px;padding:0 5px;background:#fff}
 </style>
 </head>
@@ -212,12 +213,12 @@ body.mark-open #stage{display:none}
       </div>
       <canvas id="wave" width="1800" height="150"></canvas>
       <div class="row"><span id="mWaveMsg"></span></div>
-      <div class="keys"><kbd>Space</kbd> tap a start, then tap a stop. <kbd>P</kbd> play or pause. <kbd>&larr;</kbd> <kbd>&rarr;</kbd> back or forward 5 seconds. Click the waveform to jump there. Drag a part to move it, or drag its red edge to change where it starts or stops.</div>
+      <div class="keys"><kbd>Space</kbd> tap a start, then tap a stop. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo. <kbd>P</kbd> play or pause. <kbd>&larr;</kbd> <kbd>&rarr;</kbd> back or forward 5 seconds. Click the waveform to jump there. Drag a part to move it, or drag its red edge to change where it starts or stops.</div>
     </div>
     <div class="panel">
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0;font-size:22px">Parts in this song</h2>
-        <button class="mb" id="mAdd">Add a part here</button>
+        <div class="row"><span id="mLast"></span><button class="mb" id="mUndo"></button><button class="mb" id="mRedo"></button><button class="mb" id="mAdd">Add a part here</button></div>
       </div>
       <table id="clipTable">
         <thead><tr><th>Part</th><th>Starts at</th><th></th><th>Stops at</th><th></th><th>Length</th><th></th></tr></thead>
@@ -272,14 +273,14 @@ const SETS = [
   {name:'Winter holidays', songs:['vince-guaraldi-christmas-time-is-here']}
 ];
 
-/* Start and stop points (seconds) for each part of each song.
-   Make these with the ?mark screen. The current values are evenly spaced placeholders. */
+/* Start and stop points (seconds) for each part of each song. Make these with the ?mark screen.
+   Set by Charlie: Loser, Levitating, Dirt Off Your Shoulder, Not Like Us, U Can’t Touch This. The rest are still evenly spaced placeholders. */
 let CLIPS = {
-  'beck-loser':                                     [[14.6, 34.6], [68.1, 88.1], [121.6, 141.6], [175.1, 195.1]],
-  'dua-lipa-levitating':                            [[12.2, 32.2], [56.9, 76.9], [101.5, 121.5], [146.2, 166.2]],
-  'jayz-dirt-of-your-shoulder':                     [[14.5, 34.5], [67.8, 87.8], [121.1, 141.1], [174.3, 194.3]],
-  'kendrick-lamar-not-like-us':                     [[16.3, 36.3], [76.0, 96.0], [135.8, 155.8], [195.5, 215.5]],
-  'mc-hammer-cant-touch-this':                      [[15.3, 35.3], [71.6, 91.6], [127.8, 147.8], [184.0, 204.0]],
+  'beck-loser':                                     [[6.6, 28.7], [29.0, 50.9], [119.8, 131.1], [176.6, 203.8]],
+  'dua-lipa-levitating':                            [[0.0, 19.1], [37.1, 56.2], [60.1, 79.2], [79.2, 107.5]],
+  'jayz-dirt-of-your-shoulder':                     [[0.0, 20.7], [20.7, 40.7], [120.2, 139.8]],
+  'kendrick-lamar-not-like-us':                     [[0.0, 23.9], [71.3, 99.8], [120.5, 137.9]],
+  'mc-hammer-cant-touch-this':                      [[0.0, 14.9], [15.0, 29.8], [94.1, 116.3]],
   'megan-thee-stallion-savage':                     [[9.3, 29.3], [43.6, 63.6], [77.8, 97.8], [112.0, 132.0]],
   'michael-jackson-billie-jean':                    [[18.9, 38.9], [88.0, 108.0], [157.2, 177.2], [226.4, 246.4]],
   'mozart-rondo-alla-turca':                        [[12.2, 32.2], [56.9, 76.9], [101.6, 121.6], [146.3, 166.3]],
@@ -292,7 +293,9 @@ let CLIPS = {
 };
 
 /* "Last one!" shows on the music note during the final part of each 'song', or only of the whole 'set' */
-const LAST_ONE_FOR = 'song';
+const LAST_ONE_FOR = 'set';
+/* The game always ends on this card (position in CARDS, counting from 0). It never comes up before the end. */
+const FINAL_CARD = 11;   // Sit, hands on head
 const FADE_IN = 0.04;     // seconds the music takes to fade in at each start point (just enough to avoid a click)
 const FADE_OUT = 0;       // no fade: the music cuts off instantly at each stop point
 
@@ -506,7 +509,7 @@ let pile = [], lastCard = -1;
 function shuffle(a){ for (let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 function drawCard(){
   if (!pile.length){
-    pile = shuffle(CARDS.map((c,i) => i));
+    pile = shuffle(CARDS.map((c,i) => i).filter(i => i !== FINAL_CARD));
     if (pile.length > 1 && pile[pile.length-1] === lastCard) [pile[0], pile[pile.length-1]] = [pile[pile.length-1], pile[0]];
   }
   lastCard = pile.pop();
@@ -552,7 +555,7 @@ function tryAgain(){
 function stopNow(){ if (part) part.stop(FADE_OUT); }
 function freeze(){
   part = null;
-  card = drawCard();
+  card = nextPos() ? drawCard() : FINAL_CARD;     // the last freeze of the set is always the sitting statue
   phase = 'freeze'; render();
 }
 function otherCard(){ card = drawCard(); guideKey = ''; render(); }
@@ -672,7 +675,7 @@ function guideState(){
     case 'playing':
       return {key:'playing' + songI + '-' + partI, n:2, meta:where(),
         title:'Move to the music!',
-        body:'Students move however the music makes them feel. The music stops by itself and a statue appears.' + (document.body.classList.contains('last') ? ' This is the last part of the song.' : ''),
+        body:'Students move however the music makes them feel. The music stops by itself and a statue appears.' + (document.body.classList.contains('last') ? ' This is the last one before the game ends.' : ''),
         btns:[['Stop the music now', IC.stop, stopNow]]};
     case 'freeze': {
       const c = CARDS[card] || {};
@@ -685,9 +688,12 @@ function guideState(){
                   : 'Freeze like the statue!';
       const extra = c.group === 'partner' ? 'This statue needs partners: students pair up with someone close by. '
                   : c.group === 'three' ? 'This statue needs groups of 3: students team up with two people close by. ' : '';
+      if (!nxt) return {key:'freeze-final', n:3, meta:where(), title:'Last statue: everyone sit down and freeze!',
+        body:'Everyone sits and copies the statue on the screen, then holds still. That’s the end of the game. Click <b>All done</b>.',
+        btns:[['All done', IC.check, fn, true]]};
       return {key:'freeze' + songI + '-' + partI + '-' + card, n:3, meta:where(), title,
         body:`${extra}Everyone copies the statue on the screen and holds still for a few seconds. Then click <b>${label}</b>.`,
-        btns:[[label, nxt ? IC.play : IC.check, fn, true], ['Different statue', IC.shuffle, otherCard]]};
+        btns:[[label, IC.play, fn, true], ['Different statue', IC.shuffle, otherCard]]};
     }
     case 'done':
       return {key:'done', meta:'', title:'Great dancing, everyone!',
@@ -766,12 +772,15 @@ function enterMark(){
   $('mCancelTap').onclick = () => { mPending = null; mDraw(); mLabels(); };
   $('mAdd').onclick = () => { const t = round1(mAudio ? mAudio.currentTime : 0); addClip([t, round1(t + 20)]); };
   $('mCopy').onclick = () => { const o = $('mOut'); o.select(); navigator.clipboard ? navigator.clipboard.writeText(o.value) : document.execCommand('copy'); $('mCopy').textContent = 'Copied!'; setTimeout(() => $('mCopy').textContent = 'Copy', 1500); };
-  $('mReset').onclick = () => { if (!confirm('Throw away your changes on this computer and go back to the points in the file?')) return; CLIPS = JSON.parse(JSON.stringify(FILE_CLIPS)); try { localStorage.removeItem(DRAFT_KEY); } catch(e) {} mRows(); mOut(); mDraw(); };
+  $('mReset').onclick = () => { if (!confirm('Go back to the points in the file for every song? You can undo this.')) return; CLIPS = JSON.parse(JSON.stringify(FILE_CLIPS)); changed('started over from the file'); };
+  $('mUndo').onclick = mUndo; $('mRedo').onclick = mRedo;
   $('mTry').onclick = () => { mStopAll(); document.body.classList.remove('mark-open'); document.body.classList.add('start-open'); };
   mWaveDrag();
   document.addEventListener('keydown', e => {
     if (!document.body.classList.contains('mark-open')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')){ e.preventDefault(); e.shiftKey ? mRedo() : mUndo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')){ e.preventDefault(); mRedo(); return; }
     if (!mAudio) return;
     if (e.key === ' '){ e.preventDefault(); mTap(); }
     else if (e.key === 'p' || e.key === 'P'){ e.preventDefault(); mToggle(); }
@@ -780,6 +789,7 @@ function enterMark(){
   });
   pickSong(mSlug);
   mOut();
+  histStart();
   mLoop();
 }
 function mStopAll(){ if (mPart){ mPart.stop(0); mPart = null; } if (mAudio) mAudio.pause(); mLabels(); }
@@ -815,8 +825,47 @@ function mTap(){
   mLabels(); mDraw();
 }
 function clipsHere(){ return (CLIPS[mSlug] = CLIPS[mSlug] || []); }
-function addClip(c){ const a = clipsHere(); a.push(c); a.sort((x, y) => x[0] - y[0]); changed(); }
-function changed(){ saveDraft(); mRows(); mOut(); mDraw(); }
+function addClip(c, what){ const a = clipsHere(); a.push(c); a.sort((x, y) => x[0] - y[0]); changed(what || `added part ${a.indexOf(c) + 1}`); }
+/* Undo and redo: every change saves a snapshot of all the points.
+   Undo brings back the snapshot before it, and switches to that song if needed. */
+let mHist = [], mRedoList = [];
+const snap = () => JSON.stringify(CLIPS);
+function histStart(){ mHist = [{state:snap(), slug:mSlug, what:''}]; mRedoList = []; mUndoLabels(); }
+function changed(what){
+  saveDraft(); mRows(); mOut(); mDraw();
+  const s = snap();
+  if (s !== mHist[mHist.length-1].state){
+    mHist.push({state:s, slug:mSlug, what: what || 'Change'});
+    if (mHist.length > 200) mHist.splice(1, 1);
+    mRedoList = [];
+  }
+  mUndoLabels();
+}
+function applyHist(entry, slug){
+  CLIPS = JSON.parse(entry.state); saveDraft();
+  if (slug !== mSlug){ $('mSong').value = slug; pickSong(slug); }
+  mRows(); mOut(); mDraw(); mUndoLabels();
+}
+function mUndo(){
+  if (mHist.length < 2) return;
+  const gone = mHist.pop(); mRedoList.push(gone);
+  applyHist(mHist[mHist.length-1], gone.slug);
+}
+function mRedo(){
+  if (!mRedoList.length) return;
+  const back = mRedoList.pop(); mHist.push(back);
+  applyHist(back, back.slug);
+}
+function songName(slug){ return SONGS[slug] ? SONGS[slug].title : slug; }
+const histText = h => h.what === 'started over from the file' ? `${h.what} (all songs)` : `${h.what} (${songName(h.slug)})`;
+function mUndoLabels(){
+  const u = mHist.length > 1 ? mHist[mHist.length-1] : null, r = mRedoList[mRedoList.length-1];
+  $('mUndo').innerHTML = IC.replay + 'Undo'; $('mUndo').disabled = !u;
+  $('mRedo').innerHTML = 'Redo' + IC.next; $('mRedo').disabled = !r;
+  $('mUndo').title = u ? `Undo: ${histText(u)}` : 'Nothing to undo';
+  $('mRedo').title = r ? `Redo: ${histText(r)}` : 'Nothing to redo';
+  $('mLast').textContent = u ? `Last change: ${histText(u)}` : '';
+}
 function mLabels(){
   $('mTap').textContent = mPending == null ? 'Tap a start' : 'Tap a stop';
   $('mCancelTap').disabled = mPending == null;
@@ -840,14 +889,14 @@ function mRows(){
     tr.querySelectorAll('input').forEach(inp => inp.onchange = () => {
       const v = parseTime(inp.value);
       if (!isNaN(v)) { c[+inp.dataset.k] = round1(v); if (c[1] < c[0]) c.reverse(); a.sort((x, y) => x[0] - y[0]); }
-      changed();
+      changed(`typed a ${+inp.dataset.k ? 'stop' : 'start'} for part ${i + 1}`);
     });
     tr.querySelectorAll('button[data-d]').forEach(b => b.onclick = () => {
-      c[+b.dataset.k] = Math.max(0, round1(c[+b.dataset.k] + parseFloat(b.dataset.d))); a.sort((x, y) => x[0] - y[0]); changed();
+      c[+b.dataset.k] = Math.max(0, round1(c[+b.dataset.k] + parseFloat(b.dataset.d))); a.sort((x, y) => x[0] - y[0]); changed(`nudged the ${+b.dataset.k ? 'stop' : 'start'} of part ${i + 1}`);
     });
     tr.querySelector('[data-a="play"]').onclick = () => mPlayPart(c[0], c[1]);
     tr.querySelector('[data-a="end"]').onclick = () => mPlayPart(Math.max(c[0], c[1] - 4), c[1]);
-    tr.querySelector('[data-a="del"]').onclick = () => { a.splice(i, 1); changed(); };
+    tr.querySelector('[data-a="del"]').onclick = () => { a.splice(i, 1); changed(`deleted part ${i + 1}`); };
     tb.appendChild(tr);
   });
 }
@@ -919,7 +968,7 @@ function mWaveDrag(){
     const dr = mDrag; mDrag = null;
     cv.style.cursor = '';
     if (!dr.moved) mSeek(timeAt(e));
-    else if (dr.h) changed();
+    else if (dr.h){ const n = clipsHere().indexOf(dr.clip) + 1; changed(dr.h.part === 'body' ? `moved part ${n}` : `dragged the ${dr.h.part} of part ${n}`); }
   };
   cv.addEventListener('pointerup', end);
   cv.addEventListener('pointercancel', end);
