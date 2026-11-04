@@ -110,10 +110,12 @@ body.start-open #start{display:block}
 ol.steps,ul.list{margin:0;padding-left:1.4em}
 ol.steps li,ul.list li{margin:0 0 .7vh}
 ol.steps li b,ul.list li b{color:var(--navy)}
-#setList{display:flex;flex-direction:column;gap:1vh;margin:1vh 0 1.6vh}
-.setBtn{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:1vw;text-align:left;cursor:pointer;background:#fff;border:.35vh solid #cfd6dd;border-radius:1.4vh;padding:1vh 1vw;color:var(--navy)}
+.setNote{margin:0 0 .6vh !important}
+#setList{display:flex;flex-direction:column;gap:.7vh;margin:.8vh 0 1.2vh}
+.setBtn{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:1vw;text-align:left;cursor:pointer;background:#fff;border:.35vh solid #cfd6dd;border-radius:1.4vh;padding:.7vh 1vw;color:var(--navy)}
 .setBtn .dot{width:2.6vh;height:2.6vh;border-radius:50%;border:.35vh solid #9aa7b4}
 .setBtn b{display:block;font-size:2.3vh;font-weight:700}
+.setBtn b em{font-style:normal;font-weight:600;font-size:1.75vh;color:#5c6b7a;margin-left:.5vw}
 .setBtn span{display:block;font-size:1.75vh;font-weight:500;color:#5c6b7a;line-height:1.3}
 .setBtn.on{border-color:var(--red);background:#fff4f4}
 .setBtn.on .dot{border-color:var(--red);background:radial-gradient(var(--red) 45%,transparent 50%)}
@@ -121,6 +123,12 @@ ol.steps li b,ul.list li b{color:var(--navy)}
 #testBtn{margin-top:.6vh}
 
 /* ---------- all steps box ---------- */
+#leave{position:fixed;inset:0;z-index:55;background:rgba(28,43,58,.55);display:none;align-items:center;justify-content:center}
+body.leave-open #leave{display:flex}
+#leave .box{background:#fff;border-radius:2vh;padding:3vh 2.6vw;max-width:min(760px,90vw);color:var(--navy);box-shadow:0 2vh 6vh rgba(0,0,0,.3)}
+#leave h2{font-size:3.4vh;margin:0 0 1vh}
+#leave p{font-size:2.2vh;line-height:1.4;font-weight:500;color:#33475b;margin:0 0 2.4vh}
+#leave .leaveBtns{display:flex;gap:1.2vw;justify-content:flex-end}
 #allSteps{position:fixed;inset:0;z-index:50;background:rgba(28,43,58,.55);display:none;align-items:center;justify-content:center}
 body.steps-open #allSteps{display:flex}
 #allSteps .box{background:#fff;border-radius:2vh;max-width:min(1100px,92vw);max-height:90vh;overflow:auto;padding:3vh 2.4vw;color:var(--navy);box-shadow:0 2vh 6vh rgba(0,0,0,.3)}
@@ -204,12 +212,21 @@ body.mark-open #stage{display:none}
       </div>
       <div class="card">
         <h2>Pick a set of songs</h2>
+        <p class="setNote">Any set works. Use <b>Halloween</b> in October and <b>Winter holidays</b> in December. Time left after a set? Play another one.</p>
         <div id="setList"></div>
         <button class="gb main" id="startBtn"></button>
         <h3>When you finish</h3>
         <ul class="list" id="cleanList1"></ul>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="leave" role="dialog" aria-modal="true" aria-labelledby="leaveTitle">
+  <div class="box">
+    <h2 id="leaveTitle">Leave the game?</h2>
+    <p>You’ll go back to the start screen, and this set will start over from the beginning.</p>
+    <div class="leaveBtns"><button class="gb" id="leaveYes"></button><button class="gb main" id="leaveNo"></button></div>
   </div>
 </div>
 
@@ -538,12 +555,31 @@ function loadSong(slug){
     e.parts = partsOf(slug).map(([s, t]) => ({buf: sliceBuffer(ab, s, t), level: levelGain(loudness(ab, s, t))}));
     e.state = 'ok';
     const w = e.waiting; e.waiting = null; if (w) w();
+    setLoaded();
   }).catch(() => {
     if (songs[slug] !== e) return;
     e.state = 'bad';
     if (e.waiting){ e.waiting = null; musicFailed(); }
+    setLoaded();
   });
+  e.promise = e.promise || new Promise(res => { const iv = setInterval(() => { if (e.state !== 'loading' || songs[slug] !== e){ clearInterval(iv); res(); } }, 100); });
   return e;
+}
+/* The whole set loads when the sub clicks Start, one song at a time, so after that
+   no internet is needed and a Wi-Fi hiccup mid-game can't stop the music. */
+function loadSet(){
+  const list = curSet().songs;
+  keepOnly(list);
+  list.reduce((p, slug) => p.then(() => loadSong(slug).promise), Promise.resolve());
+}
+function setStatus(){
+  const list = curSet().songs, st = list.map(s => songs[s] ? songs[s].state : 'loading');
+  return {ok: st.filter(x => x === 'ok').length, bad: st.filter(x => x === 'bad').length, n: list.length};
+}
+function setLoaded(){ if (phase === 'title' || phase === 'done'){ guideKey = ''; updateGuide(); } }
+function retrySet(){
+  curSet().songs.forEach(s => { if (songs[s] && songs[s].state === 'bad') delete songs[s]; });
+  loadSet(); guideKey = ''; updateGuide();
 }
 function keepOnly(list){ Object.keys(songs).forEach(k => { if (!list.includes(k)) delete songs[k]; }); }
 
@@ -636,10 +672,8 @@ function startMusic(){
 }
 function playAt(s, p){
   songI = s; partI = p;
-  const slug = songSlug(s), nextSlug = curSet().songs[s+1];
-  keepOnly([slug, nextSlug].filter(Boolean));
-  const e = loadSong(slug);
-  if (nextSlug) loadSong(nextSlug);          // the next song loads while this one plays
+  const slug = songSlug(s);
+  const e = loadSong(slug);                  // already loaded at Start, unless it failed or is still coming
   const go = () => {
     getCtx();
     const {buf, level} = e.parts[p];
@@ -727,6 +761,12 @@ function toggleFs(){
 }
 
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+/* about how long a set takes: the music plus roughly 10 seconds for each freeze */
+function setMinutes(i){
+  const parts = SETS[i].songs.flatMap(k => partsOf(k));
+  const secs = parts.reduce((n, p) => n + p[1] - p[0], 0) + parts.length * 10;
+  return Math.max(1, Math.round(secs / 60));
+}
 function buildSetList(){
   $('setList').innerHTML = '';
   SETS.forEach((st, i) => {
@@ -734,7 +774,7 @@ function buildSetList(){
     b.className = 'setBtn' + (i === setIdx ? ' on' : '');
     b.setAttribute('aria-pressed', i === setIdx);
     const names = st.songs.map(s => SONGS[s] ? SONGS[s].title : s).join(', ');
-    b.innerHTML = `<div class="dot"></div><div><b>${esc(st.name)}</b><span>${esc(names)}</span></div>`;
+    b.innerHTML = `<div class="dot"></div><div><b>${esc(st.name)} <em>about ${setMinutes(i)} minutes</em></b><span>${esc(names)}</span></div>`;
     b.onclick = () => { setIdx = i; buildSetList(); };
     $('setList').appendChild(b);
   });
@@ -746,7 +786,7 @@ $('testBtn').onclick = () => chime();
 $('startBtn').onclick = () => {
   getCtx();
   stopAll();
-  keepOnly(curSet().songs.slice(0, 2)); curSet().songs.slice(0, 2).forEach(loadSong);   // start loading the first songs
+  loadSet();                                // load every song in the set now
   songI = 0; partI = -1; phase = 'title'; guideKey = '';
   document.body.classList.remove('start-open');
   render();
@@ -755,13 +795,23 @@ $('fsBtn').onclick = toggleFs;
 $('stepsBtn').onclick = () => document.body.classList.add('steps-open');
 $('closeSteps').onclick = () => document.body.classList.remove('steps-open');
 $('allSteps').onclick = e => { if (e.target.id === 'allSteps') document.body.classList.remove('steps-open'); };
-$('homeBtn').onclick = () => { stopAll(); phase = 'title'; render(); buildSetList(); document.body.classList.add('start-open'); };
+function goHome(){ document.body.classList.remove('leave-open'); stopAll(); phase = 'title'; render(); buildSetList(); document.body.classList.add('start-open'); }
+/* Back to start asks first once the game is under way, so a stray click can't lose the class's place */
+$('homeBtn').onclick = () => {
+  const underway = partI >= 0 && phase !== 'done';
+  if (underway) document.body.classList.add('leave-open'); else goHome();
+};
+$('leaveYes').innerHTML = IC.home + '<span>Leave the game</span>';
+$('leaveNo').innerHTML = IC.play + '<span>Keep playing</span>';
+$('leaveYes').onclick = goHome;
+$('leaveNo').onclick = () => document.body.classList.remove('leave-open');
+$('leave').onclick = e => { if (e.target.id === 'leave') document.body.classList.remove('leave-open'); };
 
 /* Keys do nothing in the sub version, except Escape closes the All steps box */
 document.addEventListener('keydown', e => {
   if (document.body.classList.contains('mark-open')) return;
   if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.key)) return;
-  if (e.key === 'Escape') document.body.classList.remove('steps-open');
+  if (e.key === 'Escape') document.body.classList.remove('steps-open', 'leave-open');
   e.preventDefault();
 }, true);
 
@@ -792,11 +842,17 @@ const BADGE = {
 };
 function guideState(){
   switch (phase){
-    case 'title':
-      return {key:'title' + setIdx, n:'ready', meta:`<span>${esc(curSet().name)}: ${curSet().songs.length} songs, ${curSet().songs.reduce((s, k) => s + partsOf(k).length, 0)} statues</span>`,
+    case 'title': {
+      const ls = setStatus(), meta = `<span>${esc(curSet().name)}: ${curSet().songs.length} songs, about ${setMinutes(setIdx)} minutes</span>`;
+      if (ls.bad) return {key:'title-bad' + setIdx, n:'error', meta, title:'Some of the music did not load',
+        body:'Check that the computer is connected to the internet, then click <b>Try again</b>. You can also click <b>Back to start</b> and pick a different set.',
+        btns:[['Try again', IC.replay, retrySet, true]]};
+      const ready = ls.ok === ls.n;
+      return {key:'title' + setIdx + '-' + ls.ok, n:'ready', meta,
         title:'Everyone find your own space',
-        body:'Students spread out so they can move without bumping into anyone. When the class is ready, click <b>Start the music</b>.',
-        btns:[['Start the music', IC.play, startMusic, true]]};
+        body:'Students spread out so they can move without bumping into anyone. When the class is ready, click <b>Start the music</b>.' + (ready ? '' : ' The music is loading. This takes a few seconds.'),
+        btns:[[ready ? 'Start the music' : `Loading music (${ls.ok} of ${ls.n})`, IC.play, startMusic, true, !ready]]};
+    }
     case 'loading':
       return {key:'loading', n:'wait', meta:where(), title:'Getting the music ready...', body:'This takes a few seconds. The music starts by itself.'};
     case 'error':
@@ -806,7 +862,7 @@ function guideState(){
     case 'playing':
       return {key:'playing' + songI + '-' + partI, n:'music', meta:where(),
         title:'Move to the music!',
-        body:'Students move however the music makes them feel (as long as they are being safe). The music will stop by itself and a statue will appear.' + (document.body.classList.contains('last') ? ' This is the last one before the game ends.' : ''),
+        body:'Students move however the music makes them feel (as long as they are being safe). The music stops by itself. Only click <b>Stop</b> if someone needs help.',
         btns:[['Stop the music now', IC.stop, stopNow, false, false, true]]};
     case 'freeze': {
       const c = CARDS[card] || {};
@@ -820,7 +876,7 @@ function guideState(){
       const how = c.group === 'partner' ? 'Students pair up with someone close by, copy the statue on the screen and hold still for a few seconds.'
                 : c.group === 'three' ? 'Students team up with a few people close by, copy the statue on the screen and hold still for a few seconds.'
                 : 'Everyone copies the statue on the screen and holds still for a few seconds.';
-      if (!nxt) return {key:'freeze-final', n:'freeze', meta:where(), title:'Last statue: everyone sit down and freeze!',
+      if (!nxt) return {key:'freeze-final', n:'freeze', meta:where(), title:'Last statue: sit down and freeze!',
         body:'Everyone sits and copies the statue on the screen, then holds still. That’s the end of the game. Click <b>All done</b>.',
         btns:[['All done', IC.check, fn, true]]};
       return {key:'freeze' + songI + '-' + partI + '-' + card, n:'freeze', meta:where(), title,
@@ -829,8 +885,8 @@ function guideState(){
     }
     case 'done':
       return {key:'done', n:'done', meta:`<span>${esc(curSet().name)}: all done</span>`, title:'Great work!',
-        body:'Have the class sit back in their spots and put back any chairs that were moved.',
-        btns:[['Pick another set', IC.home, () => $('homeBtn').onclick(), true], ['Play this set again', IC.replay, playSetAgain]]};
+        body:'Have the class sit back in their spots and put back any chairs that were moved. Time left? Click <b>Pick another set</b>.',
+        btns:[['Pick another set', IC.home, goHome, true], ['Play this set again', IC.replay, playSetAgain]]};
   }
   return {key:'none', title:'', body:''};
 }
