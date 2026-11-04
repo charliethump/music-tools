@@ -473,10 +473,18 @@ class BufPlayer {
   pause(){ if (!this.src) return; this._pos = this.currentTime; this._kill(); }
   _kill(){ if (this.src){ const s = this.src; this.src = null; s.onended = null; try { s.stop(); } catch(e) {} } }
 }
+/* Downloads can start early (all songs in a set at once); each one is decoded only when its turn comes */
+const downloads = {};
+function download(slug){
+  if (!downloads[slug]) downloads[slug] = fetch(AUDIO_DIR + slug + '.mp3')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
+  downloads[slug].catch(() => {});   // a failed download is reported when its song's turn comes, not before
+  return downloads[slug];
+}
 function decodeSong(slug){
-  return fetch(AUDIO_DIR + slug + '.mp3')
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
-    .then(buf => getCtx().decodeAudioData(buf));
+  const dl = download(slug);
+  delete downloads[slug];          // a downloaded file can only be decoded once; a retry downloads it again
+  return dl.then(buf => getCtx().decodeAudioData(buf));
 }
 function sliceBuffer(ab, s, t){
   const sr = ab.sampleRate, a = Math.max(0, Math.floor(s*sr)), b = Math.min(ab.length, Math.ceil(t*sr));
@@ -511,7 +519,8 @@ function loadSong(slug){
 function loadSet(){
   const list = curSet().songs;
   keepOnly(list);
-  list.reduce((p, slug) => p.then(() => loadSong(slug).promise), Promise.resolve());
+  list.forEach(slug => { if (!songs[slug] || songs[slug].state === 'bad') download(slug); });   // all downloads at once
+  list.reduce((p, slug) => p.then(() => loadSong(slug).promise), Promise.resolve());          // decoded one at a time, in order
 }
 function setStatus(){
   const list = curSet().songs, st = list.map(s => songs[s] ? songs[s].state : 'loading');
@@ -788,11 +797,12 @@ function guideState(){
       if (ls.bad) return {key:'title-bad' + setIdx, n:'error', meta, title:'Some of the music did not load',
         body:'Check that the computer is connected to the internet, then click <b>Try again</b>. You can also click <b>Back to start</b> and pick a different set.',
         btns:[['Try again', IC.replay, retrySet, true]]};
-      const ready = ls.ok === ls.n;
-      return {key:'title' + setIdx + '-' + ls.ok, n:'ready', meta,
+      /* The game can start as soon as the first song is ready; the rest finish loading during the first song */
+      const first = songs[curSet().songs[0]], ready = !!first && first.state === 'ok';
+      return {key:'title' + setIdx + '-' + (ready ? 'ready' : 'wait'), n:'ready', meta,
         title:'Everyone find your own space',
         body:'Students spread out so they can move without bumping into anyone. When the class is ready, click <b>Start the music</b>.' + (ready ? '' : ' The music is loading. This takes a few seconds.'),
-        btns:[[ready ? 'Start the music' : `Loading music (${ls.ok} of ${ls.n})`, IC.play, startMusic, true, !ready]]};
+        btns:[[ready ? 'Start the music' : 'Loading music...', IC.play, startMusic, true, !ready]]};
     }
     case 'loading':
       return {key:'loading', n:'wait', meta:where(), title:'Getting the music ready...', body:'This takes a few seconds. The music starts by itself.'};
