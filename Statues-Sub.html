@@ -272,7 +272,10 @@ const AUDIO_DIR = 'statues/audio/';
 const SONGS = {
   'all-i-want-for-christmas-is-you':                {title:'All I Want for Christmas Is You', artist:'Mariah Carey'},
   'beck-loser':                                     {title:'Loser', artist:'Beck'},
+  'brian-eno-an-ending-ascent':                      {title:'An Ending (Ascent)', artist:'Brian Eno'},
+  'bts-dynamite':                                    {title:'Dynamite', artist:'BTS'},
   'dua-lipa-levitating':                            {title:'Levitating', artist:'Dua Lipa'},
+  'ewf-september':                                   {title:'September', artist:'Earth, Wind & Fire'},
   'ghostbusters':                                   {title:'Ghostbusters', artist:'Ray Parker Jr.'},
   'jayz-dirt-of-your-shoulder':                     {title:'Dirt Off Your Shoulder', artist:'Jay-Z'},
   'kendrick-lamar-not-like-us':                     {title:'Not Like Us', artist:'Kendrick Lamar'},
@@ -288,6 +291,7 @@ const SONGS = {
   'sleigh-ride':                                    {title:'Sleigh Ride', artist:'Leroy Anderson'},
   'spooky-scary-skeletons':                         {title:'Spooky Scary Skeletons', artist:'Andrew Gold'},
   'string-quartet-no61-in-d-minor':                 {title:'String Quartet No. 61 in D minor', artist:'Haydn'},
+  'timberlake-cant-stop-the-feeling':                {title:'Can’t Stop the Feeling!', artist:'Justin Timberlake'},
   'trepak':                                         {title:'Trepak (Russian Dance)', artist:'Tchaikovsky'},
   'vince-guaraldi-christmas-time-is-here':          {title:'Christmas Time Is Here', artist:'Vince Guaraldi Trio'}
 };
@@ -296,18 +300,23 @@ const SONGS = {
 const SETS = [
   {name:'Set 1', songs:['michael-jackson-billie-jean','mozart-rondo-alla-turca','mc-hammer-cant-touch-this','sabrina-carpenter-espresso']},
   {name:'Set 2', songs:['dua-lipa-levitating','nagoya-marimbas','beck-loser','russell-dickerson-good-day-to-have-a-great-day']},
-  {name:'Set 3', songs:['megan-thee-stallion-savage','string-quartet-no61-in-d-minor','jayz-dirt-of-your-shoulder','kendrick-lamar-not-like-us']},
+  {name:'Set 3', songs:['megan-thee-stallion-savage','string-quartet-no61-in-d-minor','jayz-dirt-of-your-shoulder','timberlake-cant-stop-the-feeling']},
+  {name:'Set 4', songs:['bts-dynamite','brian-eno-an-ending-ascent','kendrick-lamar-not-like-us','ewf-september']},
   {name:'Halloween', songs:['moster-mash','mountain-king','spooky-scary-skeletons','ghostbusters']},
   {name:'Winter holidays', songs:['sleigh-ride','vince-guaraldi-christmas-time-is-here','trepak','all-i-want-for-christmas-is-you']}
 ];
 
 /* Start and stop points (seconds) for each part of each song. Make these with the ?mark screen.
-   Set by Charlie, Nov 2026. Sleigh Ride, Trepak and All I Want for Christmas Is You were
-   chopped by Claude to match his patterns and still need checking in ?mark. */
+   Set by Charlie, Nov 2026. Chopped by Claude to match his patterns, still to be checked in ?mark:
+   Sleigh Ride, Trepak, All I Want for Christmas Is You, Can’t Stop the Feeling!, Dynamite,
+   An Ending (Ascent), September. */
 let CLIPS = {
   'all-i-want-for-christmas-is-you':                [[0.0, 24.4], [24.4, 50.1], [50.1, 76.4], [76.4, 102.0]],
   'beck-loser':                                     [[6.6, 28.7], [29.0, 50.9], [119.8, 131.1]],
+  'brian-eno-an-ending-ascent':                     [[4.0, 32.5], [32.5, 61.3], [61.3, 82.4]],
+  'bts-dynamite':                                   [[0.0, 25.2], [25.2, 42.1], [42.1, 50.5], [50.5, 75.8]],
   'dua-lipa-levitating':                            [[0.0, 19.1], [37.1, 56.2], [60.1, 79.2], [79.2, 107.5]],
+  'ewf-september':                                  [[0.0, 16.0], [16.0, 39.2], [39.2, 46.8], [46.8, 62.2]],
   'ghostbusters':                                   [[0.0, 21.0], [21.0, 29.0], [29.0, 62.4], [62.4, 95.6]],
   'jayz-dirt-of-your-shoulder':                     [[0.0, 20.7], [20.7, 40.7], [120.2, 139.8]],
   'kendrick-lamar-not-like-us':                     [[0.0, 23.9], [71.3, 99.8], [120.5, 137.9]],
@@ -323,6 +332,7 @@ let CLIPS = {
   'sleigh-ride':                                    [[5.4, 21.5], [21.5, 45.2], [45.2, 61.0], [61.0, 84.6]],
   'spooky-scary-skeletons':                         [[0.3, 12.6], [12.6, 37.5], [37.5, 49.9], [49.9, 75.0]],
   'string-quartet-no61-in-d-minor':                 [[0.4, 20.4], [20.4, 35.2], [35.2, 51.0]],
+  'timberlake-cant-stop-the-feeling':               [[0.0, 17.4], [17.4, 25.9], [25.9, 51.4], [51.4, 68.4]],
   'trepak':                                         [[0.9, 21.4], [21.4, 41.6], [41.6, 55.4], [55.4, 68.6]],
   'vince-guaraldi-christmas-time-is-here':          [[0.0, 14.8], [14.8, 34.3], [34.3, 63.9], [63.9, 83.9]]
 };
