@@ -274,89 +274,30 @@ body.mark-open #stage{display:none}
         <h2 style="margin:0;font-size:22px">Points for every song</h2>
         <div class="row">
           <button class="mb" id="mCopy">Copy</button>
+          <button class="mb main" id="mDownload">Download statues-data.js</button>
           <button class="mb" id="mReset">Start over from the file</button>
-          <button class="mb main" id="mTry">Try it in the game</button>
+          <button class="mb" id="mTry">Try it in the game</button>
         </div>
       </div>
-      <p class="note" style="margin:8px 0">Your changes are kept on this computer while you work. To make them part of the game everywhere, copy this block and paste it over CLIPS in the file (or send it to Claude).</p>
+      <p class="note" style="margin:8px 0">Your changes are kept on this computer while you work. To make them part of both games (yours and the sub version), click <b>Download statues-data.js</b>, then upload it to the statues folder in the music-tools repo on GitHub. It replaces the old one. If the download comes out named statues-data (1).js, rename it to statues-data.js before uploading.</p>
       <textarea id="mOut" readonly spellcheck="false"></textarea>
     </div>
   </div>
 </div>
 
+<script src="statues/statues-data.js"></script>
 <script>
 "use strict";
 /* ================= SETTINGS =================
    Songs load from AUDIO_DIR on GitHub (statues/audio/ next to this file). */
 const AUDIO_DIR = 'statues/audio/';
 
-/* Every song the game knows about: file name (without .mp3), title and artist */
-const SONGS = {
-  'all-i-want-for-christmas-is-you':                {title:'All I Want for Christmas Is You', artist:'Mariah Carey'},
-  'beck-loser':                                     {title:'Loser', artist:'Beck'},
-  'brian-eno-an-ending-ascent':                      {title:'An Ending (Ascent)', artist:'Brian Eno'},
-  'bts-dynamite':                                    {title:'Dynamite', artist:'BTS'},
-  'dua-lipa-levitating':                            {title:'Levitating', artist:'Dua Lipa'},
-  'ewf-september':                                   {title:'September', artist:'Earth, Wind & Fire'},
-  'ghostbusters':                                   {title:'Ghostbusters', artist:'Ray Parker Jr.'},
-  'jayz-dirt-of-your-shoulder':                     {title:'Dirt Off Your Shoulder', artist:'Jay-Z'},
-  'kendrick-lamar-not-like-us':                     {title:'Not Like Us', artist:'Kendrick Lamar'},
-  'mc-hammer-cant-touch-this':                      {title:'U Can’t Touch This', artist:'MC Hammer'},
-  'megan-thee-stallion-savage':                     {title:'Savage', artist:'Megan Thee Stallion'},
-  'michael-jackson-billie-jean':                    {title:'Billie Jean', artist:'Michael Jackson'},
-  'moster-mash':                                    {title:'Monster Mash', artist:'Bobby “Boris” Pickett'},
-  'mountain-king':                                  {title:'In the Hall of the Mountain King', artist:'Grieg'},
-  'mozart-rondo-alla-turca':                        {title:'Rondo alla Turca', artist:'Mozart'},
-  'nagoya-marimbas':                                {title:'Nagoya Marimbas', artist:'Steve Reich'},
-  'russell-dickerson-good-day-to-have-a-great-day': {title:'Good Day to Have a Great Day', artist:'Russell Dickerson'},
-  'sabrina-carpenter-espresso':                     {title:'Espresso', artist:'Sabrina Carpenter'},
-  'sleigh-ride':                                    {title:'Sleigh Ride', artist:'Leroy Anderson'},
-  'spooky-scary-skeletons':                         {title:'Spooky Scary Skeletons', artist:'Andrew Gold'},
-  'string-quartet-no61-in-d-minor':                 {title:'String Quartet No. 61 in D minor', artist:'Haydn'},
-  'timberlake-cant-stop-the-feeling':                {title:'Can’t Stop the Feeling!', artist:'Justin Timberlake'},
-  'trepak':                                         {title:'Trepak (Russian Dance)', artist:'Tchaikovsky'},
-  'vince-guaraldi-christmas-time-is-here':          {title:'Christmas Time Is Here', artist:'Vince Guaraldi Trio'}
-};
+/* The songs, sets and start/stop points live in statues/statues-data.js, shared with the other Statues page */
+if (typeof SONGS === 'undefined' || typeof SETS === 'undefined' || typeof CLIPS === 'undefined'){
+  document.body.innerHTML = '<p style="font:600 24px Arial,sans-serif;color:#1c2b3a;max-width:900px;margin:15vh auto;line-height:1.4">The song list did not load. Open this page from GitHub Pages, and check that <b>statues/statues-data.js</b> is uploaded to the music-tools repo.</p>';
+  throw new Error('statues/statues-data.js did not load');
+}
 
-/* The sets the sub can pick from on the start screen. Songs play in this order. */
-const SETS = [
-  {name:'Set 1', songs:['michael-jackson-billie-jean','mozart-rondo-alla-turca','mc-hammer-cant-touch-this','sabrina-carpenter-espresso']},
-  {name:'Set 2', songs:['dua-lipa-levitating','nagoya-marimbas','beck-loser','russell-dickerson-good-day-to-have-a-great-day']},
-  {name:'Set 3', songs:['megan-thee-stallion-savage','string-quartet-no61-in-d-minor','jayz-dirt-of-your-shoulder','timberlake-cant-stop-the-feeling']},
-  {name:'Set 4', songs:['bts-dynamite','brian-eno-an-ending-ascent','kendrick-lamar-not-like-us','ewf-september']},
-  {name:'Halloween', songs:['moster-mash','mountain-king','spooky-scary-skeletons','ghostbusters']},
-  {name:'Winter holidays', songs:['sleigh-ride','vince-guaraldi-christmas-time-is-here','trepak','all-i-want-for-christmas-is-you']}
-];
-
-/* Start and stop points (seconds) for each part of each song. Make these with the ?mark screen.
-   Set by Charlie, Nov 2026. Chopped by Claude to match his patterns, still to be checked in ?mark:
-   Sleigh Ride, Trepak, Dynamite, An Ending (Ascent). */
-let CLIPS = {
-  'all-i-want-for-christmas-is-you':                [[0.0, 24.4], [24.4, 49.6], [50.0, 76.4], [76.4, 102.0]],
-  'beck-loser':                                     [[6.6, 28.7], [29.0, 50.9], [119.8, 131.1]],
-  'brian-eno-an-ending-ascent':                     [[4.0, 32.5], [32.5, 61.3], [61.3, 82.4]],
-  'bts-dynamite':                                   [[0.0, 25.2], [25.2, 42.1], [42.1, 50.5], [50.5, 75.8]],
-  'dua-lipa-levitating':                            [[0.0, 19.1], [37.1, 56.2], [60.1, 79.2], [79.2, 107.5]],
-  'ewf-september':                                  [[0.0, 19.1], [19.0, 39.2], [39.2, 50.5], [50.5, 65.8]],
-  'ghostbusters':                                   [[0.0, 21.0], [21.0, 29.0], [29.0, 62.4], [62.4, 95.6]],
-  'jayz-dirt-of-your-shoulder':                     [[0.0, 20.7], [20.7, 40.7], [120.2, 139.8]],
-  'kendrick-lamar-not-like-us':                     [[0.0, 23.9], [71.3, 99.8], [120.5, 137.9]],
-  'mc-hammer-cant-touch-this':                      [[0.0, 14.9], [15.0, 29.8], [94.1, 116.3]],
-  'megan-thee-stallion-savage':                     [[8.5, 28.6], [28.6, 45.4], [66.3, 79.6]],
-  'michael-jackson-billie-jean':                    [[0.0, 12.7], [12.7, 29.5], [29.5, 33.6], [33.6, 54.6], [73.9, 88.1], [88.2, 113.3]],
-  'moster-mash':                                    [[9.0, 31.1], [31.1, 50.6], [50.6, 71.1], [71.1, 84.7]],
-  'mountain-king':                                  [[82.0, 101.5], [101.5, 118.8], [118.8, 137.0]],
-  'mozart-rondo-alla-turca':                        [[1.2, 15.7], [15.7, 29.6], [43.5, 64.8], [64.8, 92.4]],
-  'nagoya-marimbas':                                [[0.0, 20.0], [37.4, 57.4], [88.0, 108.0], [198.6, 218.6]],
-  'russell-dickerson-good-day-to-have-a-great-day': [[0.0, 11.1], [11.1, 31.1], [31.1, 52.9], [52.9, 63.5]],
-  'sabrina-carpenter-espresso':                     [[0.0, 18.5], [18.5, 28.0], [64.4, 83.3]],
-  'sleigh-ride':                                    [[5.4, 21.5], [21.5, 45.2], [45.2, 61.0], [61.0, 84.6]],
-  'spooky-scary-skeletons':                         [[0.3, 12.6], [12.6, 37.5], [37.5, 49.9], [49.9, 75.0]],
-  'string-quartet-no61-in-d-minor':                 [[0.4, 20.4], [20.4, 35.2], [35.2, 51.0]],
-  'timberlake-cant-stop-the-feeling':               [[0.0, 16.4], [16.3, 25.6], [24.3, 50.5], [50.5, 85.1]],
-  'trepak':                                         [[0.9, 21.4], [21.4, 41.6], [41.6, 55.4], [55.4, 68.6]],
-  'vince-guaraldi-christmas-time-is-here':          [[0.0, 14.8], [14.8, 34.3], [34.3, 63.9], [63.9, 83.9]]
-};
 
 /* "Last one!" shows on the music note during the final part of each 'song', or only of the whole 'set' */
 const LAST_ONE_FOR = 'set';
@@ -963,6 +904,13 @@ function enterMark(){
   $('mCancelTap').onclick = () => { mPending = null; mDraw(); mLabels(); };
   $('mAdd').onclick = () => { const t = round1(mAudio ? mAudio.currentTime : 0); addClip([t, round1(t + 20)]); };
   $('mCopy').onclick = () => { const o = $('mOut'); o.select(); navigator.clipboard ? navigator.clipboard.writeText(o.value) : document.execCommand('copy'); $('mCopy').textContent = 'Copied!'; setTimeout(() => $('mCopy').textContent = 'Copy', 1500); };
+  $('mDownload').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([dataFileText()], {type:'text/javascript'}));
+    a.download = 'statues-data.js';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
   $('mReset').onclick = () => { if (!confirm('Go back to the points in the file for every song? You can undo this.')) return; CLIPS = JSON.parse(JSON.stringify(FILE_CLIPS)); changed('started over from the file'); };
   $('mUndo').onclick = mUndo; $('mRedo').onclick = mRedo;
   $('mTry').onclick = () => { mStopAll(); document.body.classList.remove('mark-open'); document.body.classList.add('start-open'); };
@@ -1100,15 +1048,37 @@ function mPlayPart(st, sp){
   mPart = playPart(mAudio, st, sp, () => { mPart = null; mAudio.level.gain.value = mSongLevel; mLabels(); });
   mLabels();
 }
-function mOut(){
+/* Builds the text of statues/statues-data.js from SONGS, SETS and CLIPS (used by the ?mark screen) */
+function dataFileText(){
+  const q = s => JSON.stringify(s);
   const keys = Object.keys(SONGS);
   const w = Math.max(...keys.map(k => k.length)) + 3;
-  const lines = keys.map(k => {
-    const cs = (CLIPS[k] || []).map(c => `[${c[0].toFixed(1)}, ${c[1].toFixed(1)}]`).join(', ');
-    return `  ${("'" + k + "':").padEnd(w)} [${cs}]`;
-  });
-  $('mOut').value = `let CLIPS = {\n${lines.join(',\n')}\n};`;
+  const pad = k => (q(k) + ':').padEnd(w);
+  const songs = keys.map(k => `  ${pad(k)} {title:${q(SONGS[k].title)}, artist:${q(SONGS[k].artist)}}`).join(',\n');
+  const sets = SETS.map(st => `  {id:${q(st.id)}, name:${q(st.name)}, songs:[${st.songs.map(q).join(', ')}]}`).join(',\n');
+  const clips = keys.map(k => `  ${pad(k)} [${(CLIPS[k] || []).map(c => `[${c[0].toFixed(1)}, ${c[1].toFixed(1)}]`).join(', ')}]`).join(',\n');
+  return `/* Statues song data, shared by Statues.html (Charlie's version) and Statues-Sub.html (sub version).
+   Upload this file to the statues folder in the music-tools repo. Both games pick up changes automatically.
+
+   SONGS: every song: file name in statues/audio/ (without .mp3), title and artist.
+   SETS:  id is what goes after # in a link (Statues.html#set1). Songs play in this order.
+   CLIPS: start and stop points (seconds) for each part of each song.
+          Make these with the ?mark screen, then click "Download statues-data.js" there. */
+
+const SONGS = {
+${songs}
+};
+
+const SETS = [
+${sets}
+];
+
+let CLIPS = {
+${clips}
+};
+`;
 }
+function mOut(){ $('mOut').value = dataFileText(); }
 /* Waveform: drag a part to move it, drag its red edge to change a start or stop,
    or click anywhere without dragging to jump there. */
 let mDrag = null;
