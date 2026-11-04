@@ -72,8 +72,10 @@ body.start-open #guide,body.mark-open #guide{display:none}
 .gMeta:empty{display:none}
 .gTitle{font-size:3.5vh;font-weight:700;line-height:1.12;margin:0 0 .6vh}
 .gBody{font-size:2.3vh;font-weight:500;line-height:1.3;color:#33475b;max-width:70ch}
-.gBtns{display:flex;flex-direction:column;align-items:stretch;gap:1vh}
-.gBtns .row2{display:flex;gap:.8vw;justify-content:flex-end}
+/* The big button column always has the same width, and the big button always sits in the same spot.
+   Smaller buttons (Different statue, Play this set again, Skip this song) hang below it without moving it. */
+.gBtns{position:relative;width:calc(42vh + 2.4vw);align-self:start;margin-top:2.6vh}
+.gBtns .row2{position:absolute;top:calc(100% + 1.3vh);right:0;display:flex;gap:.8vw;justify-content:flex-end}
 .gb{display:flex;align-items:center;justify-content:center;gap:.6em;border-radius:1.4vh;cursor:pointer;font-weight:600;white-space:nowrap;border:.35vh solid var(--navy);background:#fff;color:var(--navy);font-size:2.1vh;padding:.8vh 1.1vw}
 .gb.main{background:var(--red);border-color:var(--red);color:#fff;font-size:3.1vh;font-weight:700;padding:1.4vh 1.2vw;box-shadow:0 .5vh 0 var(--red-dark)}
 .gb.main:active{translate:0 .4vh;box-shadow:0 .1vh 0 var(--red-dark)}
@@ -81,7 +83,7 @@ body.start-open #guide,body.mark-open #guide{display:none}
 /* how far through the part the music is, filling along the bottom of Stop the music now */
 .gb.timed{position:relative;overflow:hidden;font-size:3.1vh;font-weight:700;padding:1.4vh 1.2vw;border-color:var(--navy)}
 /* big buttons share one width (the width of Stop the music now), so the button never changes size */
-.gBtns > .gb.main,.gBtns > .gb.timed{min-width:calc(41vh + 2.4vw);box-sizing:border-box}
+.gBtns > .gb.main,.gBtns > .gb.timed{width:100%;box-sizing:border-box;overflow:hidden}
 .gb.timed .pbar{position:absolute;left:0;right:0;bottom:0;height:.4vh;background:#eef1f4}
 .gb.timed .pbar i{display:block;height:100%;width:100%;background:var(--red);transform-origin:left center;transform:scaleX(0)}
 .gb:hover:not(:disabled){filter:brightness(1.08)}
