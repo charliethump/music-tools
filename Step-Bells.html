@@ -197,6 +197,7 @@ body:not(.duet) #displayPanel .duetRow{display:none}
       <label class="chk"><input type="checkbox" id="countChk">Count-in</label>
       <label class="chk"><input type="checkbox" id="loopChk">Loop</label>
       <label class="chk"><input type="checkbox" id="duetChk">Duet</label>
+      <label class="chk"><input type="checkbox" id="metroChk">Metronome</label>
     </div>
     <div class="grp right">
       <button id="dispBtn" aria-expanded="false">Display</button>
@@ -558,7 +559,7 @@ if (!songs.length) songs.push(blankSong());
 function blankSong() { return {title:"New song", tempo:100, perLine:8, beats:[]}; }
 
 /* ---------- options ---------- */
-const DEF = {title:true, sticks:true, names:"letters", colorNames:true, lyrics:true, bellLetters:false, countIn:true, loop:false, octave:2, octave2:2, duet:false};
+const DEF = {title:true, sticks:true, names:"letters", colorNames:true, lyrics:true, bellLetters:false, countIn:true, loop:false, octave:2, octave2:2, duet:false, metronome:false};
 let opts = {...DEF};
 try { Object.assign(opts, JSON.parse(localStorage.getItem("stepBells.opts") || "{}")); } catch (e) {}
 let optsVer = 0, songVer = 0;
@@ -653,6 +654,21 @@ function click(t, accent) {
   o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.07);
   sched.push({t, nodes:[o]});
 }
+// Steady beat during the song: a soft woodblock-style tick, different from the count-in click.
+function metroClick(t) {
+  const o = ac.createOscillator(); o.type = "sine"; o.frequency.value = 950;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.45, t + 0.001);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.06);
+  const n = ac.createBufferSource(); n.buffer = noiseBuf;
+  const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = 2;
+  const ng = ac.createGain();
+  ng.gain.setValueAtTime(0.3, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
+  n.connect(bp); bp.connect(ng); ng.connect(master); n.start(t); n.stop(t + 0.03);
+  sched.push({t, nodes:[o, n]});
+}
 function cancelFuture() {
   if (!ac) return;
   const now = ac.currentTime;
@@ -662,7 +678,7 @@ function cancelFuture() {
 }
 
 /* ---------- playback (both sets of bells share one clock) ---------- */
-const P = {state:"stopped", C:0, anchorBeat:0, anchorTime:0, pausedBeat:0, ci:0, endRel:0, maxL:0, tracks:[]};
+const P = {state:"stopped", C:0, anchorBeat:0, anchorTime:0, pausedBeat:0, ci:0, mi:0, endRel:0, maxL:0, tracks:[]};
 let timer = null, pops = [], live = [null, null], lastPose = [null, null];
 const lastHit = [new Array(8).fill(null), new Array(8).fill(null)];
 
@@ -700,6 +716,7 @@ function beginFrom(b) {
   live = [null, null];
   P.anchorBeat = b; P.anchorTime = ac.currentTime + 0.08;
   P.ci = Math.max(0, Math.ceil(b - 1e-6));
+  P.mi = Math.max(P.C, Math.ceil(b - 1e-6));
   const rel = b - P.C;
   P.tracks.forEach(tr => {
     if (!tr.L) return;
@@ -738,8 +755,13 @@ function tick() {
   const hz = beatAt(now + 0.15);
   while (P.ci < P.C && P.ci < hz) {
     const t = timeAt(P.ci);
-    if (t >= now - 0.01) click(Math.max(t, now), P.ci === P.C - 1);
+    if (t >= now - 0.01) click(Math.max(t, now), P.ci === 0);
     P.ci++;
+  }
+  while (P.mi < hz && P.mi < P.C + P.endRel) {
+    const t = timeAt(P.mi);
+    if (opts.metronome && t >= now - 0.01) metroClick(Math.max(t, now));
+    P.mi++;
   }
   P.tracks.forEach(tr => {
     if (!tr.evs.length) return;
@@ -990,6 +1012,7 @@ function applyOpts() {
   $("#countChk").checked = !!opts.countIn;
   $("#loopChk").checked = !!opts.loop;
   $("#duetChk").checked = !!opts.duet;
+  $("#metroChk").checked = !!opts.metronome;
   document.body.classList.toggle("duet", !!opts.duet);
   $("#soundLbl").textContent = opts.duet ? "Left sound" : "Sound";
   $("#stage").setAttribute("viewBox", opts.duet ? VB_DUET : VB_SINGLE);
@@ -1004,6 +1027,7 @@ $("#songSel").addEventListener("change", e => {
   stop(); cur[0] = +e.target.value; tempo = songs[cur[0]].tempo; syncTempoUI(); e.target.blur();
 });
 $("#songSel2").addEventListener("change", e => { stop(); cur[1] = +e.target.value; e.target.blur(); });
+$("#metroChk").addEventListener("change", e => { opts.metronome = e.target.checked; saveOpts(); });
 $("#duetChk").addEventListener("change", e => { stop(); opts.duet = e.target.checked; saveOpts(); applyOpts(); });
 $("#playBtn").addEventListener("click", togglePlay);
 $("#restartBtn").addEventListener("click", () => stop());
