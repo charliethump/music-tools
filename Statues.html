@@ -859,6 +859,20 @@ function back(){
   }
 }
 
+/* E: on a statue, play the last part of the set; on the music, jump straight to the final sitting statue */
+function jumpEnd(){
+  if (!seq.length) return;
+  const last = seq.length - 1;
+  if (phase === 'freeze') playK(last);
+  else if (phase === 'playing' || phase === 'loading' || phase === 'error'){ stopAll(); k = last; freezeK(true); }
+}
+/* N: first part of the next song (from the title slide, the first song). Does nothing on the last song. */
+function nextSong(){
+  if (!seq.length || phase === 'done' || phase === 'picker') return;
+  const cur = k >= 0 ? seq[k].s : -1;
+  const i = seq.findIndex(x => x.s > cur);
+  if (i >= 0) playK(i);
+}
 function chooseSet(i){
   stopAll();
   setIdx = i; buildSeq();
@@ -984,7 +998,8 @@ document.addEventListener('mousedown', () => toggleSafe(false), true);
 
 /* ================= KEYS =================
    Clicker (Page Down / Page Up), arrow keys and the foot pedal. F toggles full screen; Esc leaves it.
-   H goes back to the set picker. S shows or hides Safe! V cycles the visualizer. */
+   H goes back to the set picker. S shows or hides Safe! V cycles the visualizer.
+   E jumps to the end (last part from a statue, final statue from the music). N skips to the next song. */
 const FWD = ['PageDown','ArrowRight','ArrowDown',' ','Enter'];
 const BACK = ['PageUp','ArrowLeft','ArrowUp'];
 document.addEventListener('keydown', e => {
@@ -996,6 +1011,12 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.body.classList.contains('safe')){ toggleSafe(false); return; }
   if (phase === 'picker') return;                 // pick a set with the mouse
   if (e.key === 'h' || e.key === 'H'){ e.preventDefault(); toggleSafe(false); goPicker(); return; }
+  if ('eEnN'.includes(e.key) && e.key.length === 1){
+    e.preventDefault(); if (e.repeat) return;
+    toggleSafe(false); getCtx(); autoFullscreen();
+    if (e.key === 'e' || e.key === 'E') jumpEnd(); else nextSong();
+    return;
+  }
   const fwd = FWD.includes(e.key), bk = BACK.includes(e.key);
   if (!fwd && !bk) return;
   e.preventDefault();
