@@ -24,7 +24,7 @@ button{font-family:var(--round)}
 .ico{width:1.15em;height:1.15em;flex:none}
 
 /* ---------- stage (1920x1080, scaled to fit above the dots) ---------- */
-#stage{position:absolute;left:50%;top:calc((100vh - var(--dotsH)) / 2);width:1920px;height:1080px;transform-origin:center;background:var(--bg);overflow:hidden}
+#stage{position:absolute;left:50%;top:calc((100vh - var(--dotsH)) / 2);width:1920px;height:1080px;transform-origin:center;background:transparent;overflow:hidden;z-index:1}
 body.picker #stage{display:none}
 .view{position:absolute;inset:0;display:none}
 body.title #titleView,body.done #titleView,body.error #titleView{display:block}
@@ -103,14 +103,16 @@ body.ready #ready{display:block}
 body.safe #ready{opacity:.05}
 
 /* ---------- falling snow (Winter holidays set, music only) ---------- */
-#snow{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:15;opacity:0;transition:opacity .3s ease}
-body.snowing #snow{opacity:1}
+#snow,#snowBack{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;opacity:0;transition:opacity .3s ease}
+#snow{z-index:15}
+#snowBack{z-index:0}                 /* behind the stage, which is see-through, so small flakes pass behind the note */
+body.snowing #snow,body.snowing #snowBack{opacity:1}
 
 /* ---------- sound effects panel ---------- */
 #fxBtn{position:fixed;left:calc(1vw + 10vh);bottom:.8vh;width:4.4vh;height:4.4vh;padding:.8vh;border:0;border-radius:1vh;background:none;color:var(--navy);opacity:.22;cursor:pointer;z-index:50;display:none;align-items:center;justify-content:center}
 #fxBtn:hover{opacity:.6}
 #fxBtn svg{width:100%;height:100%}
-body.playing #fxBtn,body.freeze #fxBtn,body.loading #fxBtn,body.fx-open #fxBtn{display:flex}
+body:not(.picker) #fxBtn{display:flex}
 body.picker #fxBtn{display:none}
 #fxPanel{position:fixed;right:12px;top:56px;width:350px;max-height:calc(100vh - 120px);overflow:auto;background:rgba(255,255,255,.97);border:1px solid #d9dee3;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:12px 14px;font:14px/1.35 Arial,sans-serif;color:var(--navy);z-index:45;display:none}
 body.fx-open #fxPanel{display:block}
@@ -136,7 +138,7 @@ body.picker #fxPanel{display:none}
 
 /* ---------- visualizer ---------- */
 #vis{position:absolute;left:0;top:0;width:1920px;height:1080px}
-#noteView svg{transform-origin:35% 60%;will-change:transform}
+#noteView svg{transform-origin:50% 52%;will-change:transform}
 #visBtn{position:fixed;left:calc(1vw + 5vh);bottom:.8vh;width:4.4vh;height:4.4vh;padding:.8vh;border:0;border-radius:1vh;background:none;color:var(--navy);opacity:.22;cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center}
 #visBtn:hover{opacity:.6}
 #visBtn svg{width:100%;height:100%}
@@ -198,6 +200,7 @@ body.mark-open #stage{display:none}
   </div>
 </div>
 
+<canvas id="snowBack" aria-hidden="true"></canvas>
 <canvas id="snow" aria-hidden="true"></canvas>
 <div id="dots"></div>
 <div id="msg" role="status"></div>
@@ -631,7 +634,7 @@ setInterval(() => {
 const VIS_NAMES = ['Off', 'Bars', 'Ring', 'Bouncing note', 'Wave'];
 const VIS_COLOR = '28,43,58';       // navy, drawn see-through so it stays in the background
 let visMode = 0, visRaf = 0, visAn = null, visFreq = null, visWave = null;
-let visBass = 0, visSway = 0;
+let visBass = 0;
 const visCv = $('vis'), visCx = visCv.getContext('2d');
 const noteSvg = document.querySelector('#noteView svg');
 
@@ -678,13 +681,10 @@ const VIS_DRAW = {
       c.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len)); c.stroke();
     }
   },
-  3(){    // Bouncing note: swells with the bass, sways a little with the melody
-    const b = visBands(16);
-    const bass = (b[0] + b[1] + b[2] + b[3]) / 4, mid = (b[6] + b[7] + b[8] + b[9]) / 4;
-    visBass += ((bass > visBass ? 0.5 : 0.12)) * (bass - visBass);     // quick up, slow down
-    visSway += 0.05 * (mid - visSway);
-    const t = performance.now() / 1000;
-    noteSvg.style.transform = `scale(${1 + visBass * 0.045}) rotate(${Math.sin(t * 2.2) * visSway * 4}deg)`;
+  3(){    // Bouncing note: swells and shrinks with the bass
+    const b = visBands(16), bass = (b[0] + b[1] + b[2] + b[3]) / 4;
+    visBass += (bass > visBass ? 0.5 : 0.12) * (bass - visBass);       // quick up, slower down
+    noteSvg.style.transform = `scale(${1 + visBass * 0.06})`;
   },
   4(c){   // Wave: one smooth line across the middle
     const an = visAnalyser(); an.getByteTimeDomainData(visWave);
@@ -718,7 +718,7 @@ function visUpdate(){
   const run = phase === 'playing' && visMode > 0;
   cancelAnimationFrame(visRaf); visRaf = 0;
   if (run) visRaf = requestAnimationFrame(visFrame);
-  else { visCx.clearRect(0, 0, 1920, 1080); noteSvg.style.transform = ''; visBass = visSway = 0; }
+  else { visCx.clearRect(0, 0, 1920, 1080); noteSvg.style.transform = ''; visBass = 0; }
 }
 function visSet(m, toast){
   visMode = ((m % VIS_NAMES.length) + VIS_NAMES.length) % VIS_NAMES.length;
@@ -914,7 +914,7 @@ function render(){
   b.classList.add(phase);
   if (phase === 'playing' && lastOneNow()) b.classList.add('last');
   if (phase === 'done' && doneMsg) b.classList.add('done-msg');
-  snow(phase === 'playing' && setIdx >= 0 && SNOW_SETS.includes(curSet().id));
+  snow(phase === 'playing' && setIdx >= 0 && SNOW_SETS.includes(curSet().id), k === 0);
   visUpdate();
   const e = phase === 'title' ? firstSong() : null;
   if (phase === 'loading' || (e && e.state === 'loading')) b.classList.add('waiting');
@@ -1006,30 +1006,36 @@ document.addEventListener('keydown', e => {
 });
 
 /* ================= SNOW =================
-   Light blue six-armed flakes drift down from the top while the music plays (sets in SNOW_SETS).
-   They fade out the moment the music stops; next time they start again from the top. */
-const snowCv = $('snow'), snowCx = snowCv.getContext('2d');
-let flakes = [], snowOn = false, snowRaf = 0, snowLast = 0, snowOff = 0;
+   Light blue six-armed flakes drift down while the music plays (sets in SNOW_SETS).
+   Big flakes fall in front of the eighth note and small ones behind it, for depth.
+   At each freeze they stop where they are and fade out; when the music comes back they fade in
+   at the same spots and carry on. They only start fresh from the top on the first part of the set. */
+const snowFront = $('snow'), snowBack = $('snowBack');
+const snowCxF = snowFront.getContext('2d'), snowCxB = snowBack.getContext('2d');
+let flakes = [], snowOn = false, snowRaf = 0, snowLast = 0;
 function sizeSnow(){
   const d = devicePixelRatio || 1;
-  snowCv.width = Math.round(innerWidth * d); snowCv.height = Math.round(innerHeight * d);
-  snowCx.setTransform(d, 0, 0, d, 0, 0);
+  [[snowFront, snowCxF], [snowBack, snowCxB]].forEach(([cv, cx]) => {
+    cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d);
+    cx.setTransform(d, 0, 0, d, 0, 0);
+  });
+  if (flakes.length) snowDraw();
 }
-addEventListener('resize', sizeSnow); sizeSnow();
+addEventListener('resize', sizeSnow);
 function newFlake(startAbove){
   const h = innerHeight, r = h * (0.008 + Math.random() * 0.02);     // radius
   return {
     x: Math.random() * innerWidth,
     y: startAbove ? -r - Math.random() * h : -r,                       // staggered above the top so they arrive gradually
-    r, vy: h * (0.06 + Math.random() * 0.07) * (0.6 + r / (h * 0.028)), // bigger flakes fall a little faster
+    r, front: r > h * 0.017,                                           // big ones in front of the note, small ones behind
+    vy: h * (0.06 + Math.random() * 0.07) * (0.6 + r / (h * 0.028)),   // bigger flakes fall a little faster
     sway: h * (0.01 + Math.random() * 0.02), ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 0.9,
     rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.8,
     a: 0.55 + Math.random() * 0.4
   };
 }
-function drawFlake(f, x){
-  const c = snowCx;
-  c.save(); c.translate(x, f.y); c.rotate(f.rot);
+function drawFlake(c, f){
+  c.save(); c.translate(f.x + Math.sin(f.ph) * f.sway, f.y); c.rotate(f.rot);
   c.globalAlpha = f.a; c.strokeStyle = '#7fb2e6'; c.lineCap = 'round'; c.lineWidth = Math.max(1.2, f.r * 0.16);
   c.beginPath();
   for (let i = 0; i < 6; i++){
@@ -1040,31 +1046,36 @@ function drawFlake(f, x){
   }
   c.stroke(); c.restore();
 }
+function snowDraw(){
+  snowCxF.clearRect(0, 0, innerWidth, innerHeight); snowCxB.clearRect(0, 0, innerWidth, innerHeight);
+  for (const f of flakes) drawFlake(f.front ? snowCxF : snowCxB, f);
+}
 function snowFrame(t){
   const dt = Math.min(0.05, (t - (snowLast || t)) / 1000); snowLast = t;
-  snowCx.clearRect(0, 0, innerWidth, innerHeight);
   for (const f of flakes){
     f.y += f.vy * dt; f.ph += f.sp * dt; f.rot += f.vr * dt;
-    if (f.y - f.r > innerHeight) Object.assign(f, newFlake(false), {x: Math.random() * innerWidth});
-    drawFlake(f, f.x + Math.sin(f.ph) * f.sway);
+    if (f.y - f.r > innerHeight) Object.assign(f, newFlake(false));
   }
+  snowDraw();
   snowRaf = requestAnimationFrame(snowFrame);
 }
-function snow(on){
+/* fresh: start over from the top (first part of the set); otherwise pick up where they stopped */
+function snow(on, fresh){
   if (on === snowOn) return;
   snowOn = on;
-  document.body.classList.toggle('snowing', on);
-  clearTimeout(snowOff);
+  cancelAnimationFrame(snowRaf);
   if (on){
-    cancelAnimationFrame(snowRaf);
-    const n = Math.round(60 * Math.min(1.6, innerWidth / innerHeight / 1.4));
-    flakes = Array.from({length: n}, () => newFlake(true));
+    if (fresh || !flakes.length){
+      const n = Math.round(60 * Math.min(1.6, innerWidth / innerHeight / 1.4));
+      flakes = Array.from({length: n}, () => newFlake(true));
+    }
+    snowDraw();                     // in place before the fade-in starts
     snowLast = 0; snowRaf = requestAnimationFrame(snowFrame);
-  } else {
-    // let the 0.3 s fade finish, then stop drawing
-    snowOff = setTimeout(() => { cancelAnimationFrame(snowRaf); snowCx.clearRect(0, 0, innerWidth, innerHeight); }, 350);
   }
+  // off: they stop moving right where they are and the canvases fade out (CSS)
+  document.body.classList.toggle('snowing', on);
 }
+sizeSnow();
 
 
 /* icons used by the ?mark screen */
