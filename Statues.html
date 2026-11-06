@@ -784,16 +784,27 @@ function retrySet(){
   loadSet(); render();
 }
 
-/* Cards come from a shuffled pile, so none repeats until every card has shown */
-let pile = [], lastCard = -1;
-function shuffle(a){ for (let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
+/* Cards are drawn at random each time, so a card can come up more than once in a set.
+   CARD_RATE sets how often a kind of card comes up compared with the old shuffled pile,
+   where every card had the same 1 in 17 chance: 0.5 = half as often. Plain cards share the rest.
+   The same card never shows twice in a row. */
+const CARD_RATE = {partner: 1/2, three: 1/3};
+function cardChances(){
+  const base = 1 / CARDS.length;
+  const fixed = CARDS.map(c => c.group in CARD_RATE ? base * CARD_RATE[c.group] : null);
+  const plain = fixed.filter(v => v == null).length;
+  const rest = (1 - fixed.reduce((n, v) => n + (v || 0), 0)) / plain;
+  return fixed.map(v => v == null ? rest : v);
+}
+const CARD_CHANCE = cardChances();
+let lastCard = -1;
 function drawCard(){
-  if (!pile.length){
-    pile = shuffle(CARDS.map((c,i) => i));
-    if (pile.length > 1 && pile[pile.length-1] === lastCard) [pile[0], pile[pile.length-1]] = [pile[pile.length-1], pile[0]];
-  }
-  lastCard = pile.pop();
-  return lastCard;
+  let i;
+  do {
+    let r = Math.random(); i = 0;
+    while (i < CARD_CHANCE.length - 1 && (r -= CARD_CHANCE[i]) >= 0) i++;
+  } while (i === lastCard);
+  return lastCard = i;
 }
 /* Cards are decoded ahead of time so they appear the instant the music stops */
 CARDS.forEach(c => { const im = new Image(); im.src = c.img; c.el = im; });
