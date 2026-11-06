@@ -176,7 +176,7 @@ body:not(.duet) #displayPanel .duetRow{display:none}
           <stop offset=".45" stop-color="#1c1c1c"/>
           <stop offset="1" stop-color="#050505"/>
         </radialGradient>
-        <filter id="softBlur" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="20"/></filter>
+        <filter id="softBlur" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="22"/></filter>
         <filter id="malletBlur" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
         <linearGradient id="shadowFade" gradientUnits="userSpaceOnUse" x1="420" y1="1080" x2="1720" y2="780">
           <stop offset="0" stop-color="#000" stop-opacity=".34"/>
@@ -185,8 +185,8 @@ body:not(.duet) #displayPanel .duetRow{display:none}
           <stop offset="1" stop-color="#000" stop-opacity=".34"/>
         </linearGradient>
         <g id="floorShadow" filter="url(#softBlur)">
-          <polygon points="300,1100 1670,752 1800,806 700,1100" fill="url(#shadowFade)"/>
-          <ellipse cx="1695" cy="784" rx="95" ry="24" fill="#000" opacity=".3"/>
+          <polygon points="240,1105 1650,740 1840,822 840,1105" fill="url(#shadowFade)"/>
+          <ellipse cx="1700" cy="786" rx="115" ry="30" fill="#000" opacity=".3"/>
         </g>
         <!-- Mallet shadow only shows on the tops of the bars (white = shadow can land here) -->
         <mask id="barMask" maskUnits="userSpaceOnUse" x="160" y="30" width="1680" height="1050">
