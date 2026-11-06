@@ -797,13 +797,21 @@ function cardChances(){
   return fixed.map(v => v == null ? rest : v);
 }
 const CARD_CHANCE = cardChances();
+/* No card shows more than MAX_PER_SET times in one play of a set (the final sitting statue counts),
+   and never twice in a row. Cards that have hit the limit are skipped and the others share their chance. */
+const MAX_PER_SET = 2;
 let lastCard = -1;
-function drawCard(){
-  let i;
-  do {
-    let r = Math.random(); i = 0;
-    while (i < CARD_CHANCE.length - 1 && (r -= CARD_CHANCE[i]) >= 0) i++;
-  } while (i === lastCard);
+function drawCard(forK){
+  const used = new Array(CARDS.length).fill(0);
+  cards.forEach((c, i) => { if (c != null && i < forK) used[c]++; });        // only the statues before this one count
+  used[FINAL_CARD]++;                                                       // save a spot for the final sitting statue
+  const w = CARD_CHANCE.map((p, i) => (used[i] >= MAX_PER_SET || i === lastCard ||
+    (i === FINAL_CARD && forK === seq.length - 2)) ? 0 : p);                  // no sitting right before the final sitting
+  let total = w.reduce((n, v) => n + v, 0);
+  if (total <= 0) return lastCard = (lastCard + 1) % CARDS.length;           // can't happen with 17 cards, but just in case
+  let r = Math.random() * total, i = 0;
+  while (i < w.length - 1 && (r -= w[i]) >= 0) i++;
+  while (w[i] === 0) i--;                                                    // guard against rounding at the very end
   return lastCard = i;
 }
 /* Cards are decoded ahead of time so they appear the instant the music stops */
@@ -836,7 +844,7 @@ function tryAgain(){ delete songs[songSlug(seq[k].s)]; playK(k); }
 /* fresh: the music just stopped, so a new statue. Otherwise (going back) show the same one as before. */
 function freezeK(fresh){
   part = null;
-  if (fresh || cards[k] == null) cards[k] = isLast(k) ? FINAL_CARD : drawCard();   // the set always ends on the sitting statue
+  if (fresh || cards[k] == null) cards[k] = isLast(k) ? FINAL_CARD : drawCard(k);   // the set always ends on the sitting statue
   card = cards[k];
   phase = 'freeze'; render();
 }
