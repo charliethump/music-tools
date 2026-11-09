@@ -40,7 +40,7 @@ body.playing #noteView,body.loading #noteView{display:block}
 #lastOne{position:absolute;left:400px;top:560px;font-family:var(--serif);font-weight:700;font-style:italic;font-size:112px;color:#111;transform:rotate(-15deg);transform-origin:center;white-space:nowrap;display:none}
 body.playing.last #lastOne{display:block}
 
-body.freeze #cardView{display:flex}
+body.freeze #cardView,body.open #cardView{display:flex}
 #cardView{flex-direction:column;align-items:center;justify-content:center;gap:22px}
 /* Partner and group labels sit in the space to the left of the card, so the card never shrinks */
 #cardLabel{position:absolute;left:40px;width:480px;top:50%;transform:translateY(-50%);text-align:center;font-family:var(--serif);font-weight:700;font-size:104px;line-height:1.08;color:#111;display:none}
@@ -743,7 +743,7 @@ $('visBtn').onclick = () => visSet(visMode + 1, true);
 
 /* ================= GAME =================
    Charlie's version: the clicker runs everything.
-   Forward: title > music > statue > music > statue ... > title slide > "Move safely back..." > set picker.
+   Forward: title > opening statue > music > statue > music > statue ... > title slide > "Move safely back..." > set picker.
    Back always goes back one step (from a statue it plays that part again). */
 let phase = 'picker';   // picker | title | loading | playing | freeze | done | error
 let setIdx = -1;
@@ -804,8 +804,10 @@ let lastCard = -1;
 function drawCard(forK){
   const used = new Array(CARDS.length).fill(0);
   cards.forEach((c, i) => { if (c != null && i < forK) used[c]++; });        // only the statues before this one count
+  if (openCard != null) used[openCard]++;                                   // the opening statue counts too
+  const prev = forK === 0 ? openCard : cards[forK - 1];                     // the statue just before this one
   used[FINAL_CARD]++;                                                       // save a spot for the final sitting statue
-  const w = CARD_CHANCE.map((p, i) => (used[i] >= MAX_PER_SET || i === lastCard ||
+  const w = CARD_CHANCE.map((p, i) => (used[i] >= MAX_PER_SET || i === prev ||
     (i === FINAL_CARD && forK === seq.length - 2)) ? 0 : p);                  // no sitting right before the final sitting
   let total = w.reduce((n, v) => n + v, 0);
   if (total <= 0) return lastCard = (lastCard + 1) % CARDS.length;           // can't happen with 17 cards, but just in case
@@ -814,6 +816,12 @@ function drawCard(forK){
   while (w[i] === 0) i--;                                                    // guard against rounding at the very end
   return lastCard = i;
 }
+/* Every set starts with a statue before any music. It is one of these cards (numbers as on the
+   numbered card sheet: 1 = raised arm, knee up ... 17 = nervous), each equally likely. */
+const OPENING_CARDS = [1, 2, 3, 4, 5, 6, 11, 16];
+let openCard = null;
+function pickOpening(){ return OPENING_CARDS[Math.floor(Math.random() * OPENING_CARDS.length)] - 1; }
+function showOpen(){ stopAll(); k = -1; card = openCard; phase = 'open'; render(); }
 /* Cards are decoded ahead of time so they appear the instant the music stops */
 CARDS.forEach(c => { const im = new Image(); im.src = c.img; c.el = im; });
 
@@ -855,9 +863,10 @@ function forward(){
       const e = firstSong();
       if (!e) return;
       if (e.state === 'bad') retrySet();
-      else if (e.state === 'ok') playK(0);
+      else if (e.state === 'ok') showOpen();
       return;                                  // still loading: ignore the press
     }
+    case 'open':    playK(0); return;
     case 'playing': if (part) part.stop(); return;            // stop now (with the fade-out, if any): on to the statue
     case 'freeze':  if (isLast(k)){ phase = 'done'; doneMsg = false; render(); } else playK(k + 1); return;
     case 'done':    if (!doneMsg){ doneMsg = true; render(); } else goPicker(); return;
@@ -867,9 +876,10 @@ function forward(){
 function back(){
   switch (phase){
     case 'title': goPicker(); return;
+    case 'open':  k = -1; phase = 'title'; render(); return;
     case 'playing': case 'loading': case 'error':
       stopAll();
-      if (k <= 0){ k = -1; phase = 'title'; render(); } else { k--; freezeK(false); }
+      if (k <= 0) showOpen(); else { k--; freezeK(false); }
       return;
     case 'freeze': playK(k); return;
     case 'done':
@@ -882,7 +892,7 @@ function back(){
 function jumpEnd(){
   if (!seq.length) return;
   const last = seq.length - 1;
-  if (phase === 'freeze') playK(last);
+  if (phase === 'freeze' || phase === 'open') playK(last);
   else if (phase === 'playing' || phase === 'loading' || phase === 'error'){ stopAll(); k = last; freezeK(true); }
 }
 /* N: first part of the next song (from the title slide, the first song). Does nothing on the last song. */
@@ -895,7 +905,7 @@ function nextSong(){
 function chooseSet(i){
   stopAll();
   setIdx = i; buildSeq();
-  k = -1; cards = []; phase = 'title';
+  k = -1; cards = []; phase = 'title'; openCard = pickOpening();
   loadSet(); render(); visHash();
 }
 function goPicker(){
@@ -943,7 +953,7 @@ fsIcon();
 /* ================= DRAWING ================= */
 function render(){
   const b = document.body;
-  b.classList.remove('picker','title','loading','playing','freeze','done','error','last','waiting','ready','done-msg');
+  b.classList.remove('picker','title','open','loading','playing','freeze','done','error','last','waiting','ready','done-msg');
   b.classList.add(phase);
   if (phase === 'playing' && lastOneNow()) b.classList.add('last');
   if (phase === 'done' && doneMsg) b.classList.add('done-msg');
@@ -952,7 +962,7 @@ function render(){
   const e = phase === 'title' ? firstSong() : null;
   if (phase === 'loading' || (e && e.state === 'loading')) b.classList.add('waiting');
   if (e && e.state === 'ok') b.classList.add('ready');          // green check: the music can start
-  if (phase === 'freeze' && card != null){
+  if ((phase === 'freeze' || phase === 'open') && card != null){
     const c = CARDS[card];
     $('cardImg').src = c.img;
     $('cardView').classList.toggle('labeled', !!c.label);
@@ -967,7 +977,9 @@ function render(){
 /* one dot per part, grouped by song */
 function drawDots(){
   let i = 0;
-  $('dots').innerHTML = curSet().songs.map(slug => {
+  const oc = phase === 'open' ? 'now frz' : (k >= 0 || phase === 'done') ? 'past' : '';
+  $('dots').innerHTML = `<span class="song"><button class="dotb" data-open="1" title="Opening statue" aria-label="Show the opening statue"><i class="${oc}"></i></button></span>` +
+    curSet().songs.map(slug => {
     const sg = SONGS[slug] || {title: slug};
     return '<span class="song">' + partsOf(slug).map((c, p) => {
       const n = i++;
@@ -983,7 +995,7 @@ $('dots').addEventListener('click', e => {
   const d = e.target.closest('.dotb'); if (!d) return;
   d.blur();
   getCtx(); autoFullscreen();
-  playK(+d.dataset.i);
+  if (d.dataset.open) showOpen(); else playK(+d.dataset.i);
 });
 
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
