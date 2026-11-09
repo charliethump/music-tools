@@ -148,6 +148,9 @@ body.picker #visBtn{display:none}
 #visToast.show{animation:visToast 1.6s ease forwards}
 @keyframes visToast{0%{opacity:0}12%{opacity:.5}70%{opacity:.5}100%{opacity:0}}
 
+#visBars{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:0}   /* behind the see-through stage */
+body:not(.playing) #visBars{display:none}
+
 /* ---------- teacher-only marking screen (?mark) ---------- */
 #mark{position:fixed;inset:0;z-index:60;background:var(--bg);display:none;overflow:auto;color:var(--navy);font-size:17px}
 body.mark-open #mark{display:block}
@@ -200,6 +203,7 @@ body.mark-open #stage{display:none}
   </div>
 </div>
 
+<canvas id="visBars" aria-hidden="true"></canvas>
 <canvas id="snowBack" aria-hidden="true"></canvas>
 <canvas id="snow" aria-hidden="true"></canvas>
 <div id="dots"></div>
@@ -636,6 +640,15 @@ const VIS_COLOR = '28,43,58';       // navy, drawn see-through so it stays in th
 let visMode = 0, visRaf = 0, visAn = null, visFreq = null, visWave = null;
 let visBass = 0;
 const visCv = $('vis'), visCx = visCv.getContext('2d');
+/* the bars draw on their own full-window canvas so they reach both edges of any screen */
+const barsCv = $('visBars'), barsCx = barsCv.getContext('2d');
+function sizeBars(){
+  const d = devicePixelRatio || 1;
+  barsCv.width = Math.round(innerWidth * d); barsCv.height = Math.round(innerHeight * d);
+  barsCx.setTransform(d, 0, 0, d, 0, 0);
+}
+addEventListener('resize', sizeBars); sizeBars();
+const visClear = () => { visCx.clearRect(0, 0, 1920, 1080); barsCx.clearRect(0, 0, innerWidth, innerHeight); };
 const noteSvg = document.querySelector('#noteView svg');
 
 function visAnalyser(){
@@ -662,12 +675,13 @@ function visBands(n){
 function rr(c, x, y, w, h, r){ r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x, y + h); c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r); c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r); c.lineTo(x + w, y + h); c.closePath(); c.fill(); }
 
 const VIS_DRAW = {
-  1(c){   // Bars: a low row along the bottom, behind the note
-    const n = 40, b = visBands(n), gap = 10, w = (1920 - 160 - gap * (n - 1)) / n;
+  1(){    // Bars: a low row along the bottom of the whole screen, edge to edge, behind the note
+    const c = barsCx, W = innerWidth, H = innerHeight * (1 - DOTS_FRAC);   // stays above the dots
+    const n = 40, b = visBands(n), gap = W * 0.006, w = (W - gap * (n + 1)) / n, maxH = H * 0.22;
     for (let i = 0; i < n; i++){
-      const h = 8 + b[i] * 230;
+      const h = H * 0.008 + b[i] * maxH;
       c.fillStyle = `rgba(${VIS_COLOR},${0.08 + b[i] * 0.12})`;
-      rr(c, 80 + i * (w + gap), 1080 - 20 - h, w, h, w / 2);
+      rr(c, gap + i * (w + gap), H - H * 0.012 - h, w, h, w / 2);
     }
   },
   2(c){   // Ring: short bars pointing out from a circle behind the note
@@ -708,7 +722,7 @@ const VIS_DRAW = {
   }
 };
 function visFrame(){
-  visCx.clearRect(0, 0, 1920, 1080);
+  visClear();
   if (visMode !== 3) noteSvg.style.transform = '';
   VIS_DRAW[visMode](visCx);
   visRaf = requestAnimationFrame(visFrame);
@@ -718,7 +732,7 @@ function visUpdate(){
   const run = phase === 'playing' && visMode > 0;
   cancelAnimationFrame(visRaf); visRaf = 0;
   if (run) visRaf = requestAnimationFrame(visFrame);
-  else { visCx.clearRect(0, 0, 1920, 1080); noteSvg.style.transform = ''; visBass = 0; }
+  else { visClear(); noteSvg.style.transform = ''; visBass = 0; }
 }
 function visSet(m, toast){
   visMode = ((m % VIS_NAMES.length) + VIS_NAMES.length) % VIS_NAMES.length;
