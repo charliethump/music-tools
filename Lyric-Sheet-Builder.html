@@ -42,6 +42,10 @@
   .box.p1 { border-color: var(--p1-line); background: var(--p1-fill); }
   .box.p2 { border-color: var(--p2-line); background: var(--p2-fill); }
   .box.tg { border-color: var(--tg-line); background: var(--tg-fill); }
+  .box { position: relative; }
+  .cyc { position: absolute; top: 5px; right: 6px; font-size: 11px; height: 20px; padding: 0 6px;
+         border: 1px solid #aaa; border-radius: 4px; background: #fff; cursor: pointer; }
+  .cyc:hover { background: #eee; }
   .lab { font-size: 9px; font-weight: bold; margin-bottom: 6px; outline: none; }
   .p1 .lab, .chip.p1 { color: var(--p1-line); }
   .p2 .lab, .chip.p2 { color: var(--p2-line); }
@@ -64,6 +68,9 @@
   .chipline .tag { font-size: 0.5em; font-weight: bold; margin-right: 8px; vertical-align: middle; }
   .chipline.p1 .tag { color: var(--p1-line); }
   .chipline.p2 .tag { color: var(--p2-line); }
+  .chipline.tg { background: var(--tg-fill); border-color: var(--tg-line); }
+  .chipline.tg .tag { color: var(--tg-line); }
+  .bar button:disabled { opacity: .4; cursor: default; }
   .stxt { outline: none; white-space: pre-wrap; display: inline-block; min-width: 8em; cursor: text; }
   .chipline { cursor: text; }
   .stxt:empty::before { content: attr(data-ph); color: #8a8a8a; font-style: italic; }
@@ -87,7 +94,7 @@
   @page { size: letter portrait; margin: 0; }
   @media print {
     body { background: #fff; }
-    .bar, .ctl, .help, .lctl, .addline { display: none !important; }
+    .bar, .ctl, .help, .lctl, .addline, .cyc { display: none !important; }
     .stxt:empty::before { content: ""; }
     .sline:has(.stxt:empty) { display: none; }
     .page { margin: 0; box-shadow: none; }
@@ -111,6 +118,8 @@
   <button id="addBtn">Add</button>
   <label>Text size: <button id="smaller">A-</button> <button id="bigger">A+</button></label>
   <button id="fitBtn">Fit to page</button>
+  <button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+  <button id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
   <button id="resetBtn">Start over</button>
   <button class="print" id="printBtn">Print / Save PDF</button>
   <span class="status" id="status"></span>
@@ -144,7 +153,8 @@ const PH = {
   p2: "Paste Part II lyrics",
   stag: ""
 };
-const TAG = { p1: "I", p2: "II" };
+const TAG = { p1: "I", p2: "II", tg: "BOTH" };
+const NEXT_PART = { p1: "p2", p2: "tg", tg: "p1" };
 const STAG_DEFAULT = [
   { p: "p1", t: "", ind: 0, hold: true },
   { p: "p2", t: "", ind: 1, hold: true },
@@ -195,8 +205,8 @@ function makeLine(L, list) {
 
   const ctl = document.createElement("span"); ctl.className = "lctl";
   const b = (label, title, fn) => { const x = document.createElement("button"); x.textContent = label; x.title = title;
-    x.onclick = () => { fn(); paint(); changed(); }; ctl.appendChild(x); return x; };
-  const partBtn = b("I/II", "Switch part", () => { line.dataset.p = line.dataset.p === "p1" ? "p2" : "p1"; });
+    x.onclick = () => { fn(); paint(); changed(true); }; ctl.appendChild(x); return x; };
+  const partBtn = b("I/II/Both", "Switch part: Part I, Part II, Both parts", () => { line.dataset.p = NEXT_PART[line.dataset.p] || "p1"; });
   b("\u2190", "Indent less", () => { line.dataset.ind = Math.max(0, +line.dataset.ind - 1); });
   b("\u2192", "Indent more", () => { line.dataset.ind = Math.min(12, +line.dataset.ind + 1); });
   const holdBtn = b("___", "Held note line", () => { line.dataset.hold = line.dataset.hold ? "" : "1"; });
@@ -207,7 +217,7 @@ function makeLine(L, list) {
     const p = line.dataset.p;
     chip.className = "chipline " + p + (line.dataset.hold ? " hold" : "");
     tag.textContent = TAG[p];
-    txt.dataset.ph = "Part " + TAG[p] + " entrance";
+    txt.dataset.ph = p === "tg" ? "Both parts" : "Part " + TAG[p] + " entrance";
     line.style.paddingLeft = (+line.dataset.ind * 1.6) + "em";
     line.style.fontSize = "var(--fs)";
     chip.style.fontSize = "1em";
@@ -224,7 +234,7 @@ function makeStagBox(b) {
   lab.className = "lab"; lab.contentEditable = "true"; lab.spellcheck = false;
   lab.textContent = b.lab || LABELS.stag;
   lab.addEventListener("paste", plainPaste);
-  lab.addEventListener("input", changed);
+  lab.addEventListener("input", () => changed());
   const list = document.createElement("div"); list.className = "slines";
   (b.lines || STAG_DEFAULT).forEach(L => list.appendChild(makeLine(L, list)));
   const add = document.createElement("button");
@@ -234,7 +244,7 @@ function makeStagBox(b) {
     const p = last && last.dataset.p === "p1" ? "p2" : "p1";
     const ind = last ? +last.dataset.ind + 1 : 0;
     list.appendChild(makeLine({ p, t: "", ind, hold: false }, list));
-    changed();
+    changed(true);
   };
   box.append(lab, list, add);
   return box;
@@ -258,7 +268,19 @@ function makeBox(b) {
       changed();
     });
   });
-  box.append(lab, txt);
+  const cyc = document.createElement("button");
+  cyc.className = "cyc"; cyc.textContent = "I/II/Both";
+  cyc.title = "Switch box: Part I, Part II, Together";
+  cyc.onclick = () => {
+    const from = box.dataset.k, to = NEXT_PART[from] || "p1";
+    const cur = lab.innerText.trim();
+    if (cur.startsWith(LABELS[from])) lab.textContent = LABELS[to] + cur.slice(LABELS[from].length);
+    box.dataset.k = to;
+    box.className = "box " + to;
+    txt.dataset.ph = PH[to];
+    changed(true);
+  };
+  box.append(lab, txt, cyc);
   return box;
 }
 
@@ -272,10 +294,10 @@ function makeRow(r) {
     const x = document.createElement("button");
     x.textContent = label; x.title = title; x.onclick = fn; ctl.appendChild(x);
   };
-  btn("\u25B2", "Move up", () => { if (row.previousElementSibling) rowsEl.insertBefore(row, row.previousElementSibling); changed(); });
-  btn("\u25BC", "Move down", () => { if (row.nextElementSibling) rowsEl.insertBefore(row.nextElementSibling, row); changed(); });
-  if (r.boxes.length > 1) btn("\u21C4", "Swap sides", () => { row.insertBefore(row.children[1], row.children[0]); changed(); });
-  btn("\u2715", "Delete row", () => { if (confirm("Delete this row?")) { row.remove(); changed(); } });
+  btn("\u25B2", "Move up", () => { if (row.previousElementSibling) rowsEl.insertBefore(row, row.previousElementSibling); changed(true); });
+  btn("\u25BC", "Move down", () => { if (row.nextElementSibling) rowsEl.insertBefore(row.nextElementSibling, row); changed(true); });
+  if (r.boxes.length > 1) btn("\u21C4", "Swap sides", () => { row.insertBefore(row.children[1], row.children[0]); changed(true); });
+  btn("\u2715", "Delete row", () => { if (confirm("Delete this row?")) { row.remove(); changed(true); } });
   row.appendChild(ctl);
   return row;
 }
@@ -345,7 +367,43 @@ function check() {
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(collect())); } catch (e) {}
 }
-function changed() { check(); save(); }
+let hist = [], redoStack = [], pending = null;
+function snap() { return JSON.stringify(collect()); }
+function commit() {
+  clearTimeout(pending); pending = null;
+  const s = snap();
+  if (hist[hist.length - 1] !== s) { hist.push(s); if (hist.length > 200) hist.shift(); redoStack = []; }
+  updateUndo();
+}
+function changed(immediate) {
+  check(); save();
+  clearTimeout(pending);
+  if (immediate) commit(); else pending = setTimeout(commit, 700);
+}
+function restore(s) { render(JSON.parse(s)); save(); updateUndo(); }
+function undo() {
+  if (pending) commit();
+  if (hist.length < 2) return;
+  redoStack.push(hist.pop());
+  restore(hist[hist.length - 1]);
+}
+function redo() {
+  if (pending) commit();
+  if (!redoStack.length) return;
+  const s = redoStack.pop(); hist.push(s); restore(s);
+}
+function updateUndo() {
+  document.getElementById("undoBtn").disabled = hist.length < 2 && !pending;
+  document.getElementById("redoBtn").disabled = !redoStack.length;
+}
+document.getElementById("undoBtn").onclick = undo;
+document.getElementById("redoBtn").onclick = redo;
+document.addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+});
 
 document.getElementById("addBtn").onclick = () => {
   const t = document.getElementById("addType").value;
@@ -353,25 +411,26 @@ document.getElementById("addBtn").onclick = () => {
     ? { boxes: [{ k: "p1" }, { k: "p2" }] }
     : { boxes: [{ k: t }] };
   rowsEl.appendChild(makeRow(r));
-  changed();
+  changed(true);
 };
-document.getElementById("smaller").onclick = () => { fs = Math.max(9, fs - 1); applyFs(); save(); };
-document.getElementById("bigger").onclick = () => { fs = Math.min(30, fs + 1); applyFs(); save(); };
+document.getElementById("smaller").onclick = () => { fs = Math.max(9, fs - 1); applyFs(); changed(true); };
+document.getElementById("bigger").onclick = () => { fs = Math.min(30, fs + 1); applyFs(); changed(true); };
 document.getElementById("fitBtn").onclick = () => {
   fs = 30; applyFs();
   while (fs > 9 && overflowing()) { fs -= 0.5; document.documentElement.style.setProperty("--fs", fs + "px"); }
-  applyFs(); save();
+  applyFs(); changed(true);
 };
 document.getElementById("resetBtn").onclick = () => {
-  if (confirm("Clear everything and start from the blank layout?")) { render(DEFAULT); save(); }
+  if (confirm("Clear everything and start from the blank layout?")) { render(DEFAULT); changed(true); }
 };
 document.getElementById("printBtn").onclick = () => window.print();
 titleEl.addEventListener("paste", plainPaste);
-titleEl.addEventListener("input", changed);
+titleEl.addEventListener("input", () => changed());
 
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
 render(saved && saved.rows ? saved : DEFAULT);
+hist = [snap()]; updateUndo();
 </script>
 </body>
 </html>
