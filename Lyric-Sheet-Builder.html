@@ -64,7 +64,8 @@
   .chipline .tag { font-size: 0.5em; font-weight: bold; margin-right: 8px; vertical-align: middle; }
   .chipline.p1 .tag { color: var(--p1-line); }
   .chipline.p2 .tag { color: var(--p2-line); }
-  .stxt { outline: none; white-space: pre-wrap; display: inline; }
+  .stxt { outline: none; white-space: pre-wrap; display: inline-block; min-width: 8em; cursor: text; }
+  .chipline { cursor: text; }
   .stxt:empty::before { content: attr(data-ph); color: #8a8a8a; font-style: italic; }
   .hold::after { content: ""; display: inline-block; width: 3.2em; height: 0.15em; margin-left: 4px;
                  border-bottom: 2px solid #333; vertical-align: baseline; }
@@ -183,6 +184,13 @@ function makeLine(L, list) {
   txt.addEventListener("paste", plainPaste);
   txt.addEventListener("input", () => { if (txt.innerText.trim() === "") txt.innerHTML = ""; changed(); });
   chip.append(tag, txt);
+  chip.addEventListener("mousedown", e => {
+    if (e.target === txt) return;
+    e.preventDefault();
+    txt.focus();
+    const r = document.createRange(); r.selectNodeContents(txt); r.collapse(false);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  });
   line.appendChild(chip);
 
   const ctl = document.createElement("span"); ctl.className = "lctl";
