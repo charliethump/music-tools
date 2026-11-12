@@ -30,7 +30,7 @@
 
   /* Letter page */
   .page { width: 8.5in; height: 11in; margin: 20px auto; background: #fff; padding: 0.5in;
-          box-shadow: 0 2px 10px rgba(0,0,0,.25); display: flex; flex-direction: column; overflow: hidden; }
+          box-shadow: 0 2px 10px rgba(0,0,0,.25); display: flex; flex-direction: column; overflow: visible; }
   .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
   .title { font-size: 28px; font-weight: bold; color: var(--title); outline: none; flex: 1; }
   .legend { display: flex; gap: 6px; flex-shrink: 0; }
@@ -81,11 +81,16 @@
   .lctl button { font-size: 11px; height: 20px; min-width: 22px; padding: 0 4px; border: 1px solid #aaa;
                  border-radius: 4px; background: #fff; cursor: pointer; }
   .lctl button.on { background: #333; color: #fff; }
+  .lctl .grip { cursor: grab; touch-action: none; font-size: 13px; }
+  .ctl .grip { cursor: grab; touch-action: none; font-size: 13px; }
+  .row.dragging { opacity: .75; outline: 2px dashed #7aa7ff; outline-offset: 3px; border-radius: 9px; }
+  .sline.dragging { opacity: .75; outline: 2px dashed #7aa7ff; outline-offset: 2px; border-radius: 6px; }
+  body.dragging-line, body.dragging-line * { cursor: grabbing !important; user-select: none; }
   .addline { margin-top: 4px; font-size: 11px; padding: 2px 8px; border: 1px dashed #999; border-radius: 4px;
              background: #fff; cursor: pointer; }
 
   /* Row controls (screen only) */
-  .ctl { position: absolute; right: -0.45in; top: 0; display: flex; flex-direction: column; gap: 3px; }
+  .ctl { position: absolute; left: calc(100% + 0.12in); top: 0; display: grid; grid-template-columns: repeat(2, 26px); gap: 3px; }
   .ctl button { width: 26px; height: 22px; font-size: 12px; border: 1px solid #aaa; border-radius: 4px;
                 background: #fff; cursor: pointer; padding: 0; }
   .ctl button:hover { background: #eee; }
@@ -97,7 +102,7 @@
     .bar, .ctl, .help, .lctl, .addline, .cyc { display: none !important; }
     .stxt:empty::before { content: ""; }
     .sline:has(.stxt:empty) { display: none; }
-    .page { margin: 0; box-shadow: none; }
+    .page { margin: 0; box-shadow: none; overflow: hidden; }
     .txt:empty::before { content: ""; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
@@ -204,6 +209,13 @@ function makeLine(L, list) {
   line.appendChild(chip);
 
   const ctl = document.createElement("span"); ctl.className = "lctl";
+  const grip = document.createElement("button");
+  grip.className = "grip"; grip.textContent = "\u2630"; grip.title = "Drag to move this line";
+  grip.addEventListener("pointerdown", e => startDrag(e, line, (list, from, to) => {
+    reindentFrom(list, Math.min(from, to));
+    changed(true);
+  }));
+  ctl.appendChild(grip);
   const b = (label, title, fn) => { const x = document.createElement("button"); x.textContent = label; x.title = title;
     x.onclick = () => { fn(); paint(); changed(true); }; ctl.appendChild(x); return x; };
   const partBtn = b("I/II/Both", "Switch part: Part I, Part II, Both parts", () => { line.dataset.p = NEXT_PART[line.dataset.p] || "p1"; });
@@ -223,8 +235,54 @@ function makeLine(L, list) {
     chip.style.fontSize = "1em";
     holdBtn.className = line.dataset.hold ? "on" : "";
   }
+  line._paint = paint;
   paint();
   return line;
+}
+
+function startDrag(e, line, onDone) {
+  e.preventDefault();
+  const list = line.parentElement;
+  const startOrder = [...list.children];
+  line.classList.add("dragging");
+  document.body.classList.add("dragging-line");
+  const move = ev => {
+    const others = [...list.children].filter(l => l !== line);
+    let before = null;
+    for (const l of others) {
+      const r = l.getBoundingClientRect();
+      if (ev.clientY < r.top + r.height / 2) { before = l; break; }
+    }
+    if (before !== line.nextElementSibling || (!before && list.lastElementChild !== line)) {
+      list.insertBefore(line, before);
+    }
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", up);
+    line.classList.remove("dragging");
+    document.body.classList.remove("dragging-line");
+    const now = [...list.children];
+    if (now.some((l, i) => l !== startOrder[i])) {
+      onDone(list, startOrder.indexOf(line), now.indexOf(line));
+    }
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
+}
+
+// From index i down: each line sits one step further in than the line above.
+// "Both" lines keep their own indent; the next line steps in from there.
+function reindentFrom(list, i) {
+  const lines = [...list.children];
+  for (let k = Math.max(0, i); k < lines.length; k++) {
+    const L = lines[k];
+    if (L.dataset.p === "tg") { L._paint(); continue; }
+    L.dataset.ind = k === 0 ? 0 : Math.min(12, +lines[k - 1].dataset.ind + 1);
+    L._paint();
+  }
 }
 
 function makeStagBox(b) {
@@ -290,6 +348,10 @@ function makeRow(r) {
   r.boxes.forEach(b => row.appendChild(makeBox(b)));
   const ctl = document.createElement("div");
   ctl.className = "ctl";
+  const grip = document.createElement("button");
+  grip.className = "grip"; grip.textContent = "\u2630"; grip.title = "Drag to move this row";
+  grip.addEventListener("pointerdown", e => startDrag(e, row, () => changed(true)));
+  ctl.appendChild(grip);
   const btn = (label, title, fn) => {
     const x = document.createElement("button");
     x.textContent = label; x.title = title; x.onclick = fn; ctl.appendChild(x);
