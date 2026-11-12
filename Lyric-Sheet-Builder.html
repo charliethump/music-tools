@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lyric Sheet Builder</title>
+<style>
+  :root {
+    --p1-line: #2E7D4F; --p1-fill: #E2F2E7;
+    --p2-line: #C0392B; --p2-fill: #FBE3E0;
+    --tg-line: #4E5B66; --tg-fill: #ECEFF2;
+    --title: #1F3A2B;
+    --text: #222;
+    --fs: 17px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #d9dcdf; font-family: Helvetica, Arial, sans-serif; color: var(--text); }
+
+  /* Toolbar (screen only) */
+  .bar { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid #bbb;
+         padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bar button, .bar select { font: inherit; font-size: 14px; padding: 6px 10px; border: 1px solid #999;
+         border-radius: 6px; background: #f7f7f7; cursor: pointer; }
+  .bar button:hover { background: #eee; }
+  .bar .print { background: #2E7D4F; color: #fff; border-color: #2E7D4F; }
+  .bar label { font-size: 14px; }
+  .status { font-size: 14px; margin-left: auto; }
+  .status.over { color: #C0392B; font-weight: bold; }
+  .status.ok { color: #2E7D4F; }
+
+  /* Letter page */
+  .page { width: 8.5in; height: 11in; margin: 20px auto; background: #fff; padding: 0.5in;
+          box-shadow: 0 2px 10px rgba(0,0,0,.25); display: flex; flex-direction: column; overflow: hidden; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .title { font-size: 28px; font-weight: bold; color: var(--title); outline: none; flex: 1; }
+  .legend { display: flex; gap: 6px; flex-shrink: 0; }
+  .chip { font-size: 10px; font-weight: bold; padding: 3px 10px; border-radius: 6px; border: 1.5px solid; }
+
+  .rows { flex: 1; display: flex; flex-direction: column; gap: var(--gap, 12px); }
+  .row { position: relative; display: flex; gap: 10px; }
+  .box { flex: 1; border: 1.5px solid; border-radius: 9px; padding: 8px 12px 10px; min-width: 0; }
+  .box.p1 { border-color: var(--p1-line); background: var(--p1-fill); }
+  .box.p2 { border-color: var(--p2-line); background: var(--p2-fill); }
+  .box.tg { border-color: var(--tg-line); background: var(--tg-fill); }
+  .lab { font-size: 9px; font-weight: bold; margin-bottom: 6px; outline: none; }
+  .p1 .lab, .chip.p1 { color: var(--p1-line); }
+  .p2 .lab, .chip.p2 { color: var(--p2-line); }
+  .tg .lab, .chip.tg { color: var(--tg-line); }
+  .chip.p1 { border-color: var(--p1-line); background: var(--p1-fill); }
+  .chip.p2 { border-color: var(--p2-line); background: var(--p2-fill); }
+  .chip.tg { border-color: var(--tg-line); background: var(--tg-fill); }
+  .txt { font-size: var(--fs); line-height: 1.35; outline: none; white-space: pre-wrap; min-height: 1.35em; }
+  .txt:empty::before { content: attr(data-ph); color: #8a8a8a; font-style: italic; }
+  .txt:focus, .lab:focus, .title:focus { box-shadow: 0 0 0 2px #7aa7ff; border-radius: 3px; }
+
+  /* Staggered box */
+  .box.stag { border-color: var(--tg-line); background: #fff; }
+  .stag .lab { color: var(--tg-line); }
+  .sline { position: relative; display: flex; align-items: center; margin: 3px 0; }
+  .chipline { display: inline-block; max-width: 100%; padding: 2px 10px 3px; border-radius: 6px;
+              border-left: 5px solid; font-size: var(--fs); line-height: 1.3; }
+  .chipline.p1 { background: var(--p1-fill); border-color: var(--p1-line); }
+  .chipline.p2 { background: var(--p2-fill); border-color: var(--p2-line); }
+  .chipline .tag { font-size: 0.5em; font-weight: bold; margin-right: 8px; vertical-align: middle; }
+  .chipline.p1 .tag { color: var(--p1-line); }
+  .chipline.p2 .tag { color: var(--p2-line); }
+  .stxt { outline: none; white-space: pre-wrap; display: inline; }
+  .stxt:empty::before { content: attr(data-ph); color: #8a8a8a; font-style: italic; }
+  .hold::after { content: ""; display: inline-block; width: 3.2em; height: 0.15em; margin-left: 4px;
+                 border-bottom: 2px solid #333; vertical-align: baseline; }
+  .lctl { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: flex; gap: 2px;
+          background: rgba(255,255,255,.9); border-radius: 4px; }
+  .lctl button { font-size: 11px; height: 20px; min-width: 22px; padding: 0 4px; border: 1px solid #aaa;
+                 border-radius: 4px; background: #fff; cursor: pointer; }
+  .lctl button.on { background: #333; color: #fff; }
+  .addline { margin-top: 4px; font-size: 11px; padding: 2px 8px; border: 1px dashed #999; border-radius: 4px;
+             background: #fff; cursor: pointer; }
+
+  /* Row controls (screen only) */
+  .ctl { position: absolute; right: -0.45in; top: 0; display: flex; flex-direction: column; gap: 3px; }
+  .ctl button { width: 26px; height: 22px; font-size: 12px; border: 1px solid #aaa; border-radius: 4px;
+                background: #fff; cursor: pointer; padding: 0; }
+  .ctl button:hover { background: #eee; }
+  .help { max-width: 8.5in; margin: 0 auto 30px; font-size: 13px; color: #333; line-height: 1.5; padding: 0 4px; }
+
+  @page { size: letter portrait; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .bar, .ctl, .help, .lctl, .addline { display: none !important; }
+    .stxt:empty::before { content: ""; }
+    .sline:has(.stxt:empty) { display: none; }
+    .page { margin: 0; box-shadow: none; }
+    .txt:empty::before { content: ""; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <label>Add row:
+    <select id="addType">
+      <option value="tg">Together</option>
+      <option value="p1">Part I</option>
+      <option value="p2">Part II</option>
+      <option value="pair">Part I + Part II side by side</option>
+      <option value="stag">Staggered entrances (Part I / Part II)</option>
+    </select>
+  </label>
+  <button id="addBtn">Add</button>
+  <label>Text size: <button id="smaller">A-</button> <button id="bigger">A+</button></label>
+  <button id="fitBtn">Fit to page</button>
+  <button id="resetBtn">Start over</button>
+  <button class="print" id="printBtn">Print / Save PDF</button>
+  <span class="status" id="status"></span>
+</div>
+
+<div class="page" id="page">
+  <div class="head">
+    <div class="title" contenteditable="true" spellcheck="false" id="title">The Twenty-Fifth Day of December</div>
+    <div class="legend">
+      <span class="chip tg">TOGETHER</span>
+      <span class="chip p1">PART I</span>
+      <span class="chip p2">PART II</span>
+    </div>
+  </div>
+  <div class="rows" id="rows"></div>
+</div>
+
+<div class="help">
+  Click any box to type or paste lyrics. Box labels are editable too (for example, "PART II - LATE ENTRANCE").
+  Use the buttons to the right of each row to move it up, move it down, flip a side-by-side row, or delete it.
+  In a staggered row, each line's buttons switch it between Part I and Part II, indent it less or more, add a held-note line after it, or delete it. "+ Add line" adds the next entrance for the other part, one step further in.
+  "Fit to page" shrinks the text until everything fits on one letter page. Your work saves in this browser automatically.
+  To print, choose Letter, Portrait, Margins: None, and turn on Background graphics.
+</div>
+
+<script>
+const LABELS = { tg: "TOGETHER", p1: "PART I", p2: "PART II", stag: "PART I + PART II - STAGGERED" };
+const PH = {
+  tg: "Paste the section everyone sings",
+  p1: "Paste Part I lyrics",
+  p2: "Paste Part II lyrics",
+  stag: ""
+};
+const TAG = { p1: "I", p2: "II" };
+const STAG_DEFAULT = [
+  { p: "p1", t: "", ind: 0, hold: true },
+  { p: "p2", t: "", ind: 1, hold: true },
+  { p: "p1", t: "", ind: 2, hold: true },
+  { p: "p2", t: "", ind: 3, hold: false }
+];
+const DEFAULT = {
+  title: "The Twenty-Fifth Day of December",
+  fs: 17,
+  rows: [
+    { boxes: [{ k: "p1", lab: "PART I", t: "" }] },
+    { boxes: [{ k: "p2", lab: "PART II", t: "" }] },
+    { boxes: [{ k: "tg", lab: "TOGETHER", t: "" }] },
+    { boxes: [{ k: "p1", lab: "PART I", t: "" }, { k: "p2", lab: "PART II", t: "" }] }
+  ]
+};
+const KEY = "lyricSheetBuilder.v1";
+const rowsEl = document.getElementById("rows");
+const titleEl = document.getElementById("title");
+let fs = DEFAULT.fs;
+
+function plainPaste(e) {
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+  document.execCommand("insertText", false, text);
+}
+
+function makeLine(L, list) {
+  const line = document.createElement("div");
+  line.className = "sline";
+  line.dataset.p = L.p; line.dataset.ind = L.ind || 0; line.dataset.hold = L.hold ? "1" : "";
+  const chip = document.createElement("span");
+  const tag = document.createElement("span"); tag.className = "tag";
+  const txt = document.createElement("span");
+  txt.className = "stxt"; txt.contentEditable = "true";
+  txt.textContent = L.t || "";
+  txt.addEventListener("paste", plainPaste);
+  txt.addEventListener("input", () => { if (txt.innerText.trim() === "") txt.innerHTML = ""; changed(); });
+  chip.append(tag, txt);
+  line.appendChild(chip);
+
+  const ctl = document.createElement("span"); ctl.className = "lctl";
+  const b = (label, title, fn) => { const x = document.createElement("button"); x.textContent = label; x.title = title;
+    x.onclick = () => { fn(); paint(); changed(); }; ctl.appendChild(x); return x; };
+  const partBtn = b("I/II", "Switch part", () => { line.dataset.p = line.dataset.p === "p1" ? "p2" : "p1"; });
+  b("\u2190", "Indent less", () => { line.dataset.ind = Math.max(0, +line.dataset.ind - 1); });
+  b("\u2192", "Indent more", () => { line.dataset.ind = Math.min(12, +line.dataset.ind + 1); });
+  const holdBtn = b("___", "Held note line", () => { line.dataset.hold = line.dataset.hold ? "" : "1"; });
+  b("\u2715", "Delete line", () => { line.remove(); });
+  line.appendChild(ctl);
+
+  function paint() {
+    const p = line.dataset.p;
+    chip.className = "chipline " + p + (line.dataset.hold ? " hold" : "");
+    tag.textContent = TAG[p];
+    txt.dataset.ph = "Part " + TAG[p] + " entrance";
+    line.style.paddingLeft = (+line.dataset.ind * 1.6) + "em";
+    line.style.fontSize = "var(--fs)";
+    chip.style.fontSize = "1em";
+    holdBtn.className = line.dataset.hold ? "on" : "";
+  }
+  paint();
+  return line;
+}
+
+function makeStagBox(b) {
+  const box = document.createElement("div");
+  box.className = "box stag"; box.dataset.k = "stag";
+  const lab = document.createElement("div");
+  lab.className = "lab"; lab.contentEditable = "true"; lab.spellcheck = false;
+  lab.textContent = b.lab || LABELS.stag;
+  lab.addEventListener("paste", plainPaste);
+  lab.addEventListener("input", changed);
+  const list = document.createElement("div"); list.className = "slines";
+  (b.lines || STAG_DEFAULT).forEach(L => list.appendChild(makeLine(L, list)));
+  const add = document.createElement("button");
+  add.className = "addline"; add.textContent = "+ Add line";
+  add.onclick = () => {
+    const last = list.lastElementChild;
+    const p = last && last.dataset.p === "p1" ? "p2" : "p1";
+    const ind = last ? +last.dataset.ind + 1 : 0;
+    list.appendChild(makeLine({ p, t: "", ind, hold: false }, list));
+    changed();
+  };
+  box.append(lab, list, add);
+  return box;
+}
+
+function makeBox(b) {
+  if (b.k === "stag") return makeStagBox(b);
+  const box = document.createElement("div");
+  box.className = "box " + b.k;
+  box.dataset.k = b.k;
+  const lab = document.createElement("div");
+  lab.className = "lab"; lab.contentEditable = "true"; lab.spellcheck = false;
+  lab.textContent = b.lab || LABELS[b.k];
+  const txt = document.createElement("div");
+  txt.className = "txt"; txt.contentEditable = "true"; txt.dataset.ph = PH[b.k];
+  txt.textContent = b.t || "";
+  [lab, txt].forEach(el => {
+    el.addEventListener("paste", plainPaste);
+    el.addEventListener("input", () => {
+      if (el === txt && txt.innerText.trim() === "") txt.innerHTML = "";
+      changed();
+    });
+  });
+  box.append(lab, txt);
+  return box;
+}
+
+function makeRow(r) {
+  const row = document.createElement("div");
+  row.className = "row";
+  r.boxes.forEach(b => row.appendChild(makeBox(b)));
+  const ctl = document.createElement("div");
+  ctl.className = "ctl";
+  const btn = (label, title, fn) => {
+    const x = document.createElement("button");
+    x.textContent = label; x.title = title; x.onclick = fn; ctl.appendChild(x);
+  };
+  btn("\u25B2", "Move up", () => { if (row.previousElementSibling) rowsEl.insertBefore(row, row.previousElementSibling); changed(); });
+  btn("\u25BC", "Move down", () => { if (row.nextElementSibling) rowsEl.insertBefore(row.nextElementSibling, row); changed(); });
+  if (r.boxes.length > 1) btn("\u21C4", "Swap sides", () => { row.insertBefore(row.children[1], row.children[0]); changed(); });
+  btn("\u2715", "Delete row", () => { if (confirm("Delete this row?")) { row.remove(); changed(); } });
+  row.appendChild(ctl);
+  return row;
+}
+
+function collect() {
+  return {
+    title: titleEl.innerText.trim(),
+    fs,
+    rows: [...rowsEl.children].map(row => ({
+      boxes: [...row.querySelectorAll(".box")].map(b => b.dataset.k === "stag" ? ({
+        k: "stag",
+        lab: b.querySelector(".lab").innerText.trim(),
+        lines: [...b.querySelectorAll(".sline")].map(l => ({
+          p: l.dataset.p, ind: +l.dataset.ind, hold: !!l.dataset.hold,
+          t: l.querySelector(".stxt").innerText.replace(/\n+$/, "")
+        }))
+      }) : ({
+        k: b.dataset.k,
+        lab: b.querySelector(".lab").innerText.trim(),
+        t: b.querySelector(".txt").innerText.replace(/\n+$/, "")
+      }))
+    }))
+  };
+}
+
+function render(data) {
+  titleEl.textContent = data.title;
+  fs = data.fs || DEFAULT.fs;
+  rowsEl.innerHTML = "";
+  data.rows.forEach(r => rowsEl.appendChild(makeRow(r)));
+  applyFs();
+}
+
+function applyFs() {
+  document.documentElement.style.setProperty("--fs", fs + "px");
+  check();
+}
+
+function overflowing() {
+  const page = document.getElementById("page");
+  rowsEl.style.flex = "none";
+  const over = page.scrollHeight > page.clientHeight + 1;
+  rowsEl.style.flex = "";
+  return over;
+}
+
+function check() {
+  const st = document.getElementById("status");
+  // spread rows: grow gap to fill the page a bit, capped
+  rowsEl.style.setProperty("--gap", "10px");
+  if (overflowing()) {
+    st.textContent = "Too long for one page - try Fit to page";
+    st.className = "status over";
+  } else {
+    let g = 10;
+    while (g < 22) {
+      rowsEl.style.setProperty("--gap", (g + 1) + "px");
+      if (overflowing()) break;
+      g++;
+    }
+    rowsEl.style.setProperty("--gap", g + "px");
+    st.textContent = "Fits on one page (" + fs + " pt text)";
+    st.className = "status ok";
+  }
+}
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(collect())); } catch (e) {}
+}
+function changed() { check(); save(); }
+
+document.getElementById("addBtn").onclick = () => {
+  const t = document.getElementById("addType").value;
+  const r = t === "pair"
+    ? { boxes: [{ k: "p1" }, { k: "p2" }] }
+    : { boxes: [{ k: t }] };
+  rowsEl.appendChild(makeRow(r));
+  changed();
+};
+document.getElementById("smaller").onclick = () => { fs = Math.max(9, fs - 1); applyFs(); save(); };
+document.getElementById("bigger").onclick = () => { fs = Math.min(30, fs + 1); applyFs(); save(); };
+document.getElementById("fitBtn").onclick = () => {
+  fs = 30; applyFs();
+  while (fs > 9 && overflowing()) { fs -= 0.5; document.documentElement.style.setProperty("--fs", fs + "px"); }
+  applyFs(); save();
+};
+document.getElementById("resetBtn").onclick = () => {
+  if (confirm("Clear everything and start from the blank layout?")) { render(DEFAULT); save(); }
+};
+document.getElementById("printBtn").onclick = () => window.print();
+titleEl.addEventListener("paste", plainPaste);
+titleEl.addEventListener("input", changed);
+
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+render(saved && saved.rows ? saved : DEFAULT);
+</script>
+</body>
+</html>
