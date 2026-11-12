@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lyric Sheet Builder</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='10' fill='%23fff' stroke='%23333' stroke-width='3'/%3E%3Crect x='11' y='12' width='42' height='10' rx='3' fill='%234E5B66'/%3E%3Crect x='11' y='27' width='42' height='10' rx='3' fill='%232E7D4F'/%3E%3Crect x='11' y='42' width='42' height='10' rx='3' fill='%23C0392B'/%3E%3C/svg%3E">
 <style>
   :root {
     --p1-line: #2E7D4F; --p1-fill: #E2F2E7;
@@ -27,6 +28,22 @@
   .status { font-size: 14px; margin-left: auto; }
   .status.over { color: #C0392B; font-weight: bold; }
   .status.ok { color: #2E7D4F; }
+
+  /* Color panel */
+  .colors { display: none; flex-basis: 100%; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 2px; }
+  .colors.open { display: block; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .preset { display: flex; align-items: center; gap: 8px; font: inherit; font-size: 13px; padding: 6px 10px;
+            border: 1px solid #999; border-radius: 6px; background: #fff; cursor: pointer; }
+  .preset:hover { background: #f2f2f2; }
+  .preset.active { border: 2px solid #222; padding: 5px 9px; }
+  .sw { display: inline-flex; gap: 3px; }
+  .sw i { display: block; width: 16px; height: 16px; border-radius: 3px; border: 2px solid; }
+  .custom { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; }
+  .custom fieldset { border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; margin: 0; display: flex; gap: 10px; align-items: center; }
+  .custom legend { font-weight: bold; padding: 0 4px; }
+  .custom label { display: flex; align-items: center; gap: 4px; }
+  .custom input[type=color] { width: 34px; height: 24px; padding: 0; border: 1px solid #999; border-radius: 4px; cursor: pointer; }
 
   /* Letter page */
   .page { width: 8.5in; height: 11in; margin: 20px auto; background: #fff; padding: 0.5in;
@@ -99,7 +116,7 @@
   @page { size: letter portrait; margin: 0; }
   @media print {
     body { background: #fff; }
-    .bar, .ctl, .help, .lctl, .addline, .cyc { display: none !important; }
+    .bar, .colors, .ctl, .help, .lctl, .addline, .cyc { display: none !important; }
     .stxt:empty::before { content: ""; }
     .sline:has(.stxt:empty) { display: none; }
     .page { margin: 0; box-shadow: none; overflow: hidden; }
@@ -126,13 +143,28 @@
   <button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
   <button id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
   <button id="resetBtn">Start over</button>
+  <button id="colorsBtn" aria-expanded="false">Colors</button>
   <button class="print" id="printBtn">Print / Save PDF</button>
   <span class="status" id="status"></span>
+<div class="colors" id="colorsPanel">
+  <div class="presets" id="presets"></div>
+  <div class="custom">
+    <fieldset><legend>Together</legend>
+      <label>Border <input type="color" data-k="tg" data-f="line"></label>
+      <label>Fill <input type="color" data-k="tg" data-f="fill"></label></fieldset>
+    <fieldset><legend>Part I</legend>
+      <label>Border <input type="color" data-k="p1" data-f="line"></label>
+      <label>Fill <input type="color" data-k="p1" data-f="fill"></label></fieldset>
+    <fieldset><legend>Part II</legend>
+      <label>Border <input type="color" data-k="p2" data-f="line"></label>
+      <label>Fill <input type="color" data-k="p2" data-f="fill"></label></fieldset>
+  </div>
+</div>
 </div>
 
 <div class="page" id="page">
   <div class="head">
-    <div class="title" contenteditable="true" spellcheck="false" id="title">The Twenty-Fifth Day of December</div>
+    <div class="title" contenteditable="true" spellcheck="false" id="title">Song Title</div>
     <div class="legend">
       <span class="chip tg">TOGETHER</span>
       <span class="chip p1">PART I</span>
@@ -166,16 +198,24 @@ const STAG_DEFAULT = [
   { p: "p1", t: "", ind: 2, hold: true },
   { p: "p2", t: "", ind: 3, hold: false }
 ];
+const PRESETS = [
+  { name: "Green & red", c: { tg: { line: "#4E5B66", fill: "#ECEFF2" }, p1: { line: "#2E7D4F", fill: "#E2F2E7" }, p2: { line: "#C0392B", fill: "#FBE3E0" } } },
+  { name: "Purple, teal & orange", c: { tg: { line: "#6B46A8", fill: "#EEE6F7" }, p1: { line: "#2A8A8A", fill: "#E1F2F1" }, p2: { line: "#D9701F", fill: "#FCE9DB" } } },
+  { name: "Blue & gold", c: { tg: { line: "#555555", fill: "#EEEEEE" }, p1: { line: "#1F5FA8", fill: "#E3EDF8" }, p2: { line: "#A86B00", fill: "#FBF0D9" } } },
+  { name: "Colorblind-friendly", c: { tg: { line: "#333333", fill: "#F0F0F0" }, p1: { line: "#0072B2", fill: "#DCEEF8" }, p2: { line: "#D55E00", fill: "#FBE6D6" } } },
+  { name: "Black & white (copier)", c: { tg: { line: "#000000", fill: "#E0E0E0" }, p1: { line: "#000000", fill: "#FFFFFF" }, p2: { line: "#000000", fill: "#BDBDBD" } } }
+];
 const DEFAULT = {
-  title: "The Twenty-Fifth Day of December",
+  title: "Song Title",
   fs: 17,
+  colors: PRESETS[0].c,
   rows: [
-    { boxes: [{ k: "p1", lab: "PART I", t: "" }] },
-    { boxes: [{ k: "p2", lab: "PART II", t: "" }] },
     { boxes: [{ k: "tg", lab: "TOGETHER", t: "" }] },
-    { boxes: [{ k: "p1", lab: "PART I", t: "" }, { k: "p2", lab: "PART II", t: "" }] }
+    { boxes: [{ k: "p1", lab: "PART I", t: "" }] },
+    { boxes: [{ k: "p2", lab: "PART II", t: "" }] }
   ]
 };
+let colors = JSON.parse(JSON.stringify(DEFAULT.colors));
 const KEY = "lyricSheetBuilder.v1";
 const rowsEl = document.getElementById("rows");
 const titleEl = document.getElementById("title");
@@ -368,6 +408,7 @@ function collect() {
   return {
     title: titleEl.innerText.trim(),
     fs,
+    colors,
     rows: [...rowsEl.children].map(row => ({
       boxes: [...row.querySelectorAll(".box")].map(b => b.dataset.k === "stag" ? ({
         k: "stag",
@@ -385,9 +426,53 @@ function collect() {
   };
 }
 
+function applyColors() {
+  const root = document.documentElement.style;
+  ["tg", "p1", "p2"].forEach(k => {
+    root.setProperty("--" + k + "-line", colors[k].line);
+    root.setProperty("--" + k + "-fill", colors[k].fill);
+  });
+  root.setProperty("--title", colors.tg.line);
+  document.querySelectorAll(".custom input[type=color]").forEach(inp => {
+    inp.value = colors[inp.dataset.k][inp.dataset.f].toLowerCase();
+  });
+  const cur = JSON.stringify(colors).toLowerCase();
+  document.querySelectorAll(".preset").forEach((b, i) => {
+    b.classList.toggle("active", JSON.stringify(PRESETS[i].c).toLowerCase() === cur);
+  });
+}
+
+(function buildPresets() {
+  const wrap = document.getElementById("presets");
+  PRESETS.forEach(pr => {
+    const b = document.createElement("button");
+    b.className = "preset";
+    const sw = document.createElement("span"); sw.className = "sw";
+    ["tg", "p1", "p2"].forEach(k => {
+      const i = document.createElement("i");
+      i.style.background = pr.c[k].fill; i.style.borderColor = pr.c[k].line;
+      sw.appendChild(i);
+    });
+    b.append(sw, document.createTextNode(pr.name));
+    b.onclick = () => { colors = JSON.parse(JSON.stringify(pr.c)); applyColors(); changed(true); };
+    wrap.appendChild(b);
+  });
+  document.querySelectorAll(".custom input[type=color]").forEach(inp => {
+    inp.addEventListener("input", () => { colors[inp.dataset.k][inp.dataset.f] = inp.value; applyColors(); save(); });
+    inp.addEventListener("change", () => changed(true));
+  });
+  const btn = document.getElementById("colorsBtn"), panel = document.getElementById("colorsPanel");
+  btn.onclick = () => {
+    const open = panel.classList.toggle("open");
+    btn.setAttribute("aria-expanded", open);
+  };
+})();
+
 function render(data) {
   titleEl.textContent = data.title;
   fs = data.fs || DEFAULT.fs;
+  colors = JSON.parse(JSON.stringify(data.colors || DEFAULT.colors));
+  applyColors();
   rowsEl.innerHTML = "";
   data.rows.forEach(r => rowsEl.appendChild(makeRow(r)));
   applyFs();
