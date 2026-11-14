@@ -253,6 +253,7 @@ const SFX_VOLUME = 0.35;           // page flips, whooshes, boing
 const AMB_VOLUME = 0.5;            // background sounds
 const AMB_DUCK = 0.18;             // background level while the drummer plays
 const AUTO_FULLSCREEN = true;      // go full screen on the first press (browsers don't allow it before a click or key)
+const END_FADE_SEC = 10;           // background sounds fade out over this long when The End appears
 const FLIP_MS = 950;
 const T = { cardMove: 600, rise: 650, fall: 600 };
 const HIT = '#ff7a00', ECHO = '#1e88e5';
@@ -1085,9 +1086,24 @@ function showEnd() {
   e.animate([{ transform: 'translate(-50%,-250%) rotate(-6deg)' }, { transform: 'translate(-50%,-50%) rotate(2deg)', offset: .6 }, { transform: 'translate(-50%,-62%) rotate(-1deg)', offset: .8 }, { transform: 'translate(-50%,-50%) rotate(0)' }], { duration: 1000, easing: 'ease-out' });
   const ctx = getCtx(), t = ctx.currentTime + 0.55;
   instrument('bell', t, 0); instrument('bell', t + 0.25, 1); instrument('bell', t + 0.5, 0, true);
+  fadeAmbience(END_FADE_SEC);
+}
+// Background sounds fade out smoothly (The End); restoreAmbience brings them back
+function fadeAmbience(sec) {
+  if (!audioCtx) return;
+  const g = ambBus.gain, now = audioCtx.currentTime, from = Math.max(g.value, 0.0001), n = 128, curve = new Float32Array(n);
+  for (let k = 0; k < n; k++) { const x = k / (n - 1); curve[k] = from * (1 - x) * (1 - x); }   // eases out, gentle at the tail
+  g.cancelScheduledValues(now); g.setValueCurveAtTime(curve, now, sec);
+}
+function restoreAmbience() {
+  if (!audioCtx) return;
+  const g = ambBus.gain, now = audioCtx.currentTime;
+  g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.setTargetAtTime(st.ambOn ? AMB_VOLUME : 0, now, 0.4);
 }
 function clearEnd(quick) {
-  const e = $('theEnd'); e.style.opacity = 0;
+  const e = $('theEnd');
+  if (e.style.opacity === '1') restoreAmbience();   // leaving The End: background comes back
+  e.style.opacity = 0;
   if ($('whiteVeil').style.opacity !== '0') $('whiteVeil').style.opacity = 0;
 }
 
