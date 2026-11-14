@@ -609,7 +609,7 @@ function hideBubble() { bubbleEl.style.display = 'none'; }
    Playing a rhythm
    ===================================================================== */
 const play = { timers: [], sources: [] };
-function at(ms, fn) { play.timers.push(setTimeout(fn, Math.max(0, ms))); }
+function at(ms, fn) { play.timers.push(setTimeout(fn, Math.max(0, ms - performance.now()))); }  // ms = performance.now() time
 function hitsOf(rhythm) {
   const out = [], rests = [];
   parseRhythm(rhythm).forEach((t, i) => {
