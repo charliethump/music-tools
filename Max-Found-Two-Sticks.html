@@ -1012,7 +1012,7 @@ async function runFinale() {
   veil(0.3);
   await drummerRise();
   if (token !== st.playToken) return;
-  setBubble('Listen!', 'listen');
+  if (st.finaleEcho) setBubble('Listen!', 'listen');   // no Listen! when the class isn't echoing
   const R = finaleRects();
   cardEl.innerHTML = cardSVG(list[0].rhythm); placeCard(cardEl, R.main);
   cardEl.classList.add('lift'); cardEl.style.display = 'block'; st.cardWhere = 'finale';
@@ -1070,8 +1070,6 @@ async function runFinale() {
   });
   // Big finish
   at(msAt(t) - 90, hideBubble);
-  instrument('click', t, 0, true); instrument('click', t + 0.08, 1, true);
-  at(msAt(t) - hitLead(beatMs), () => { drummer.hit('L', beatMs); drummer.hit('R', beatMs); });
   at(msAt(t) + 300, () => drummer.pose('neutral'));
   await sleep(msAt(t) - performance.now() + 1600);
   if (token !== st.playToken) return;
