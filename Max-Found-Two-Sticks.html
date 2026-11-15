@@ -359,7 +359,7 @@ const PAGES = [
   { name: 'p. 22-23', rhythm: 'du shh du-de du-de',      mode: 'echo',      marks: [0.7891, 0.2481, 0.9536, 0.3396], card: [0.773, 0.2, 0.979, 0.391],       amb: { city: .4 }, door: true },
   { name: 'p. 24-25', glow: [0.667, 0.28, 13, 24, 'yellow'], rhythm: 'du-de du-de du-de du-de', mode: 'volunteer', marks: [0.0942, 0.2413, 0.2686, 0.3513], card: [0.0767, 0.1965, 0.2881, 0.4014], amb: { train: 1, city: .35 }, fadeOnCard: { train: 6 } },   // train fades out over 6 s once the rhythm starts
   { name: 'p. 26-27', rhythm: 'du du-de du shh',         mode: 'echo',      marks: [0.7637, 0.1873, 0.9507, 0.2742], card: [0.7349, 0.1201, 0.9604, 0.3263], amb: { city: .3, band: 'approach' } },
-  { name: 'p. 28-29', amb: { city: .3, band: 'pass' } },
+  { name: 'p. 28-29', story: 'catch', amb: { city: .3, band: 'pass' } },
   { name: 'p. 30', single: 'left', story: 'finale', amb: { city: .3, birds: 1 } },
 ];
 // glow: [x, y, width %, height %, color] on the spread (color 'yellow' or default red) - Max on the steps (p. 2-3), his dad in the train window (p. 24-25)
@@ -576,6 +576,7 @@ async function next() {
     if (st.step < 3) { windStep(st.step); st.step++; return; }
     clearWind();
   }
+  if (p.story === 'catch' && st.step === 0 && !SUB) { st.step = 1; catchSticks(); return; }   // not in the sub version
   if (p.story === 'finale') {          // forward = straight to The End (P plays the finale first)
     if (st.step < 2) { st.step = 2; $('endChoice').style.display = 'none'; showEnd(); }
     return;
@@ -999,6 +1000,14 @@ function hideGlow() {
   g.getAnimations().forEach(a => a.cancel());
   g.style.opacity = 0;
   g.animate([{ opacity: from }, { opacity: 0 }], { duration: 450, easing: 'ease-out' });
+}
+// p. 28-29: dad tosses Max his spare sticks - whoosh, two clacks and a glint (normal version only)
+function catchSticks() {
+  sfx.whoosh(0.9);
+  const g = $('glint');
+  g.animate([{ opacity: 0 }, { opacity: .9, offset: .3 }, { opacity: 0 }], { duration: 1400 });
+  const ctx = getCtx(), t = ctx.currentTime;
+  instrument('click', t + 0.75, 0); instrument('click', t + 0.95, 1);
 }
 function windStep(s) {
   const lines = document.querySelectorAll('.wline');
