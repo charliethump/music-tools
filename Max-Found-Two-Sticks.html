@@ -297,6 +297,8 @@ const SFX_VOLUME = 0.35;           // page flips, whooshes, boing
 const AMB_VOLUME = 0.5;            // background sounds
 const AMB_DUCK = 0.18;             // background level while the drummer plays
 const AUTO_FULLSCREEN = true;      // go full screen on the first press (browsers don't allow it before a click or key)
+const VOLUNTEER_AMB = 0.5;         // background level while a volunteer has the card (share of normal)
+const VOLUNTEER_FADE_SEC = 5;      // how long that fade takes
 const END_FADE_SEC = 10;           // background sounds fade out over this long when The End appears
 const FLIP_MS = 950;
 
@@ -534,6 +536,7 @@ function enterPage() {
   if (p.story === 'sun') $('sun').animate([{ opacity: 0 }, { opacity: .85, offset: .35 }, { opacity: .25 }], { duration: 4000, fill: 'forwards' });
 }
 function leavePage() {
+  ambFocusTo(1, 0.8);                  // background back to full after a volunteer page
   clearTimeout(st.doorTimer);
   hideCard();
   showPatch(false);
@@ -909,6 +912,7 @@ async function finishPlay(p) {
   if (SHOULDERS_AFTER_PLAY) showShoulders();
 }
 async function volunteerEnlarge() {
+  ambFocusTo(VOLUNTEER_AMB, VOLUNTEER_FADE_SEC);
   st.busy = true;
   hideShoulders();
   veil(0.35);
@@ -1192,14 +1196,15 @@ function clearEnd(quick) {
    ===================================================================== */
 let doorBuf = null, clickBuf = null, bellsBuf = null, cityBufs = null, windBuf = null, pigeonBufs = null;
 const recBufs = {};
-let audioCtx = null, instrBus, sfxBus, ambBus, reverbIn, noiseBuf, brownBuf;
+let audioCtx = null, instrBus, sfxBus, ambBus, ambFocus, reverbIn, noiseBuf, brownBuf;
 function getCtx() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const c = audioCtx;
     instrBus = c.createGain(); instrBus.gain.value = INSTR_VOLUME; instrBus.connect(c.destination);
     sfxBus = c.createGain(); sfxBus.gain.value = SFX_VOLUME; sfxBus.connect(c.destination);
-    ambBus = c.createGain(); ambBus.gain.value = st.ambOn ? AMB_VOLUME : 0; ambBus.connect(c.destination);
+    ambBus = c.createGain(); ambBus.gain.value = st.ambOn ? AMB_VOLUME : 0;
+    ambFocus = c.createGain(); ambBus.connect(ambFocus).connect(c.destination);   // lowered while a volunteer has the card
     // small generated room for bells / bottles / band
     const conv = c.createConvolver(), len = c.sampleRate * 2.2, ir = c.createBuffer(2, len, c.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
@@ -1523,6 +1528,12 @@ function playDoor() {
   const src = audioCtx.createBufferSource(), g = audioCtx.createGain();
   src.buffer = doorBuf; g.gain.value = DOOR_LEVEL;
   src.connect(g).connect(ambBus); src.start();
+}
+function ambFocusTo(level, sec) {
+  if (!audioCtx) return;
+  const g = ambFocus.gain, now = audioCtx.currentTime;
+  if (Math.abs(g.value - level) < 0.001) return;
+  g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(level, now + sec);
 }
 function pigeonFlight(delay = 0) {
   if (!pigeonBufs || !audioCtx) return;
