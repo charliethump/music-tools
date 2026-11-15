@@ -288,7 +288,7 @@ const COUNT_IMAGES = [   // lettered count-off words, same order as COUNT_OFF; e
 const PATTERN_BEATS = 4;
 const ECHO_TICK = 0.35;            // quiet beat click during the "your turn" bar (0 = silent)
 const SHOULDERS_AFTER_PLAY = false; // the "sticks on shoulders" only appears with the S key
-const STICK_W = 4;                 // stick thickness (Stick Notation 'Line thickness', default 4)
+const STICK_W = 6;                 // stick thickness (Stick Notation 'Line thickness'; the tool's default is 4)
 const CARDS_START_HIDDEN = false;  // true once clean page photos (no taped cards) are swapped in
 const USE_PATCH = false;          // white box over taped cards (off: the page photos have the taped cards painted out)
 const HOME_CARD_SIZE = 1.0;       // card width on the page, as a share of the card area
@@ -357,7 +357,7 @@ const PAGES = [
   { name: 'p. 18-19', rhythm: 'du du du-de du',          mode: 'echo',      marks: [0.2544, 0.2783, 0.4229, 0.3792], card: [0.2285, 0.2408, 0.4453, 0.4373], amb: { city: .4 } },
   { name: 'p. 20-21', rhythm: 'du-de du du-de du',       mode: 'volunteer', marks: [0.7212, 0.4786, 0.8823, 0.5801], card: [0.699, 0.442, 0.908, 0.627],     amb: { city: .25, bells: 1, flutter: .3 } },
   { name: 'p. 22-23', rhythm: 'du shh du-de du-de',      mode: 'echo',      marks: [0.7891, 0.2481, 0.9536, 0.3396], card: [0.773, 0.2, 0.979, 0.391],       amb: { city: .4 }, door: true },
-  { name: 'p. 24-25', glow: [0.667, 0.28, 13, 24, 'yellow'], rhythm: 'du-de du-de du-de du-de', mode: 'volunteer', marks: [0.0942, 0.2413, 0.2686, 0.3513], card: [0.0767, 0.1965, 0.2881, 0.4014], amb: { train: 1 } },
+  { name: 'p. 24-25', glow: [0.667, 0.28, 13, 24, 'yellow'], rhythm: 'du-de du-de du-de du-de', mode: 'volunteer', marks: [0.0942, 0.2413, 0.2686, 0.3513], card: [0.0767, 0.1965, 0.2881, 0.4014], amb: { train: 1 }, fadeOnCard: { train: 6 } },   // train fades out over 6 s once the rhythm starts
   { name: 'p. 26-27', rhythm: 'du du-de du shh',         mode: 'echo',      marks: [0.7637, 0.1873, 0.9507, 0.2742], card: [0.7349, 0.1201, 0.9604, 0.3263], amb: { city: .3, band: 'approach' } },
   { name: 'p. 28-29', amb: { city: .3, band: 'pass' } },
   { name: 'p. 30', single: 'left', story: 'finale', amb: { city: .3, birds: 1 } },
@@ -561,6 +561,7 @@ async function next() {
   if (p.glow && !SUB && !st.glowOn && st.step === 0) { st.glowOn = true; showGlow(p.glow); return; }
   if (p.rhythm) {
     const mode = st.modes[st.idx];
+    if (st.step === 0) cardFades(p);
     if (SUB && st.step === 0) { st.step = 1; await subRhythm(); return; }
     if (st.step === 0) {
       hideGlow();
@@ -595,6 +596,7 @@ function resetPage() {
   const i = st.idx; leavePage(); st.step = 0;
   const p = PAGES[i];
   if (p.rhythm) showHomeCard(!SUB);
+  if (p.fadeOnCard && audioCtx) setAmbience(p.amb || {});   // bring a faded layer (the train) back
   if (p.story === 'rain') rainStart();
   if (p.story === 'wind' && audioCtx) {   // undo the gust / calm
     const L = amb.layers.wind; if (L && L.lp) L.lp.frequency.setTargetAtTime(2600, audioCtx.currentTime, 0.5);
@@ -1534,6 +1536,15 @@ function ambFocusTo(level, sec) {
   const g = ambFocus.gain, now = audioCtx.currentTime;
   if (Math.abs(g.value - level) < 0.001) return;
   g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(level, now + sec);
+}
+// Background layers that fade away when a page's rhythm starts (fadeOnCard: { layer: seconds })
+function cardFades(p) {
+  if (!p.fadeOnCard || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  for (const name in p.fadeOnCard) {
+    const L = amb.layers[name]; if (!L) continue;
+    const g = L.out.gain; g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0.0001, now + p.fadeOnCard[name]);
+  }
 }
 function pigeonFlight(delay = 0) {
   if (!pigeonBufs || !audioCtx) return;
