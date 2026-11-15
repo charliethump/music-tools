@@ -123,7 +123,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 #subHeard{color:#8fd18f;font-size:16px;align-self:center}
 body.sub .faint{display:none!important}
 body.sub #subHomeBtn{display:block!important}
-#subHomeBtn{left:6px;bottom:4px}
+#subHomeBtn{left:6px;bottom:4px;display:none}   /* only in the sub version */
 #subNav{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:30;display:none;gap:10px}
 body.sub.reading #subNav{display:flex}
 #subNav button{font:bold 15px Arial,sans-serif;border-radius:9px;padding:6px 14px;opacity:.92;cursor:pointer;border:1px solid #555;background:#2a2d33;color:#eee;box-shadow:0 .4vh 1.2vh rgba(0,0,0,.4);white-space:nowrap}
@@ -693,8 +693,8 @@ function lightSym(i, part, color, ms) {
   const g = cardEl.querySelector(`.sym[data-b="${i}"]`); if (!g) return;
   const paths = part === null ? g.querySelectorAll('rect,path') : g.querySelectorAll('.h' + part);
   paths.forEach(p => { if (p.tagName === 'path') p.style.stroke = color; else p.style.fill = color; });
-  g.style.transformBox = 'fill-box'; g.style.transformOrigin = '50% 100%';
-  g.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)', offset: .25 }, { transform: 'scale(1)' }], { duration: ms });
+  g.style.transformBox = 'fill-box'; g.style.transformOrigin = '50% 50%';   // grow from the middle so the top stays inside the card
+  g.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.1)', offset: .25 }, { transform: 'scale(1)' }], { duration: ms });
   setTimeout(() => paths.forEach(p => { p.style.stroke = ''; p.style.fill = ''; }), ms * 0.92);
 }
 
@@ -847,7 +847,7 @@ function scheduleBar(rhythm, sound, t0, nowCtx, nowMs, opts = {}) {
   rests.forEach(b => {
     const ms = nowMs + (t0 + b * beat - nowCtx) * 1000;
     at(ms, () => { lightSym(b, null, opts.color || HIT, beatMs * 0.9); if (!opts.silent) drummer.pose('shh'); });
-    if (!opts.silent && !rests.includes(b + 1) && b + 1 < PATTERN_BEATS) at(ms + beatMs * 0.85, () => drummer.pose('neutral'));
+    if (!opts.silent && !rests.includes(b + 1)) at(ms + beatMs * 0.85, () => drummer.pose('neutral'));   // also after a final shh, so he's neutral before he drops away
   });
   for (let b = 0; b < PATTERN_BEATS; b++) {
     const ms = nowMs + (t0 + b * beat - nowCtx) * 1000;
