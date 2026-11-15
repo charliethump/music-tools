@@ -124,6 +124,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 body.sub .faint{display:none!important}
 body.sub #subHomeBtn{display:block!important}
 #subHomeBtn{left:6px;bottom:4px}
+#subNav{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:30;display:none;gap:14px}
+body.sub.reading #subNav{display:flex}
+#subNav button{font:bold 20px Arial,sans-serif;border-radius:12px;padding:11px 22px;cursor:pointer;border:1px solid #555;background:#2a2d33;color:#eee;box-shadow:0 .4vh 1.2vh rgba(0,0,0,.4);white-space:nowrap}
+#subNav button.primary{background:#ffc83d;color:#222;border-color:#ffc83d}
+#subNav button.echo{background:#1e88e5;color:#fff;border-color:#1e88e5}
+#subNav button:disabled{opacity:.35;cursor:default}
+#subNav button[hidden]{display:none}
+#subReturn{display:none}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:18px;z-index:60;background:#1a1c20}
 </style>
 </head>
@@ -139,7 +147,7 @@ body.sub #subHomeBtn{display:block!important}
         <h2>Before you start</h2><ol id="subBefore"></ol>
         <div class="sub-btns" style="margin:0 0 12px 22px"><button id="subTest" class="sp-btn">🔊 Test the sound</button><span id="subHeard"></span></div>
         <ol id="subBefore2" start="2"></ol>
-        <div class="sub-btns"><button id="subGo" class="sp-btn primary big">Start the book ▶</button></div>
+        <div class="sub-btns"><button id="subGo" class="sp-btn primary big">Start the book ▶</button><button id="subReturn" class="sp-btn big"></button></div>
         <h2>When you finish</h2><ol id="subAfter"></ol>
       </div>
     </div>
@@ -229,6 +237,7 @@ body.sub #subHomeBtn{display:block!important}
 <div id="toast"></div>
 <div id="pages"><div id="pagesGrid"></div></div>
 <button class="faint" id="setupBtn" title="Setup page">⚙ setup</button>
+<div id="subNav"><button id="subPrev">◀ Previous page</button><button id="subNext" class="primary">Next page ▶</button></div>
 <button class="faint" id="subHomeBtn" title="Back to the start screen">↩ start screen</button>
 <div id="splash">
   <div class="sp-wrap">
@@ -302,11 +311,11 @@ const SUB_TEXT = {
   summary: 'This interactive book can be read aloud to first- and second-graders. You read the book out loud. On the rhythm pages, a drummer on the screen plays a rhythm and the class echoes it back on their rhythm sticks.',
   how: [
     'Read the words on each page out loud.',
-    '<b>Next:</b> press <b>→</b> or the <b>space bar</b>, or click the right side of the screen. <b>Back:</b> press <b>←</b> or click the left side.',
-    'On some pages, pressing <b>→</b> brings up a rhythm card instead of turning the page. A second later the drummer comes up on his own. He counts “1, 2, ready, go!” and plays the rhythm while the sign says <b>Listen!</b> Students listen with sticks still.',
-    'Then the sign says <b>Echo!</b> He counts off again and the class plays the rhythm back on their sticks with him. When he drops away, press <b>→</b> to turn the page.',
+    'Click <b>Next page</b> or <b>Previous page</b> at the bottom of the screen. (The arrow keys and space bar work too.)',
+    'On some pages the button says <b>Echo Max’s rhythm</b> instead. Click it: a rhythm card appears, and a second later the drummer comes up on his own. He counts “1, 2, ready, go!” and plays the rhythm while the sign says <b>Listen!</b> Students listen with sticks still.',
+    'Then the sign says <b>Echo!</b> He counts off again and the class plays the rhythm back on their sticks with him. When he drops away, click <b>Next page</b>.',
     'To stop the drummer early, click him or press <b>Esc</b>.',
-    'The book ends with <b>The End</b>.'
+    'The book ends with <b>The End</b>. The <b>↩ start screen</b> button (bottom left) brings you back here any time.'
   ],
   before: [
     'Turn the computer’s sound on and up, then click <b>Test the sound</b>.',
@@ -417,9 +426,10 @@ const BOOK_AR = 2048 / 1300;
 const bookEl = $('book'), shiftEl = $('shift');
 function layout() {
   const W = innerWidth, H = innerHeight;
+  const navH = SUB ? 76 : 0;            // sub version: room for the Previous / Next buttons
   let bw = W * 0.96, bh = bw / BOOK_AR;
-  if (bh > H * 0.93) { bh = H * 0.93; bw = bh * BOOK_AR; }
-  Object.assign(bookEl.style, { width: bw + 'px', height: bh + 'px', left: (W - bw) / 2 + 'px', top: (H - bh) / 2 + 'px' });
+  if (bh > H * 0.93 - navH) { bh = H * 0.93 - navH; bw = bh * BOOK_AR; }
+  Object.assign(bookEl.style, { width: bw + 'px', height: bh + 'px', left: (W - bw) / 2 + 'px', top: (H - navH - bh) / 2 + 'px' });
   bookEl.style.perspective = (bw * 1.7) + 'px';
   shiftEl.style.transform = `translateX(${shiftFor(st.idx) * 100}%)`;
   const dh = H * 0.8;
@@ -568,6 +578,7 @@ function back() {
   if (st.flipping) return;
   if (st.busy) { stopAll(); return; }
   const p = PAGES[st.idx];
+  if (SUB) { if (p.story === 'finale' && st.step > 0) resetPage(); else if (st.idx > 0) flipTo(st.idx - 1); return; }
   if (st.step > 0 || st.glowOn) { resetPage(); return; }
   if (st.idx > 0) flipTo(st.idx - 1);
 }
@@ -1673,12 +1684,34 @@ $('spSubCopy').onclick = async () => {
 };
 function openSubStart() {
   if (st.busy) stopAll(true);
+  const i = st.idx, mid = i > 0 && i < PAGES.length - 1;   // not the cover or the last page
+  $('subReturn').style.display = mid ? 'inline-block' : 'none';
+  if (mid) $('subReturn').textContent = '◀ Back to ' + (PAGES[i].name.startsWith('p.') ? 'page ' + PAGES[i].name.slice(3) : 'the ' + PAGES[i].name.toLowerCase() + ' page');
+  document.body.classList.remove('reading');
   $('subStart').style.display = 'block'; $('subStart').scrollTop = 0;
 }
-function subBegin() {
-  $('subStart').style.display = 'none';
-  initAudio();
+function subClose() { $('subStart').style.display = 'none'; document.body.classList.add('reading'); initAudio(); }
+function subBegin() {                       // always from the cover
+  subClose();
+  if (st.idx !== 0) jumpTo(0); else { stopAll(true); resetPage(); }
 }
+$('subReturn').onclick = subClose;
+// Previous / Next buttons under the book
+function subNavUpdate() {
+  if (!SUB) return;
+  const p = PAGES[st.idx], prev = $('subPrev'), nxt = $('subNext'), busy = st.busy || st.flipping;
+  let label = 'Next page ▶', cls = 'primary', act = 'next';
+  if (p.rhythm && st.step === 0) { label = '🥁 Echo Max’s rhythm'; cls = 'echo'; }
+  else if (p.story === 'finale') { if (st.step === 0) label = 'The End ▶'; else { label = 'Back to the start screen'; act = 'home'; } }
+  if (nxt.textContent !== label) nxt.textContent = label;
+  nxt.className = cls; nxt.dataset.act = act;
+  nxt.disabled = busy; prev.disabled = busy;
+  prev.hidden = st.idx === 0;
+}
+$('subNav').addEventListener('click', e => e.stopPropagation());
+$('subNext').onclick = () => { $('subNext').dataset.act === 'home' ? openSubStart() : next(); subNavUpdate(); };
+$('subPrev').onclick = () => { initAudio(); back(); subNavUpdate(); };
+if (SUB) setInterval(subNavUpdate, 120);
 $('subSummary').textContent = SUB_TEXT.summary;
 $('subHow').innerHTML = SUB_TEXT.how.map(t => `<li>${t}</li>`).join('');
 $('subBefore').innerHTML = `<li>${SUB_TEXT.before[0]}</li>`;   // Test the sound button sits under step 1
