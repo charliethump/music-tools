@@ -1,0 +1,1569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seating Charts</title>
+<style>
+:root{
+  --bg:#1b1e24; --bg2:#23272f; --panel:#f6f5f2; --ink:#1d2129; --muted:#6b7280; --line:#d9d6cf;
+  --accent:#2f6fd6; --accent2:#e2ecfb; --warn:#b45309; --warnbg:#fef3c7; --bad:#b42318; --badbg:#fde8e7; --ok:#15803d; --okbg:#dcfce7;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:#e8eaee;font-family:var(--ui);font-size:14px}
+button{font:inherit;cursor:pointer}
+input,select,textarea{font:inherit}
+.hidden{display:none!important}
+
+/* ---------- top bar ---------- */
+#bar{height:46px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#111318;border-bottom:1px solid #2c313a}
+#bar .brand{font-weight:700;letter-spacing:.2px;margin-right:6px;white-space:nowrap}
+.tb{background:#262b34;color:#e8eaee;border:1px solid #363c47;border-radius:7px;padding:6px 11px;white-space:nowrap}
+.tb:hover{background:#2f3540}
+.tb.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tb.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tb.primary:hover{background:#2a62bf}
+.tb:disabled{opacity:.45;cursor:default}
+.spacer{flex:1}
+#status{font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid #3a404b;color:#c8ccd4;white-space:nowrap;cursor:pointer;background:#1b1f26}
+#status.ok{border-color:#2f6b45;color:#9fe0b4}
+#status.warn{border-color:#8a6116;color:#f6d38b}
+#status.bad{border-color:#8f2a22;color:#f4b0aa}
+#demoBanner{background:#7c3aed;color:#fff;text-align:center;font-size:13px;padding:5px;font-weight:600}
+
+/* ---------- layout ---------- */
+#main{position:absolute;top:46px;left:0;right:0;bottom:0;display:flex}
+body.demo #main{top:73px}
+#viewArea{flex:1;min-width:0;position:relative;display:flex;flex-direction:column}
+#drawer{width:430px;background:var(--panel);color:var(--ink);border-left:1px solid #c9c5bc;display:flex;flex-direction:column;min-height:0}
+#drawer .tabs{display:flex;flex-wrap:wrap;gap:2px;padding:8px 8px 0;border-bottom:1px solid var(--line);background:#ecebe6}
+#drawer .tabs button{border:1px solid transparent;border-bottom:none;background:none;padding:7px 9px;border-radius:7px 7px 0 0;color:#4b5260;font-size:13px}
+#drawer .tabs button.on{background:var(--panel);border-color:var(--line);color:var(--ink);font-weight:600;margin-bottom:-1px}
+#drawer .tabs .x{margin-left:auto;font-size:18px;line-height:1;padding:4px 8px}
+#drawerBody{flex:1;overflow:auto;padding:14px}
+
+/* ---------- home ---------- */
+#home{flex:1;overflow:auto;padding:22px 26px 40px}
+#home h1{font-size:22px;margin:0 0 4px}
+#home .sub{color:#a3a9b5;margin-bottom:18px}
+.school{margin-bottom:26px}
+.school h2{font-size:15px;text-transform:uppercase;letter-spacing:1.2px;color:#9aa3b2;margin:0 0 10px;border-bottom:1px solid #2f343d;padding-bottom:6px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.card{background:var(--bg2);border:1px solid #333944;border-radius:11px;overflow:hidden;cursor:pointer;transition:border-color .12s}
+.card:hover{border-color:#5a7fc0}
+.card .thumb{background:#0f1115;display:flex;justify-content:center}
+.card .meta{padding:9px 11px 11px}
+.card .t{font-weight:650;font-size:14px;margin-bottom:3px}
+.card .d{color:#a3a9b5;font-size:12px;line-height:1.5}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:#323844;color:#cfd4dc;margin-right:4px}
+.pill.warn{background:#4a3a12;color:#f6d38b}
+.pill.now{background:#1d4ed8;color:#fff}
+.welcome{max-width:640px;margin:50px auto;background:var(--bg2);border:1px solid #333944;border-radius:14px;padding:26px 28px}
+.welcome h1{margin-top:0}
+.welcome p{color:#c3c8d1;line-height:1.55}
+.welcome .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+
+/* ---------- class view ---------- */
+#classView{flex:1;display:flex;flex-direction:column;min-height:0}
+#classTools{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#171a20;border-bottom:1px solid #2a2f37;flex-wrap:wrap}
+#classTools .ct{font-weight:650;margin-right:6px}
+#classTools .sep{width:1px;height:22px;background:#333a45;margin:0 4px}
+#verBanner{background:var(--warnbg);color:#5b3b05;padding:6px 12px;font-size:13px;display:flex;gap:10px;align-items:center}
+#verBanner button{border:1px solid #c9a253;background:#fff8e6;border-radius:6px;padding:3px 9px}
+#stageWrap{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#tray{background:#171a20;border-top:1px solid #2a2f37;padding:6px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px}
+#tray .chip{background:#2b313b;border:1px solid #3b4250;color:#e8eaee;border-radius:999px;padding:3px 10px}
+#tray .chip.on{background:var(--accent);border-color:var(--accent)}
+#hint{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;background:rgba(15,17,21,.85);color:#e8eaee;padding:6px 12px;border-radius:8px;font-size:13px;pointer-events:none;white-space:nowrap}
+
+/* fullscreen / presenting */
+body.present #bar, body.present #classTools, body.present #tray, body.present #drawer, body.present #verBanner, body.present #hint{display:none!important}
+body.present #main{top:0!important}
+body.present #demoBanner{display:none}
+body.present{background:#000}
+body.present #stageWrap{background:#000}
+
+/* ---------- stage ---------- */
+.stage{position:relative;background-size:100% 100%;background-repeat:no-repeat;overflow:hidden;font-family:Arial,Helvetica,sans-serif;user-select:none;flex:none}
+.st-title{position:absolute;left:2.1%;top:1.6%;font-weight:700;color:#000;font-size:calc(var(--sw)*0.046);line-height:1.15;white-space:nowrap}
+.st-ver,.st-rev{position:absolute;bottom:1.1%;font-weight:700;font-style:italic;font-size:calc(var(--sw)*0.0185)}
+.st-ver{left:1.4%}
+.st-rev{right:1.4%}
+.st-cap{position:absolute;left:8.6%;top:85.3%;font-size:calc(var(--sw)*0.0245);color:#111}
+.spot{position:absolute;transform:translate(-50%,-50%);text-align:center;color:#fff;font-weight:700;line-height:1.05;
+  text-shadow:0 0 calc(var(--sw)*0.003) rgba(0,0,0,.65),0 0 calc(var(--sw)*0.006) rgba(0,0,0,.35);white-space:nowrap;display:flex;align-items:center;justify-content:center}
+.spot .nm{display:block}
+.stage.editing .spot{cursor:pointer}
+.stage.editing .spot::before{content:"";position:absolute;inset:-14% -6%;border-radius:calc(var(--sw)*0.008);border:1.5px dashed rgba(255,255,255,.55);background:rgba(0,0,0,.12)}
+.stage .spot.empty .nm{opacity:.75}
+.stage .spot.off{opacity:.55}
+.stage .spot.off::before{border-style:dotted;background:rgba(0,0,0,.28)}
+.stage .spot.sel::before{border:2.5px solid #ffd54a;background:rgba(255,213,74,.25)}
+.stage .spot.pick::before{border:2.5px solid #4ade80;background:rgba(74,222,128,.3)}
+.stage .spot.nb::before{border:2.5px solid #60a5fa;background:rgba(96,165,250,.3)}
+.stage .spot.hl::before{content:"";position:absolute;inset:-22% -10%;border-radius:calc(var(--sw)*0.01);border:calc(var(--sw)*0.004) solid #ffd54a;background:rgba(255,213,74,.25);display:block}
+.stage .badges{position:absolute;top:100%;left:50%;transform:translateX(-50%);display:flex;gap:2px;margin-top:2px;pointer-events:none}
+.stage .badge{font-family:var(--ui);font-size:max(9px,calc(var(--sw)*0.0105));font-weight:700;background:#111;color:#ffd54a;border-radius:3px;padding:0 3px;text-shadow:none;line-height:1.35}
+.stage .badge.lock{color:#fff;background:#b42318}
+
+/* Bop or Flop */
+.bopStage{position:relative;display:flex;background:#cfcfcf;flex:none;overflow:hidden}
+.bopPanel{flex:1;min-width:0;display:flex;flex-direction:column;gap:2.2%;padding:2.4% 2.2%;background:linear-gradient(180deg,#1d2230,#151924);font-family:Arial,Helvetica,sans-serif;color:#fff}
+.bopVideo{position:relative;width:100%;aspect-ratio:16/9;background:#05070b;border-radius:calc(var(--bh)*0.012);overflow:hidden;flex:none;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.bopVideo iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.bopCover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4%;background:radial-gradient(circle at 50% 40%,#2b3550,#0b0e15)}
+.bopCover .big{font-weight:800;font-size:calc(var(--bh)*0.052);letter-spacing:.5px}
+.bopCover .big .b{color:#4ade80}.bopCover .big .f{color:#f87171}
+.bopCover .small{font-size:calc(var(--bh)*0.022);color:#9aa3b2}
+.bopCard{background:#f3f3f1;color:#111;border-radius:calc(var(--bh)*0.012);padding:4% 6%;flex:none}
+.bopCard .row{display:flex;gap:4%;font-size:calc(var(--bh)*0.03);line-height:1.25;margin:2.2% 0;align-items:baseline}
+.bopCard .k{font-weight:700;flex:none;width:36%;text-align:right;color:#333}
+.bopCard .v{flex:1;min-width:0}
+.bopCard .v.hid{color:#9aa0a6;letter-spacing:2px}
+.bopBy{text-align:center}
+.bopBy .k{font-weight:700;font-size:calc(var(--bh)*0.032);width:auto;text-align:center;color:#111}
+.bopBy .v{font-weight:800;font-size:calc(var(--bh)*0.05);margin-top:1%;min-height:1.2em}
+.bopBy .v.hid{color:#9aa0a6}
+.bopStep{margin-top:auto;font-size:calc(var(--bh)*0.018);color:#7e8796;text-align:center}
+body.present .bopStep{visibility:hidden}
+
+/* ---------- drawer content ---------- */
+.dsec{margin-bottom:18px}
+.dsec h3{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:#5b6270;margin:0 0 8px}
+.dsec p.note{color:var(--muted);font-size:12.5px;line-height:1.45;margin:6px 0}
+.btn{background:#fff;border:1px solid #c7c3ba;border-radius:7px;padding:6px 11px;color:var(--ink)}
+.btn:hover{background:#f0eee9}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#2a62bf}
+.btn.danger{color:var(--bad);border-color:#e3b2ad}
+.btn.sm{padding:3px 8px;font-size:12.5px}
+.btn.on{background:var(--accent2);border-color:var(--accent);color:#1e4fa3}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:3px;margin-bottom:9px}
+.field label{font-size:12px;color:#5b6270;font-weight:600}
+.inp{border:1px solid #c7c3ba;border-radius:6px;padding:6px 8px;background:#fff;color:var(--ink);min-width:0}
+.inp:focus{outline:2px solid #9cc0f5;outline-offset:0}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{text-align:left;font-size:11.5px;color:#5b6270;font-weight:600;border-bottom:1px solid var(--line);padding:5px 4px}
+table.t td{border-bottom:1px solid #e7e4dd;padding:4px;vertical-align:middle}
+table.t input.inp{padding:3px 6px;width:100%}
+.msg{padding:8px 10px;border-radius:7px;font-size:13px;line-height:1.4;margin:6px 0}
+.msg.warn{background:var(--warnbg);color:#6b4407}
+.msg.bad{background:var(--badbg);color:#7a1b13}
+.msg.ok{background:var(--okbg);color:#14532d}
+.msg.info{background:var(--accent2);color:#1e3a6b}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.zchip{border:1px solid #c7c3ba;border-radius:999px;padding:2px 9px;font-size:12.5px;background:#fff}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.rule{display:flex;gap:8px;align-items:center;border-bottom:1px solid #e7e4dd;padding:6px 0}
+.rule span{flex:1}
+.vlist{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vitem{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;cursor:pointer}
+.vitem:hover{border-color:var(--accent)}
+.vitem .cap{padding:4px 7px;font-size:12px;display:flex;justify-content:space-between}
+.vitem.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+
+/* ---------- modal ---------- */
+#modalBack{position:fixed;inset:0;background:rgba(5,7,10,.62);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+#modal{background:var(--panel);color:var(--ink);border-radius:12px;max-width:960px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#modal .mh{display:flex;align-items:center;padding:13px 16px;border-bottom:1px solid var(--line)}
+#modal .mh h2{margin:0;font-size:17px;flex:1}
+#modal .mb{padding:16px;overflow:auto}
+#modal .mf{padding:11px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+details.cls{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#fff}
+details.cls summary{padding:8px 11px;cursor:pointer;font-weight:600}
+details.cls .inner{padding:4px 12px 12px}
+@media (max-width:900px){#drawer{width:100%;position:absolute;inset:0;z-index:20}}
+</style>
+</head>
+<body>
+<div id="demoBanner" class="hidden">DEMO MODE - fake names - nothing here is saved. <button class="tb" style="margin-left:8px;padding:2px 9px" data-act="exitDemo">Exit demo</button></div>
+<div id="bar">
+  <span class="brand">Seating Charts</span>
+  <button class="tb" data-act="home">Classes</button>
+  <button class="tb" data-act="now" title="Jump to the class the schedule says is on now">Now</button>
+  <button class="tb" id="autoBtn" data-act="toggleAuto" title="Automatically show the scheduled class">Auto: on</button>
+  <span class="spacer"></span>
+  <span id="status" data-act="dataMenu">Loading...</span>
+  <button class="tb" data-act="dataMenu">Data and settings</button>
+  <button class="tb" data-act="present" title="Full screen (F)">Full screen</button>
+</div>
+<div id="main">
+  <div id="viewArea">
+    <div id="home"></div>
+    <div id="classView" class="hidden">
+      <div id="classTools"></div>
+      <div id="verBanner" class="hidden"></div>
+      <div id="stageWrap"></div>
+      <div id="tray" class="hidden"></div>
+    </div>
+  </div>
+  <div id="drawer" class="hidden">
+    <div class="tabs" id="drawerTabs"></div>
+    <div id="drawerBody"></div>
+  </div>
+</div>
+<div id="modalBack" class="hidden"><div id="modal"><div class="mh"><h2 id="mTitle"></h2><button class="btn sm" data-act="closeModal">Close</button></div><div class="mb" id="mBody"></div><div class="mf" id="mFoot"></div></div></div>
+<input type="file" id="fileInput" accept=".json,application/json" class="hidden">
+<input type="file" id="csvInput" accept=".csv,text/csv" class="hidden">
+
+<script>
+"use strict";
+/* =====================================================================
+   Seating Charts - standalone classroom seating tool
+   All student data stays on this computer: in a JSON data file you pick
+   and in this browser's storage. Nothing is sent anywhere.
+   ===================================================================== */
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = p => p + Math.random().toString(36).slice(2, 10);
+const norm = s => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+const DAYS = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const DAYS_LONG = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const GRADE_ORDER = {'5': 0, '4': 1, '3': 2, '2': 3, '1': 4, 'K': 5};
+const NAME_FONT = 0.0215;       // name size as a fraction of chart width
+const DEFAULT_FACTOR = 2.3;
+
+let DATA = null;          // the live data
+let REAL = null;          // real data parked while demo mode is on
+let DEMO = false;
+
+const UI = {
+  view: 'home', classId: null, viewVersion: null, drawer: null,
+  tool: 'none', sel: new Set(), pick: null, nbSpot: null,
+  bopView: {}, bopStep: 0, override: null, histStudent: null
+};
+
+/* ---------------- browser storage (IndexedDB) ---------------- */
+const IDB = {
+  db: null,
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('seatingCharts', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => { this.db = r.result; res(this.db); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async get(k) { const db = await this.open(); return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  async set(k, v) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); }); },
+  async del(k) { const db = await this.open(); return new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').delete(k); t.oncomplete = () => res(); }); }
+};
+
+/* ---------------- data file ---------------- */
+const FILE = {
+  supported: 'showOpenFilePicker' in window,
+  handle: null, connected: false, needsReconnect: false, dirty: false, saving: false, lastError: '',
+  name() { return this.handle ? this.handle.name : ''; },
+  async init() {
+    try { this.handle = await IDB.get('fileHandle') || null; } catch (e) { this.handle = null; }
+    try { this.dirty = !!(await IDB.get('dirty')); } catch (e) {}
+    if (!this.handle) return;
+    try {
+      const p = await this.handle.queryPermission({mode: 'readwrite'});
+      if (p === 'granted') await this.afterPermission();
+      else this.needsReconnect = true;
+    } catch (e) { this.needsReconnect = true; }
+  },
+  async reconnect() {
+    if (!this.handle) return this.openPicker();
+    try {
+      const p = await this.handle.requestPermission({mode: 'readwrite'});
+      if (p !== 'granted') { toast('Permission was not granted, so changes stay in this browser for now.'); return; }
+      await this.afterPermission();
+      renderAll();
+    } catch (e) { toast('Could not reconnect: ' + e.message); }
+  },
+  async readFile() {
+    const f = await this.handle.getFile();
+    const txt = await f.text();
+    return JSON.parse(txt);
+  },
+  async afterPermission() {
+    this.needsReconnect = false;
+    let fileData = null;
+    try { fileData = await this.readFile(); } catch (e) { fileData = null; }
+    this.connected = true;
+    if (fileData && fileData.app === 'seating-chart') {
+      if (!DATA) { DATA = upgrade(fileData); await IDB.set('data', DATA); }
+      else {
+        const fileT = Date.parse(fileData.savedAt || 0), cacheT = Date.parse(DATA.savedAt || 0);
+        if (this.dirty && cacheT > fileT) {
+          await this.write();      // local edits are newer: push them to the file
+        } else if (fileT > cacheT && this.dirty) {
+          if (confirm('The data file was changed somewhere else, and this browser also has changes that were never saved to the file.\n\nOK = use the data file (lose this browser\'s unsaved changes)\nCancel = keep this browser\'s version and overwrite the file')) {
+            DATA = upgrade(fileData); await IDB.set('data', DATA); this.setDirty(false);
+          } else await this.write();
+        } else if (fileT >= cacheT) {
+          DATA = upgrade(fileData); await IDB.set('data', DATA); this.setDirty(false);
+        } else await this.write();
+      }
+    } else if (DATA) {
+      await this.write();
+    }
+  },
+  async openPicker() {
+    if (!this.supported) { $('#fileInput').click(); return; }
+    try {
+      const [h] = await window.showOpenFilePicker({types: [{description: 'Seating chart data', accept: {'application/json': ['.json']}}]});
+      const p = await h.requestPermission({mode: 'readwrite'});
+      const txt = await (await h.getFile()).text();
+      const d = JSON.parse(txt);
+      if (d.app !== 'seating-chart') throw new Error('That file is not a seating chart data file.');
+      this.handle = h; await IDB.set('fileHandle', h);
+      DATA = upgrade(d); await IDB.set('data', DATA);
+      this.connected = p === 'granted'; this.needsReconnect = !this.connected; this.setDirty(false);
+      if (this.connected && !d.savedAt) await this.write();
+      afterDataLoaded();
+    } catch (e) { if (e.name !== 'AbortError') toast('Could not open: ' + e.message); }
+  },
+  async createNew(seed) {
+    if (!this.supported) { DATA = seed; await IDB.set('data', DATA); download(); afterDataLoaded(); return; }
+    try {
+      const h = await window.showSaveFilePicker({suggestedName: 'seating-data.json', types: [{description: 'Seating chart data', accept: {'application/json': ['.json']}}]});
+      this.handle = h; await IDB.set('fileHandle', h);
+      DATA = seed; this.connected = true; this.needsReconnect = false;
+      await this.write(); await IDB.set('data', DATA);
+      afterDataLoaded();
+    } catch (e) { if (e.name !== 'AbortError') toast('Could not create the file: ' + e.message); }
+  },
+  async write() {
+    if (!this.handle || !this.connected || DEMO) return;
+    this.saving = true; renderStatus();
+    try {
+      const w = await this.handle.createWritable();
+      await w.write(JSON.stringify(DATA, null, 1));
+      await w.close();
+      this.setDirty(false); this.lastError = '';
+    } catch (e) {
+      this.lastError = e.message; this.connected = false; this.needsReconnect = true;
+    }
+    this.saving = false; renderStatus();
+  },
+  setDirty(v) { this.dirty = v; IDB.set('dirty', v).catch(() => {}); },
+  async disconnect() { this.handle = null; this.connected = false; this.needsReconnect = false; await IDB.del('fileHandle'); renderStatus(); }
+};
+
+let saveTimer = null;
+function save() {
+  if (!DATA || DEMO) return;
+  DATA.savedAt = new Date().toISOString();
+  FILE.setDirty(true);
+  clearTimeout(saveTimer);
+  renderStatus();
+  saveTimer = setTimeout(async () => {
+    try { await IDB.set('data', DATA); } catch (e) {}
+    if (FILE.connected) await FILE.write();
+    renderStatus();
+  }, 500);
+}
+
+function download() {
+  const blob = new Blob([JSON.stringify(DATA, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  const d = new Date();
+  a.href = URL.createObjectURL(blob);
+  a.download = 'seating-data-backup-' + d.toISOString().slice(0, 10) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function upgrade(d) {
+  d.settings = Object.assign({autoSchedule: true, flipMinutes: 5, schools: ['SRS', 'EWS']}, d.settings || {});
+  d.layouts = d.layouts || {};
+  d.classes = d.classes || [];
+  for (const c of d.classes) {
+    c.spots = c.spots || []; c.students = c.students || []; c.rules = c.rules || [];
+    c.versions = c.versions || []; c.schedule = c.schedule || [];
+    if (c.neighborFactor == null) c.neighborFactor = DEFAULT_FACTOR;
+    if (c.bop) { c.bop.songs = c.bop.songs || []; if (!c.bop.defaultView) c.bop.defaultView = 'bop'; }
+  }
+  return d;
+}
+
+/* ---------------- helpers: classes, spots, names ---------------- */
+const getClass = id => DATA && DATA.classes.find(c => c.id === id);
+const curClass = () => getClass(UI.classId);
+const layoutOf = c => DATA.layouts[c.layout];
+function spotGeo(c, id) { const L = layoutOf(c); return L && L.spots.find(s => s.id === id); }
+function activeSpots(c) { return c.spots.map(s => Object.assign({}, spotGeo(c, s.id) || {}, s)).filter(s => s.x != null); }
+const latest = c => c.versions[c.versions.length - 1] || null;
+function shownVersion(c) {
+  if (UI.viewVersion != null) return c.versions.find(v => v.n === UI.viewVersion) || latest(c);
+  return latest(c);
+}
+const studentById = (c, id) => c.students.find(s => s.id === id);
+const activeStudents = c => c.students.filter(s => s.active);
+
+function displayNames(c) {
+  const out = {};
+  const pool = c.students.filter(s => s.active || true);
+  const groups = {};
+  for (const s of pool) {
+    if (s.preferred) { out[s.id] = s.preferred; continue; }
+    if (!s.linked && s.chartName) { out[s.id] = s.chartName; continue; }
+    const k = norm(s.first);
+    (groups[k] = groups[k] || []).push(s);
+  }
+  for (const k in groups) {
+    const g = groups[k].filter(s => s.active);
+    const inactive = groups[k].filter(s => !s.active);
+    for (const s of inactive) out[s.id] = s.first + (s.last ? ' ' + s.last[0] + '.' : '');
+    if (g.length <= 1) { for (const s of g) out[s.id] = s.first; continue; }
+    const byInit = {};
+    for (const s of g) { const i = norm((s.last || '')[0] || ''); (byInit[i] = byInit[i] || []).push(s); }
+    for (const i in byInit) {
+      const gg = byInit[i];
+      for (const s of gg) out[s.id] = gg.length > 1 ? (s.first + ' ' + (s.last || '')).trim() : (s.first + ' ' + (s.last ? s.last[0] + '.' : '')).trim();
+    }
+  }
+  return out;
+}
+
+function fmtDate(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-').map(Number); return `${m}/${d}/${String(y).slice(2)}`; }
+function todayISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+function fmtTime(t) { let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')}`; }
+function schedText(c) { return c.schedule.map(s => `${DAYS[s.day]} ${fmtTime(s.start)}-${fmtTime(s.end)}`).join(', ') || 'Not scheduled'; }
+
+/* text measuring, so names shrink or wrap the way the slides did */
+const measureCtx = document.createElement('canvas').getContext('2d');
+function textW(t) { measureCtx.font = 'bold 100px Arial, Helvetica, sans-serif'; return measureCtx.measureText(t).width / 100; } // width in "em"
+function nameFit(name, spotW) {
+  // returns {lines, scale}; all relative to chart width so it does not depend on screen size
+  const maxW = Math.max(spotW * 1.28, 7.5) / 100;
+  const one = textW(name) * NAME_FONT;
+  if (one <= maxW) return {lines: [name], scale: 1};
+  const parts = name.split(' ');
+  if (parts.length > 1) {
+    let best = null;
+    for (let i = 1; i < parts.length; i++) {
+      const a = parts.slice(0, i).join(' '), b = parts.slice(i).join(' ');
+      const w = Math.max(textW(a), textW(b)) * NAME_FONT;
+      if (!best || w < best.w) best = {w, lines: [a, b]};
+    }
+    return {lines: best.lines, scale: Math.min(1, maxW / best.w)};
+  }
+  return {lines: [name], scale: Math.max(.55, maxW / one)};
+}
+
+/* ---------------- stage rendering ---------------- */
+function renderStage(c, version, opts = {}) {
+  const L = layoutOf(c);
+  const W = opts.width;
+  const H = W * L.aspect[1] / L.aspect[0];
+  const el = document.createElement('div');
+  el.className = 'stage' + (opts.editing ? ' editing' : '');
+  el.style.cssText = `--sw:${W}px;width:${W}px;height:${H}px;background-image:url("${L.bg}")`;
+  const names = displayNames(c);
+  const assign = version ? version.assign : {};
+  const ink = L.footerInk || '#000';
+  let html = `<div class="st-title">${esc(c.title)}</div>`;
+  const classSpots = new Map(c.spots.map(s => [s.id, s]));
+  const nbSet = opts.neighbors || null;
+  const list = opts.showAllTemplate ? L.spots : activeSpots(c);
+  for (const g of list) {
+    const cs = classSpots.get(g.id);
+    const on = !!cs;
+    const sid = on ? assign[g.id] : null;
+    const st = sid ? studentById(c, sid) : null;
+    let nm = st ? (names[sid] || '?') : '';
+    let cls = 'spot';
+    if (!on) cls += ' off';
+    if (on && !st) cls += ' empty';
+    if (opts.selected && opts.selected.has(g.id)) cls += ' sel';
+    if (opts.pick && opts.pick.spot === g.id) cls += ' pick';
+    if (nbSet && nbSet.has(g.id)) cls += ' nb';
+    if (opts.highlight && opts.highlight === g.id) cls += ' hl';
+    if (!st && !opts.editing && !opts.highlight) continue;
+    const label = st ? nm : (opts.editing ? (on ? '–' : '+') : '\u00a0');
+    const fit = nameFit(label, g.w || 10);
+    const fs = `calc(var(--sw) * ${(NAME_FONT * fit.scale).toFixed(5)})`;
+    const inner = fit.lines.map(l => `<span class="nm">${esc(l)}</span>`).join('');
+    let badges = '';
+    if (opts.editing && on) {
+      const b = (cs.zones || []).map(z => `<span class="badge">${esc(z)}</span>`).join('') + (cs.lock ? '<span class="badge lock">LOCK</span>' : '');
+      if (b) badges = `<span class="badges">${b}</span>`;
+    }
+    html += `<div class="${cls}" data-spot="${esc(g.id)}" style="left:${g.x}%;top:${g.y}%;min-width:${Math.max(g.w || 8, 5) * .8}%;font-size:${fs};flex-direction:column">${inner}${badges}</div>`;
+  }
+  if (version) {
+    html += `<div class="st-ver" style="color:${ink}">v${version.n}</div><div class="st-rev" style="color:${ink}">Revised ${fmtDate(version.date)}</div>`;
+  }
+  if (c.caption) html += `<div class="st-cap">${esc(c.caption)}</div>`;
+  el.innerHTML = html;
+  return el;
+}
+
+/* ---------------- Bop or Flop ---------------- */
+function currentSong(c) { if (!c.bop) return null; return c.bop.songs.find(s => s.id === c.bop.currentSongId) || null; }
+function ytInfo(url) {
+  if (!url) return null;
+  const s = String(url).trim();
+  let id = null, start = 0;
+  let m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([A-Za-z0-9_-]{11})/);
+  if (m) id = m[1]; else if (/^[A-Za-z0-9_-]{11}$/.test(s)) id = s;
+  const t = s.match(/[?&](?:t|start)=(\d+h)?(\d+m)?(\d+)s?/);
+  if (t) start = (parseInt(t[1]) || 0) * 3600 + (parseInt(t[2]) || 0) * 60 + (parseInt(t[3]) || 0);
+  return id ? {id, start} : null;
+}
+function suggestedByName(c, song) {
+  if (!song || !song.suggestedBy) return '';
+  if (song.suggestedBy.kind === 'student') { const n = displayNames(c)[song.suggestedBy.id]; return n || '(student)'; }
+  return song.suggestedBy.name || '';
+}
+function renderBop(c, version, availW, availH) {
+  // 16:9 box: chart on the left at full height, panel on the right
+  let H = Math.min(availH, availW * 9 / 16), W = H * 16 / 9;
+  const L = layoutOf(c);
+  const chartW = H * L.aspect[0] / L.aspect[1];
+  const box = document.createElement('div');
+  box.className = 'bopStage';
+  box.style.cssText = `width:${W}px;height:${H}px;--bh:${H}px`;
+  const editing = UI.tool !== 'none' && UI.viewVersion == null;
+  const st = renderStage(c, version, {width: chartW, editing, selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)});
+  box.appendChild(st);
+  const song = currentSong(c);
+  const step = UI.bopStep;
+  const yt = song ? ytInfo(song.youtube) : null;
+  const panel = document.createElement('div');
+  panel.className = 'bopPanel';
+  const hid = '???';
+  const showInfo = step >= 1;
+  let video;
+  if (song && yt && step >= 1) {
+    video = `<iframe src="https://www.youtube.com/embed/${yt.id}?autoplay=1&rel=0&modestbranding=1&playsinline=1${yt.start ? '&start=' + yt.start : ''}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen title="Song video"></iframe>`;
+  } else {
+    video = `<div class="bopCover"><div class="big"><span class="b">Bop</span> or <span class="f">Flop</span>?</div><div class="small">${song ? (yt ? 'Press next to play' : 'No video link for this song') : 'No song set for today'}</div></div>`;
+  }
+  const v = (k) => showInfo && song ? esc(k === 'song' ? (song.song ? `"${song.song}"` : '') : song[k] || '') : hid;
+  panel.innerHTML = `
+    <div class="bopVideo">${video}</div>
+    <div class="bopCard">
+      <div class="row"><span class="k">Artist:</span><span class="v ${showInfo ? '' : 'hid'}">${v('artist')}</span></div>
+      <div class="row"><span class="k">Song:</span><span class="v ${showInfo ? '' : 'hid'}">${v('song')}</span></div>
+      <div class="row"><span class="k">Year:</span><span class="v ${showInfo ? '' : 'hid'}">${v('year')}</span></div>
+      <div class="row"><span class="k">Country:</span><span class="v ${showInfo ? '' : 'hid'}">${v('country')}</span></div>
+      <div class="row"><span class="k">Genre:</span><span class="v ${showInfo ? '' : 'hid'}">${v('genre')}</span></div>
+    </div>
+    <div class="bopCard bopBy"><div class="k">Suggested by:</div><div class="v ${step >= 2 ? '' : 'hid'}">${step >= 2 ? esc(suggestedByName(c, song)) : hid}</div></div>
+    <div class="bopStep">${song ? ['Next: play video and show song info', 'Next: reveal who suggested it', 'Next: go to the next class'][Math.min(step, 2)] : 'Add a song in Edit, Bop or Flop'}</div>`;
+  box.appendChild(panel);
+  return box;
+}
+function bopActive(c) { if (!c || !c.bop || !c.bop.enabled) return false; const v = UI.bopView[c.id]; return v ? v === 'bop' : c.bop.defaultView === 'bop'; }
+
+/* ---------------- adjacency (for keep-apart rules) ---------------- */
+function adjacency(c, spots) {
+  const L = layoutOf(c);
+  const P = spots.map(s => [s.x / 100 * L.aspect[0], s.y / 100 * L.aspect[1]]);
+  const n = P.length;
+  if (n < 2) return {adj: P.map(() => P.map(() => false)), cutoff: 0};
+  const D = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1])));
+  const nearest = D.map((row, i) => Math.min(...row.filter((_, j) => j !== i)));
+  const sorted = nearest.slice().sort((a, b) => a - b);
+  const cutoff = sorted[Math.floor(sorted.length / 2)] * (c.neighborFactor || DEFAULT_FACTOR);
+  return {adj: D.map((row, i) => row.map((d, j) => i !== j && d <= cutoff)), cutoff};
+}
+function nbSet(c) {
+  if (UI.tool !== 'neighbors' || !UI.nbSpot) return null;
+  const sp = activeSpots(c);
+  const i = sp.findIndex(s => s.id === UI.nbSpot);
+  if (i < 0) return null;
+  const {adj} = adjacency(c, sp);
+  return new Set(sp.filter((_, j) => adj[i][j]).map(s => s.id));
+}
+
+/* ---------------- shuffle ---------------- */
+function rulesFor(c) {
+  const act = new Set(activeStudents(c).map(s => s.id));
+  const must = {}, never = {}, apart = [];
+  for (const r of c.rules) {
+    if (!act.has(r.s)) continue;
+    if (r.type === 'must') must[r.s] = r.zone;
+    else if (r.type === 'never') (never[r.s] = never[r.s] || []).push(r.zone);
+    else if (r.type === 'apart' && act.has(r.t)) apart.push([r.s, r.t]);
+  }
+  return {must, never, apart};
+}
+function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function planShuffle(c) {
+  const spots = activeSpots(c);
+  const cur = latest(c);
+  const prev = cur ? cur.assign : {};
+  const spotOf = {}; for (const k in prev) spotOf[prev[k]] = k;
+  const R = rulesFor(c);
+  const act = activeStudents(c);
+  const lockedSpots = spots.filter(s => s.lock);
+  const fixed = {}; // spotId -> studentId (locked)
+  for (const s of lockedSpots) if (prev[s.id] && studentById(c, prev[s.id]) && studentById(c, prev[s.id]).active) fixed[s.id] = prev[s.id];
+  const fixedStudents = new Set(Object.values(fixed));
+  const movers = act.filter(s => !fixedStudents.has(s.id)).map(s => s.id);
+  const free = spots.filter(s => !s.lock);
+  if (movers.length > free.length) return {error: `There are ${movers.length} students to place but only ${free.length} unlocked spots. Turn on more spots in Edit, Spots.`};
+  const zonesOf = {}; for (const s of spots) zonesOf[s.id] = s.zones || [];
+  // rotation
+  let rot = null;
+  if (c.rotation && c.rotation.zone) {
+    const z = c.rotation.zone;
+    const slots = free.filter(s => zonesOf[s.id].includes(z)).length;
+    if (slots) {
+      const elig = movers.filter(id => !(R.never[id] || []).includes(z) && !(R.must[id] && R.must[id] !== z) && R.must[id] !== z);
+      const mustIn = movers.filter(id => R.must[id] === z).length;
+      const open = Math.max(0, slots - mustIn);
+      const served = new Set((c.rotation.served || []).filter(id => elig.includes(id)));
+      const lastRound = new Set((c.rotation.lastRound || []).filter(id => elig.includes(id)));
+      const waiting = elig.filter(id => !served.has(id));
+      rot = {zone: z, slots: open, blocked: new Set(), guaranteed: new Set(), cycled: false, served: [...served], waiting};
+      if (waiting.length >= open) {
+        for (const id of served) rot.blocked.add(id);
+      } else {
+        // fair wrap: everyone still waiting gets a turn first, the rest come from
+        // students who did not just have a turn
+        rot.cycled = true;
+        for (const id of waiting) rot.guaranteed.add(id);
+        const pool = elig.filter(id => !rot.guaranteed.has(id) && !lastRound.has(id));
+        if (pool.length >= open - waiting.length) for (const id of lastRound) if (!rot.guaranteed.has(id)) rot.blocked.add(id);
+      }
+    }
+  }
+  const eligible = {};
+  for (const id of movers) {
+    const must = R.must[id], never = R.never[id] || [];
+    eligible[id] = free.filter(s => {
+      const zs = zonesOf[s.id];
+      if (must && !zs.includes(must)) return false;
+      if (never.some(z => zs.includes(z))) return false;
+      if (rot) {
+        if (rot.blocked.has(id) && zs.includes(rot.zone)) return false;
+        if (rot.guaranteed.has(id) && !zs.includes(rot.zone)) return false;
+      }
+      return true;
+    }).map(s => s.id);
+    if (!eligible[id].length) {
+      const nm = displayNames(c)[id];
+      return {error: `${nm} has no spot that fits their rules. Check Edit, Rules.`};
+    }
+  }
+  const idx = {}; spots.forEach((s, i) => idx[s.id] = i);
+  const {adj} = adjacency(c, spots);
+  const apartOk = (assign) => {
+    const where = {}; for (const k in assign) where[assign[k]] = k;
+    for (const [a, b] of R.apart) { const sa = where[a], sb = where[b]; if (sa && sb && adj[idx[sa]][idx[sb]]) return false; }
+    return true;
+  };
+  for (let pass = 0; pass < 2; pass++) {
+    for (let attempt = 0; attempt < 5000; attempt++) {
+      const order = shuffleArr(movers.slice()).sort((a, b) => eligible[a].length - eligible[b].length);
+      const taken = new Set(Object.keys(fixed));
+      const assign = Object.assign({}, fixed);
+      let ok = true;
+      for (const id of order) {
+        let opts = eligible[id].filter(s => !taken.has(s));
+        if (pass === 0 && spotOf[id]) opts = opts.filter(s => s !== spotOf[id]);
+        if (!opts.length) { ok = false; break; }
+        const pickS = opts[Math.floor(Math.random() * opts.length)];
+        assign[pickS] = id; taken.add(pickS);
+      }
+      if (!ok || !apartOk(assign)) continue;
+      return {assign, relaxed: pass === 1, rot};
+    }
+  }
+  return {error: 'Could not find an arrangement that meets every rule. Try loosening a keep-apart pair, unlocking a spot, adding spots to a required zone or lowering the neighbor factor in Edit, Settings.'};
+}
+
+function doShuffle() {
+  const c = curClass(); if (!c) return;
+  const res = planShuffle(c);
+  if (res.error) { alert(res.error); return; }
+  const cur = latest(c);
+  const rotBefore = c.rotation ? JSON.parse(JSON.stringify(c.rotation)) : null;
+  const v = {n: (cur ? cur.n : 0) + 1, date: todayISO(), assign: res.assign, by: 'shuffle', rotBefore};
+  const notes = [];
+  if (res.rot && c.rotation) {
+    const z = res.rot.zone, zs = new Set(activeSpots(c).filter(s => (s.zones || []).includes(z) && !s.lock).map(s => s.id));
+    const took = Object.entries(res.assign).filter(([sp]) => zs.has(sp)).map(([, id]) => id);
+    if (res.rot.cycled) {
+      c.rotation.served = took.filter(id => !res.rot.guaranteed.has(id));
+      notes.push(`Everyone has now had a turn in "${z}". A new round started.`);
+    } else {
+      c.rotation.served = [...new Set([...(c.rotation.served || []), ...took])];
+    }
+    c.rotation.lastRound = took;
+  }
+  if (res.relaxed) notes.push('All rules were met, but a few students kept their previous spot because the rules left no other option.');
+  c.versions.push(v);
+  UI.viewVersion = null;
+  save(); renderClass();
+  if (notes.length) toast(notes.join(' '));
+}
+function undoShuffle() {
+  const c = curClass(); const v = latest(c);
+  if (!v || v.by !== 'shuffle') return;
+  if (!confirm(`Delete v${v.n} and go back to v${v.n - 1}? Rotation turns from this shuffle will be undone too.`)) return;
+  c.versions.pop();
+  if (v.rotBefore !== undefined) c.rotation = v.rotBefore;
+  save(); renderClass();
+}
+
+/* ---------------- schedule ---------------- */
+function allSlots() {
+  const out = [];
+  for (const c of DATA.classes) for (const s of c.schedule) out.push({c, day: s.day, s: toMin(s.start), e: toMin(s.end)});
+  return out.sort((a, b) => a.day - b.day || a.s - b.s);
+}
+function autoSlot(now = new Date()) {
+  const slots = allSlots(); if (!slots.length) return null;
+  const flip = DATA.settings.flipMinutes ?? 5;
+  const day = now.getDay(), m = now.getHours() * 60 + now.getMinutes();
+  if (day >= 1 && day <= 5) {
+    const today = slots.filter(x => x.day === day);
+    let cand = null;
+    for (const x of today) if (x.s - flip <= m) cand = x;
+    const next = today.find(x => x.s - flip > m);
+    if (cand && (m < cand.e || next)) return cand;   // during class, or in a gap before the next flip
+    if (!cand && next) return next;                    // before the first class of the day
+  }
+  // after school or weekend: next school day's first class
+  for (let k = 1; k <= 7; k++) {
+    const d = ((day + k - 1) % 7) + 1; const dd = d === 7 ? 0 : d;
+    const f = slots.find(x => x.day === dd);
+    if (f) return f;
+  }
+  return slots[0];
+}
+function nextFlip(now = new Date()) {
+  // the next moment the automatic choice could change
+  const slots = allSlots(); const flip = DATA.settings.flipMinutes ?? 5;
+  const day = now.getDay(), m = now.getHours() * 60 + now.getMinutes();
+  const pts = [];
+  for (const x of slots) if (x.day === day) { pts.push(x.s - flip); pts.push(x.e); }
+  const fut = pts.filter(p => p > m).sort((a, b) => a - b);
+  const d = new Date(now);
+  if (fut.length) { d.setHours(0, fut[0], 0, 0); return d; }
+  d.setDate(d.getDate() + 1); d.setHours(0, 0, 0, 0); return d;
+}
+function stepClass(dir) {
+  const slots = allSlots(); if (!slots.length) return;
+  const c = curClass();
+  let i = -1;
+  if (c) {
+    const mine = slots.map((x, k) => [x, k]).filter(([x]) => x.c === c);
+    if (mine.length) {
+      // pick the slot of this class closest to the current time in the week
+      const now = new Date(); const wm = now.getDay() * 1440 + now.getHours() * 60 + now.getMinutes();
+      const auto = autoSlot();
+      const hit = mine.find(([x]) => auto && x === auto) || mine.reduce((best, cur) => {
+        const d = Math.abs(cur[0].day * 1440 + cur[0].s - wm); return !best || d < best.d ? {d, v: cur} : best;
+      }, null).v;
+      i = hit[1];
+    }
+  }
+  const n = slots.length;
+  const j = i < 0 ? 0 : (i + dir + n) % n;
+  openClass(slots[j].c.id, {manual: true});
+}
+function tick() {
+  if (!DATA) return;
+  if (UI.override && Date.now() >= UI.override) UI.override = null;
+  if (!DATA.settings.autoSchedule || UI.override || UI.view !== 'class' || UI.drawer || UI.tool !== 'none') return;
+  const s = autoSlot();
+  if (s && s.c.id !== UI.classId) openClass(s.c.id);
+}
+
+/* ---------------- views ---------------- */
+function show(view) {
+  UI.view = view;
+  $('#home').classList.toggle('hidden', view !== 'home');
+  $('#classView').classList.toggle('hidden', view !== 'class');
+}
+function renderAll() { renderStatus(); renderAutoBtn(); if (UI.view === 'home') renderHome(); else renderClass(); }
+function renderAutoBtn() { const b = $('#autoBtn'); if (!DATA) return; b.textContent = 'Auto: ' + (DATA.settings.autoSchedule ? 'on' : 'off'); b.classList.toggle('on', !!DATA.settings.autoSchedule); }
+
+function renderStatus() {
+  const el = $('#status'); el.className = '';
+  if (DEMO) { el.textContent = 'Demo data, not saved'; el.classList.add('warn'); return; }
+  if (!DATA) { el.textContent = 'No data yet'; return; }
+  if (FILE.saving) { el.textContent = 'Saving...'; return; }
+  if (FILE.connected) { el.textContent = (FILE.dirty ? 'Saving to ' : 'Saved to ') + FILE.name(); el.classList.add('ok'); return; }
+  if (FILE.needsReconnect) { el.textContent = 'Click to reconnect ' + FILE.name(); el.classList.add('warn'); return; }
+  el.textContent = FILE.supported ? 'Not linked to a data file' : 'Saved in this browser only'; el.classList.add('bad');
+}
+
+function renderHome() {
+  show('home');
+  closeDrawer(true);
+  const h = $('#home');
+  if (!DATA) { h.innerHTML = welcomeHTML(); return; }
+  const auto = autoSlot();
+  let html = `<h1>Classes</h1><div class="sub">${DATA.classes.length} classes. ${auto ? `Schedule says: <b>${esc(auto.c.title)}</b> (${DAYS[auto.day]} ${fmtTime(minToT(auto.s))})` : 'No schedule set.'}</div>`;
+  const schools = [...new Set([...(DATA.settings.schools || []), ...DATA.classes.map(c => c.school)])];
+  for (const sc of schools) {
+    const list = DATA.classes.filter(c => c.school === sc).sort((a, b) => (GRADE_ORDER[a.grade] ?? 9) - (GRADE_ORDER[b.grade] ?? 9) || a.title.localeCompare(b.title));
+    if (!list.length) continue;
+    html += `<div class="school"><h2>${esc(sc)}</h2><div class="cards">`;
+    for (const c of list) {
+      const v = latest(c);
+      const unl = c.students.filter(s => s.active && !s.linked).length;
+      const uns = unseated(c).length;
+      html += `<div class="card" data-act="open" data-id="${c.id}"><div class="thumb" data-thumb="${c.id}"></div><div class="meta">
+        <div class="t">${esc(c.title)}</div>
+        <div class="d">${esc(schedText(c))}<br>${v ? `v${v.n} &middot; ${fmtDate(v.date)}` : 'No chart yet'} &middot; ${activeStudents(c).length} students</div>
+        <div style="margin-top:5px">${auto && auto.c === c ? '<span class="pill now">Now</span>' : ''}${c.bop && c.bop.enabled ? '<span class="pill">Bop or Flop</span>' : ''}${unl ? `<span class="pill warn">${unl} not linked to roster</span>` : ''}${uns ? `<span class="pill warn">${uns} unseated</span>` : ''}</div>
+      </div></div>`;
+    }
+    html += `</div></div>`;
+  }
+  html += `<div class="row" style="margin-top:8px"><button class="tb" data-act="addClass">Add a class</button><button class="tb" data-act="importRoster">Import Aspen roster</button></div>`;
+  h.innerHTML = html;
+  for (const t of $$('[data-thumb]', h)) {
+    const c = getClass(t.dataset.thumb);
+    t.appendChild(renderStage(c, latest(c), {width: 228}));
+  }
+}
+const minToT = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+function welcomeHTML() {
+  return `<div class="welcome"><h1>Seating Charts</h1>
+    <p>Student names and rules are saved only on this computer, in a data file you choose and in this browser's storage. Nothing is uploaded anywhere.</p>
+    <p><b>First time?</b> Open the starter data file you downloaded (<code>seating-data-starter.json</code>). Chrome will ask to allow editing so changes save back to that file. Keep the file in your Google Drive folder if you want it on more than one computer.</p>
+    <div class="row">
+      <button class="tb primary" data-act="openFile">Open data file</button>
+      <button class="tb" data-act="newFile">Start an empty data file</button>
+      <button class="tb" data-act="demo">Try with fake names</button>
+    </div>
+    ${FILE.supported ? '' : '<p class="small" style="color:#f6d38b;margin-top:14px">This browser cannot save directly to a file. Use Chrome or Edge for that. Here, changes stay in the browser and you can download a backup.</p>'}
+  </div>`;
+}
+
+function unseated(c) {
+  const v = latest(c); const seated = new Set(v ? Object.values(v.assign) : []);
+  return activeStudents(c).filter(s => !seated.has(s.id));
+}
+
+function openClass(id, opts = {}) {
+  const changed = id !== UI.classId;
+  UI.classId = id;
+  if (changed) { UI.viewVersion = null; UI.bopStep = 0; UI.sel.clear(); UI.pick = null; UI.nbSpot = null; if (UI.tool === 'swap' || UI.tool === 'neighbors') UI.tool = 'none'; }
+  if (opts.manual && DATA.settings.autoSchedule) UI.override = nextFlip().getTime();
+  show('class');
+  renderClass();
+  if (UI.drawer) renderDrawer();
+}
+
+function renderClass() {
+  const c = curClass();
+  if (!c) { renderHome(); return; }
+  show('class');
+  const v = latest(c);
+  const viewingOld = UI.viewVersion != null && v && UI.viewVersion !== v.n;
+  const isBop = bopActive(c);
+  const canUndo = v && v.by === 'shuffle' && !viewingOld;
+  const tools = $('#classTools');
+  tools.innerHTML = `<span class="ct">${esc(c.title)}</span>
+    <button class="tb" data-act="prevClass" title="Previous class (Page Up)">&larr;</button>
+    <button class="tb" data-act="nextClass" title="Next class (Page Down)">&rarr;</button>
+    <span class="sep"></span>
+    <button class="tb primary" data-act="shuffle" ${viewingOld ? 'disabled' : ''}>Shuffle into a new version</button>
+    <button class="tb" data-act="undoShuffle" ${canUndo ? '' : 'disabled'}>Undo shuffle</button>
+    <button class="tb ${UI.tool === 'swap' ? 'on' : ''}" data-act="toolSwap" ${viewingOld ? 'disabled' : ''} title="Click two names to swap them, or a name then an empty spot to move it. Edits the current version.">Move students</button>
+    <span class="sep"></span>
+    ${c.bop && c.bop.enabled ? `<button class="tb ${isBop ? 'on' : ''}" data-act="toggleBop" title="B">${isBop ? 'Bop or Flop view' : 'Chart view'}</button>` : ''}
+    <button class="tb ${UI.drawer === 'history' ? 'on' : ''}" data-act="drawer" data-tab="history">History</button>
+    <button class="tb ${UI.drawer && UI.drawer !== 'history' ? 'on' : ''}" data-act="drawer" data-tab="${UI.drawer && UI.drawer !== 'history' ? UI.drawer : 'students'}">Edit</button>`;
+  const vb = $('#verBanner');
+  if (viewingOld) {
+    vb.classList.remove('hidden');
+    vb.innerHTML = `Viewing v${UI.viewVersion} from ${fmtDate(shownVersion(c).date)} (not the current chart). <button data-act="backToCurrent">Back to current</button><button data-act="restoreVersion">Restore as a new version</button>`;
+  } else vb.classList.add('hidden');
+  renderStageArea();
+  renderTray();
+}
+
+function renderStageArea() {
+  const c = curClass(); if (!c) return;
+  const wrap = $('#stageWrap');
+  wrap.innerHTML = '';
+  const pad = document.body.classList.contains('present') ? 0 : 16;
+  const W = wrap.clientWidth - pad * 2, H = wrap.clientHeight - pad * 2;
+  if (W < 50 || H < 50) return;
+  const v = shownVersion(c);
+  const editing = UI.tool !== 'none' && UI.viewVersion == null;
+  if (bopActive(c)) {
+    wrap.appendChild(renderBop(c, v, W, H));
+  } else {
+    const L = layoutOf(c);
+    const ar = L.aspect[0] / L.aspect[1];
+    const w = Math.min(W, H * ar);
+    wrap.appendChild(renderStage(c, v, {width: w, editing, showAllTemplate: UI.tool === 'spots' || UI.tool === 'zones', selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)}));
+  }
+  const hints = {
+    swap: UI.pick ? 'Now click another name to swap, or an empty spot to move there' : 'Click a name, then another name or an empty spot',
+    spots: 'Click any square or chair to turn that spot on or off for this class',
+    zones: 'Click spots to select them, then use the Spots tab to add a zone or lock',
+    neighbors: 'Click a spot to see which spots count as next to it'
+  };
+  if (UI.tool !== 'none' && hints[UI.tool] && !document.body.classList.contains('present')) {
+    const h = document.createElement('div'); h.id = 'hint'; h.textContent = hints[UI.tool]; wrap.appendChild(h);
+  }
+}
+
+function renderTray() {
+  const c = curClass(); const t = $('#tray');
+  const list = unseated(c);
+  if (!list.length || UI.viewVersion != null) { t.classList.add('hidden'); return; }
+  const names = displayNames(c);
+  t.classList.remove('hidden');
+  t.innerHTML = `<span class="muted" style="color:#a3a9b5">Not seated:</span>` + list.map(s => `<button class="chip ${UI.pick && UI.pick.student === s.id && !UI.pick.spot ? 'on' : ''}" data-act="pickUnseated" data-id="${s.id}">${esc(names[s.id])}</button>`).join('') +
+    `<span class="muted small" style="color:#8a92a0">Click a name, then an empty spot. Or shuffle to seat everyone.</span>`;
+}
+
+/* stage clicks */
+function onStageClick(spotId) {
+  const c = curClass(); if (!c || UI.viewVersion != null) return;
+  if (UI.tool === 'swap') return swapClick(c, spotId);
+  if (UI.tool === 'spots') return toggleSpot(c, spotId);
+  if (UI.tool === 'zones') { if (!c.spots.find(s => s.id === spotId)) return; UI.sel.has(spotId) ? UI.sel.delete(spotId) : UI.sel.add(spotId); renderStageArea(); renderDrawer(); return; }
+  if (UI.tool === 'neighbors') { UI.nbSpot = spotId; renderStageArea(); renderDrawer(); return; }
+}
+function ensureVersion(c) {
+  if (!latest(c)) c.versions.push({n: 1, date: todayISO(), assign: {}, by: 'manual'});
+  return latest(c);
+}
+function swapClick(c, spotId) {
+  if (!c.spots.find(s => s.id === spotId)) return;
+  const v = ensureVersion(c);
+  if (!UI.pick) {
+    if (!v.assign[spotId]) return;
+    UI.pick = {spot: spotId, student: v.assign[spotId]};
+  } else if (!UI.pick.spot) {
+    // placing an unseated student
+    const other = v.assign[spotId];
+    v.assign[spotId] = UI.pick.student;
+    UI.pick = other ? {spot: null, student: other} : null;
+    v.edited = true; save();
+  } else {
+    if (spotId !== UI.pick.spot) {
+      const a = v.assign[UI.pick.spot], b = v.assign[spotId];
+      if (b) v.assign[UI.pick.spot] = b; else delete v.assign[UI.pick.spot];
+      v.assign[spotId] = a;
+      v.edited = true; save();
+    }
+    UI.pick = null;
+  }
+  renderStageArea(); renderTray();
+}
+function toggleSpot(c, spotId) {
+  const i = c.spots.findIndex(s => s.id === spotId);
+  if (i >= 0) {
+    const v = latest(c);
+    if (v && v.assign[spotId]) {
+      const nm = displayNames(c)[v.assign[spotId]];
+      if (!confirm(`${nm} is sitting there. Turn the spot off and move ${nm} to Not seated?`)) return;
+      delete v.assign[spotId];
+    }
+    c.spots.splice(i, 1);
+  } else {
+    const L = layoutOf(c);
+    const order = L.spots.map(s => s.id);
+    c.spots.push({id: spotId, zones: spotGeo(c, spotId).chair ? ['chairs'] : [], lock: false});
+    c.spots.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  }
+  save(); renderStageArea(); renderTray(); renderDrawer();
+}
+
+/* ---------------- drawer ---------------- */
+const TABS = [['students', 'Students'], ['spots', 'Spots'], ['rules', 'Rules'], ['rotation', 'Rotation'], ['history', 'History'], ['bop', 'Bop or Flop'], ['settings', 'Settings']];
+function openDrawer(tab) {
+  if (UI.drawer === tab) { closeDrawer(); return; }
+  UI.drawer = tab;
+  if (tab === 'spots') { UI.tool = 'spots'; UI.sel.clear(); }
+  else if (UI.tool === 'spots' || UI.tool === 'zones' || UI.tool === 'neighbors') UI.tool = 'none';
+  $('#drawer').classList.remove('hidden');
+  renderDrawer(); renderClass();
+}
+function closeDrawer(silent) {
+  UI.drawer = null; $('#drawer').classList.add('hidden');
+  if (['spots', 'zones', 'neighbors'].includes(UI.tool)) UI.tool = 'none';
+  UI.sel.clear(); UI.nbSpot = null; UI.histStudent = null;
+  if (!silent) renderClass();
+}
+function renderDrawer() {
+  const c = curClass(); if (!c || !UI.drawer) return;
+  $('#drawerTabs').innerHTML = TABS.filter(([k]) => k !== 'bop' || c.grade === '5' || (c.bop && c.bop.enabled)).map(([k, l]) => `<button class="${UI.drawer === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('') + `<button class="x" data-act="closeDrawer" title="Close">&times;</button>`;
+  const b = $('#drawerBody');
+  const fn = {students: drStudents, spots: drSpots, rules: drRules, rotation: drRotation, history: drHistory, bop: drBop, settings: drSettings}[UI.drawer];
+  const st = b.scrollTop;
+  b.innerHTML = fn(c);
+  b.scrollTop = st;
+  if (UI.drawer === 'history') fillHistoryThumbs(c);
+}
+
+function drStudents(c) {
+  const names = displayNames(c);
+  const v = latest(c); const where = {}; if (v) for (const k in v.assign) where[v.assign[k]] = k;
+  const rows = c.students.slice().sort((a, b) => (b.active - a.active) || names[a.id].localeCompare(names[b.id])).map(s => {
+    const g = where[s.id] ? spotGeo(c, where[s.id]) : null;
+    return `<tr style="${s.active ? '' : 'opacity:.55'}">
+      <td><b>${esc(names[s.id])}</b>${s.linked ? '' : ' <span class="pill warn" title="Not matched to an Aspen roster row yet">unlinked</span>'}<div class="small muted">${g ? esc(g.label) : (s.active ? 'Not seated' : 'Left class')}</div></td>
+      <td><input class="inp" data-act="stuField" data-f="first" data-id="${s.id}" value="${esc(s.first)}"></td>
+      <td><input class="inp" data-act="stuField" data-f="last" data-id="${s.id}" value="${esc(s.last)}"></td>
+      <td><input class="inp" data-act="stuField" data-f="preferred" data-id="${s.id}" value="${esc(s.preferred)}" placeholder="auto"></td>
+      <td><button class="btn sm" data-act="stuActive" data-id="${s.id}">${s.active ? 'Left' : 'Back'}</button></td></tr>`;
+  }).join('');
+  return `<div class="dsec"><h3>Students (${activeStudents(c).length})</h3>
+    <p class="note">The chart shows <b>Preferred</b> exactly when it is filled in. Otherwise it shows the first name, adding a last initial or full last name only when two students in this class would look the same.</p>
+    <table class="t"><thead><tr><th>Shows as</th><th>First</th><th>Last</th><th>Preferred</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="row" style="margin-top:10px"><button class="btn" data-act="addStudent">Add a student</button><button class="btn" data-act="importRoster">Import Aspen roster</button></div>
+    <p class="note">"Left" keeps the student's history but removes them from the chart. To pin a student to one spot, lock that spot in the Spots tab.</p></div>`;
+}
+
+function drSpots(c) {
+  const sp = activeSpots(c);
+  const zones = {}; for (const s of sp) for (const z of (s.zones || [])) zones[z] = (zones[z] || 0) + 1;
+  const locked = sp.filter(s => s.lock).length;
+  const selN = UI.sel.size;
+  const {adj} = adjacency(c, sp);
+  const avg = sp.length ? (adj.flat().filter(Boolean).length / sp.length).toFixed(1) : 0;
+  const st = activeStudents(c).length;
+  return `<div class="dsec"><h3>Spots for this class</h3>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn ${UI.tool === 'spots' ? 'on' : ''}" data-act="setTool" data-tool="spots">Turn spots on or off</button>
+      <button class="btn ${UI.tool === 'zones' ? 'on' : ''}" data-act="setTool" data-tool="zones">Select for zones and locks</button>
+      <button class="btn ${UI.tool === 'neighbors' ? 'on' : ''}" data-act="setTool" data-tool="neighbors">Show neighbors</button>
+    </div>
+    <div class="msg ${sp.length < st ? 'bad' : 'info'}">${sp.length} spots on, ${st} students${sp.length < st ? '. Turn on more spots before shuffling.' : '.'}</div>
+    <p class="note">Every square and chair of the room is shown while this tab is open. Faded ones are off for this class. This class's spots never affect any other class.</p></div>
+    ${UI.tool === 'zones' ? `<div class="dsec"><h3>Selected: ${selN}</h3>
+      <div class="field"><label>Zone name</label><input class="inp" id="zoneName" list="zoneList" placeholder="e.g. chairs, front, back"><datalist id="zoneList">${Object.keys(zones).map(z => `<option value="${esc(z)}">`).join('')}<option value="front"><option value="back"><option value="chairs"></datalist></div>
+      <div class="row"><button class="btn" data-act="zoneAdd" ${selN ? '' : 'disabled'}>Add zone</button><button class="btn" data-act="zoneRemove" ${selN ? '' : 'disabled'}>Remove zone</button><button class="btn" data-act="lockSel" ${selN ? '' : 'disabled'}>Lock</button><button class="btn" data-act="unlockSel" ${selN ? '' : 'disabled'}>Unlock</button><button class="btn sm" data-act="clearSel" ${selN ? '' : 'disabled'}>Clear selection</button></div>
+      <p class="note">A locked spot keeps whoever is in it through every shuffle. Unlocking leaves zones alone.</p></div>` : ''}
+    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot at factor ${c.neighborFactor}. Change the factor in Settings.</p></div>` : ''}
+    <div class="dsec"><h3>Zones</h3>${Object.keys(zones).length ? `<div class="chips">${Object.entries(zones).map(([z, n]) => `<span class="zchip">${esc(z)}: ${n}</span>`).join('')}</div>` : '<p class="note">No zones yet.</p>'}
+    <p class="note">${locked} locked spot${locked === 1 ? '' : 's'}.</p></div>`;
+}
+
+function studentOptions(c, sel, excludeId) {
+  const names = displayNames(c);
+  return activeStudents(c).filter(s => s.id !== excludeId).sort((a, b) => names[a.id].localeCompare(names[b.id])).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${esc(names[s.id])}</option>`).join('');
+}
+function classZones(c) { return [...new Set(activeSpots(c).flatMap(s => s.zones || []))].sort(); }
+function ruleProblems(c) {
+  const out = []; const R = rulesFor(c); const sp = activeSpots(c); const names = displayNames(c);
+  const free = z => sp.filter(s => !s.lock && (s.zones || []).includes(z)).length;
+  const need = {};
+  for (const id in R.must) { const z = R.must[id]; need[z] = (need[z] || 0) + 1; if (!free(z)) out.push(`${names[id]} must sit in "${z}", but this class has no unlocked "${z}" spots.`); }
+  for (const z in need) if (need[z] > free(z) && free(z)) out.push(`${need[z]} students must sit in "${z}", but it only has ${free(z)} unlocked spots.`);
+  if (sp.length < activeStudents(c).length) out.push(`${activeStudents(c).length} students but only ${sp.length} spots are on.`);
+  return out;
+}
+function drRules(c) {
+  const names = displayNames(c);
+  const zones = classZones(c);
+  const t = UI.ruleType || 'must';
+  const first = activeStudents(c).sort((a, b) => names[a.id].localeCompare(names[b.id]))[0];
+  const sSel = UI.ruleStudent && studentById(c, UI.ruleStudent) ? UI.ruleStudent : (first && first.id);
+  const target = t === 'apart' ? studentOptions(c, null, sSel) : zones.map(z => `<option>${esc(z)}</option>`).join('');
+  const rules = c.rules.map(r => {
+    const a = names[r.s] || '(removed student)';
+    const txt = r.type === 'must' ? `${a} must sit in ${r.zone}` : r.type === 'never' ? `${a} must never sit in ${r.zone}` : `${a} not next to ${names[r.t] || '(removed)'}`;
+    const inactive = !(studentById(c, r.s) || {}).active || (r.type === 'apart' && !(studentById(c, r.t) || {}).active);
+    return `<div class="rule"><span style="${inactive ? 'opacity:.5' : ''}">${esc(txt)}${inactive ? ' <span class="small muted">(not active)</span>' : ''}</span><button class="btn sm danger" data-act="ruleDel" data-id="${r.id}">Remove</button></div>`;
+  }).join('') || '<p class="note">No rules for this class.</p>';
+  const probs = ruleProblems(c);
+  return `<div class="dsec"><h3>Add a rule</h3>
+    <div class="field"><label>Student</label><select class="inp" id="ruleS" data-act="ruleStudent">${studentOptions(c, sSel)}</select></div>
+    <div class="field"><label>Rule</label><select class="inp" id="ruleT" data-act="ruleType">
+      <option value="must" ${t === 'must' ? 'selected' : ''}>must sit in...</option>
+      <option value="never" ${t === 'never' ? 'selected' : ''}>must never sit in...</option>
+      <option value="apart" ${t === 'apart' ? 'selected' : ''}>must not sit next to...</option></select></div>
+    <div class="field"><label>${t === 'apart' ? 'Student' : 'Zone'}</label><select class="inp" id="ruleX">${target || '<option value="">No zones yet. Make one in the Spots tab.</option>'}</select></div>
+    <button class="btn primary" data-act="ruleAdd">Add rule</button></div>
+    <div class="dsec"><h3>Rules for this class</h3>${rules}</div>
+    ${probs.length ? `<div class="dsec">${probs.map(p => `<div class="msg bad">${esc(p)}</div>`).join('')}</div>` : (c.rules.length ? '<div class="msg ok">Every rule can be met on this layout.</div>' : '')}
+    <p class="note">Rules belong to the student, not their name, so nickname changes and duplicate names never break them. For real distance between two students, zones work better than keep-apart.</p>`;
+}
+
+function drRotation(c) {
+  const zones = classZones(c);
+  const r = c.rotation;
+  const names = displayNames(c);
+  let body = '';
+  if (r && r.zone) {
+    const served = new Set(r.served || []);
+    const list = activeStudents(c).filter(s => {
+      const R = rulesFor(c); return !(R.never[s.id] || []).includes(r.zone) && !(R.must[s.id] && R.must[s.id] !== r.zone);
+    }).sort((a, b) => names[a.id].localeCompare(names[b.id]));
+    const waiting = list.filter(s => !served.has(s.id));
+    body = `<div class="msg info">${waiting.length} of ${list.length} students are still waiting for a turn in "${esc(r.zone)}".</div>
+      <table class="t"><thead><tr><th>Student</th><th>Had a turn this round</th></tr></thead><tbody>
+      ${list.map(s => `<tr><td>${esc(names[s.id])}</td><td><input type="checkbox" data-act="rotServed" data-id="${s.id}" ${served.has(s.id) ? 'checked' : ''}></td></tr>`).join('')}</tbody></table>
+      <div class="row" style="margin-top:10px"><button class="btn" data-act="rotReset">Start a new round</button></div>
+      <p class="note">When fewer students are waiting than there are spots in the zone, everyone waiting is guaranteed a turn, and the rest of the spots go to students who did not just have one. Tick a box to mark a new student as already served.</p>`;
+  }
+  return `<div class="dsec"><h3>Take turns in a zone</h3>
+    <div class="field"><label>Rotating zone</label><select class="inp" data-act="rotZone"><option value="">None</option>${zones.map(z => `<option ${r && r.zone === z ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></div>
+    ${body}</div>`;
+}
+
+function drHistory(c) {
+  const names = displayNames(c);
+  const cur = latest(c);
+  const vs = c.versions.slice().reverse();
+  let stu = '';
+  if (UI.histStudent && studentById(c, UI.histStudent)) {
+    const id = UI.histStudent;
+    const rows = []; const zoneCount = {}; const bandCount = {};
+    let seatedIn = 0;
+    for (const v of vs) {
+      const sp = Object.keys(v.assign).find(k => v.assign[k] === id);
+      const g = sp ? spotGeo(c, sp) : null;
+      const zs = sp ? ((c.spots.find(s => s.id === sp) || {}).zones || []) : [];
+      if (g) { seatedIn++; for (const z of zs) zoneCount[z] = (zoneCount[z] || 0) + 1; const b = g.chair ? 'Chair' : g.label.replace(/ \d+$/, ''); bandCount[b] = (bandCount[b] || 0) + 1; }
+      rows.push({v, g, zs, sp});
+    }
+    const songs = c.bop ? c.bop.songs.filter(s => s.suggestedBy && s.suggestedBy.kind === 'student' && s.suggestedBy.id === id) : [];
+    stu = `<div class="dsec"><h3>${esc(names[id])}: where they have sat</h3>
+      <div class="chips" style="margin-bottom:8px">${Object.entries(zoneCount).map(([z, n]) => `<span class="zchip"><b>${esc(z)}</b>: ${n}</span>`).join('')}${Object.entries(bandCount).map(([z, n]) => `<span class="zchip">${esc(z)}: ${n}</span>`).join('')}</div>
+      <div class="vlist">${rows.map(r => `<div class="vitem" data-act="viewVersion" data-n="${r.v.n}"><div data-hthumb="${r.v.n}" data-hl="${r.sp || ''}"></div><div class="cap"><b>v${r.v.n}</b><span>${r.g ? esc(r.g.label) : 'not seated'}</span></div></div>`).join('')}</div>
+      ${songs.length ? `<h3 style="margin-top:14px">Songs suggested</h3>${songs.map(s => `<div class="small">${fmtDate(s.date)}: "${esc(s.song)}" by ${esc(s.artist)}</div>`).join('')}` : ''}
+      <div class="row" style="margin-top:10px"><button class="btn sm" data-act="histStudent" data-id="">Back to all versions</button></div></div>`;
+  }
+  const versions = `<div class="dsec"><h3>All versions (${c.versions.length})</h3>
+    <div class="vlist">${vs.map(v => `<div class="vitem ${UI.viewVersion === v.n || (UI.viewVersion == null && v === cur) ? 'cur' : ''}" data-act="viewVersion" data-n="${v.n}"><div data-hthumb="${v.n}"></div><div class="cap"><b>v${v.n}</b><span>${fmtDate(v.date)}${v.edited ? ' &middot; edited' : ''}</span></div></div>`).join('')}</div>
+    <p class="note">Click a version to show it on the big chart.</p></div>`;
+  return `<div class="dsec"><h3>Student history</h3><select class="inp" data-act="histStudent" style="width:100%"><option value="">Pick a student...</option>${c.students.slice().sort((a, b) => names[a.id].localeCompare(names[b.id])).map(s => `<option value="${s.id}" ${UI.histStudent === s.id ? 'selected' : ''}>${esc(names[s.id])}${s.active ? '' : ' (left)'}</option>`).join('')}</select></div>` + (stu || versions);
+}
+function fillHistoryThumbs(c) {
+  for (const el of $$('[data-hthumb]', $('#drawerBody'))) {
+    const v = c.versions.find(x => x.n === Number(el.dataset.hthumb));
+    el.appendChild(renderStage(c, v, {width: 186, highlight: el.dataset.hl || null}));
+  }
+}
+
+function drBop(c) {
+  if (!c.bop) c.bop = {enabled: false, defaultView: 'bop', songs: []};
+  const names = displayNames(c);
+  const cur = currentSong(c);
+  const e = UI.songEdit ? c.bop.songs.find(s => s.id === UI.songEdit) : null;
+  const f = e || {};
+  const sb = f.suggestedBy || {};
+  const list = c.bop.songs.slice().reverse().map(s => `<tr><td class="small">${fmtDate(s.date)}</td><td><b>${esc(s.song)}</b><div class="small muted">${esc(s.artist)}${s.youtube ? '' : ' &middot; no video'}</div></td><td class="small">${esc(suggestedByName(c, s))}</td>
+     <td style="white-space:nowrap">${cur === s ? '<span class="pill now">Current</span>' : `<button class="btn sm" data-act="songCurrent" data-id="${s.id}">Use</button>`} <button class="btn sm" data-act="songEdit" data-id="${s.id}">Edit</button> <button class="btn sm danger" data-act="songDel" data-id="${s.id}">&times;</button></td></tr>`).join('');
+  return `<div class="dsec"><h3>Bop or Flop</h3>
+    <label class="row"><input type="checkbox" data-act="bopEnabled" ${c.bop.enabled ? 'checked' : ''}> Use Bop or Flop with this class</label>
+    <label class="row" style="margin-top:6px"><input type="checkbox" data-act="bopDefault" ${c.bop.defaultView === 'bop' ? 'checked' : ''}> Open in Bop or Flop view by default</label>
+    <p class="note">In Bop or Flop view the clicker steps through: play the video and show the song info, then reveal who suggested it, then the next class. Back steps backward.</p></div>
+    <div class="dsec"><h3>${e ? 'Edit song' : 'Add the next song'}</h3>
+      <div class="field"><label>YouTube link</label><input class="inp" id="sgYt" value="${esc(f.youtube)}" placeholder="https://www.youtube.com/watch?v=..."></div>
+      <div class="row"><div class="field" style="flex:1"><label>Song</label><input class="inp" id="sgSong" value="${esc(f.song)}"></div><div class="field" style="flex:1"><label>Artist</label><input class="inp" id="sgArtist" value="${esc(f.artist)}"></div></div>
+      <div class="row"><div class="field" style="width:70px"><label>Year</label><input class="inp" id="sgYear" value="${esc(f.year)}"></div><div class="field" style="flex:1"><label>Country</label><input class="inp" id="sgCountry" value="${esc(f.country)}"></div><div class="field" style="flex:1"><label>Genre</label><input class="inp" id="sgGenre" value="${esc(f.genre)}"></div></div>
+      <div class="field"><label>Suggested by</label><select class="inp" id="sgBy"><option value="">Pick a student...</option>${studentOptions(c, sb.kind === 'student' ? sb.id : null)}<option value="__other" ${sb.kind === 'other' ? 'selected' : ''}>Someone else (type below)</option></select></div>
+      <div class="field"><label>Name if someone else (staff, etc.)</label><input class="inp" id="sgOther" value="${esc(sb.kind === 'other' ? sb.name : '')}" placeholder="e.g. Mrs. Voss"></div>
+      <div class="row"><button class="btn primary" data-act="songSave">${e ? 'Save changes' : 'Add and make current'}</button>${e ? '<button class="btn" data-act="songEdit" data-id="">Cancel</button>' : ''}</div></div>
+    <div class="dsec"><h3>Song history</h3>${list ? `<table class="t"><thead><tr><th>Date</th><th>Song</th><th>Suggested by</th><th></th></tr></thead><tbody>${list}</tbody></table>` : '<p class="note">No songs yet.</p>'}</div>`;
+}
+
+function drSettings(c) {
+  const layouts = Object.values(DATA.layouts);
+  return `<div class="dsec"><h3>Class</h3>
+    <div class="field"><label>Title on the chart</label><input class="inp" data-act="clsField" data-f="title" value="${esc(c.title)}"></div>
+    <div class="row"><div class="field" style="flex:1"><label>School</label><input class="inp" data-act="clsField" data-f="school" value="${esc(c.school)}" list="schoolList"><datalist id="schoolList">${(DATA.settings.schools || []).map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+      <div class="field" style="width:90px"><label>Grade</label><select class="inp" data-act="clsField" data-f="grade">${['K', '1', '2', '3', '4', '5'].map(g => `<option ${c.grade === g ? 'selected' : ''}>${g}</option>`).join('')}</select></div></div>
+    <div class="field"><label>Aspen homeroom teacher(s), comma separated</label><input class="inp" data-act="clsHr" value="${esc((c.hrKeys || []).join(', '))}"><span class="small muted">Matches the "HR Teacher" column, last names only.</span></div>
+    <div class="field"><label>Caption under the rug (optional)</label><input class="inp" data-act="clsField" data-f="caption" value="${esc(c.caption)}"></div>
+    <div class="field"><label>Neighbor factor (keep-apart reach): ${c.neighborFactor}</label><input type="range" min="1.1" max="3.5" step="0.1" value="${c.neighborFactor}" data-act="clsFactor"><span class="small muted">Higher means "next to" reaches farther. Use Spots, Show neighbors to check.</span></div></div>
+    <div class="dsec"><h3>Schedule</h3>
+      ${c.schedule.map((s, i) => `<div class="row" style="margin-bottom:6px"><select class="inp" data-act="schedF" data-i="${i}" data-f="day">${[1, 2, 3, 4, 5].map(d => `<option value="${d}" ${s.day === d ? 'selected' : ''}>${DAYS_LONG[d]}</option>`).join('')}</select>
+        <input class="inp" type="time" data-act="schedF" data-i="${i}" data-f="start" value="${s.start}"> to <input class="inp" type="time" data-act="schedF" data-i="${i}" data-f="end" value="${s.end}"><button class="btn sm danger" data-act="schedDel" data-i="${i}">&times;</button></div>`).join('') || '<p class="note">Not scheduled.</p>'}
+      <button class="btn sm" data-act="schedAdd">Add a time</button></div>
+    <div class="dsec"><h3>Room layout</h3>
+      <select class="inp" data-act="clsLayout">${layouts.map(l => `<option value="${l.id}" ${c.layout === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>
+      <p class="note">Changing the layout clears this class's spots, zones and current seating (history stays).</p></div>
+    <div class="dsec"><h3>Remove</h3><button class="btn danger" data-act="deleteClass">Delete this class</button></div>`;
+}
+
+/* ---------------- roster import ---------------- */
+function parseCSV(text) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(f); f = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+    else f += ch;
+  }
+  if (f.length || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => x.trim()));
+}
+function splitName(full) {
+  const s = full.trim();
+  if (s.includes(',')) { const [last, rest] = s.split(/,(.*)/s); const given = rest.trim(); return {last: last.trim(), given, first: given.split(/\s+/)[0] || given}; }
+  const parts = s.split(/\s+/); return {first: parts[0], given: parts.slice(0, -1).join(' ') || parts[0], last: parts.length > 1 ? parts[parts.length - 1] : ''};
+}
+const teacherKey = t => norm(String(t).split(',')[0]).replace(/^(mrs?|ms|dr)\.?\s+/, '');
+
+let IMPORT = null;
+function startImport() { $('#csvInput').value = ''; $('#csvInput').click(); }
+async function onCSV(file) {
+  const text = await file.text();
+  const rows = parseCSV(text);
+  if (rows.length < 2) { alert('That file has no rows.'); return; }
+  const head = rows[0].map(h => norm(h));
+  const ni = head.findIndex(h => h === 'name' || h.includes('student') || h.includes('name'));
+  const ti = head.findIndex(h => h.includes('teacher') || h === 'hr' || h.includes('homeroom'));
+  if (ni < 0 || ti < 0) { alert('Could not find the Name and HR Teacher columns in that file.'); return; }
+  const byT = {};
+  for (const r of rows.slice(1)) {
+    if (!r[ni] || !r[ti]) continue;
+    const k = teacherKey(r[ti]);
+    (byT[k] = byT[k] || {label: r[ti].trim(), list: []}).list.push(splitName(r[ni]));
+  }
+  IMPORT = {groups: byT, map: {}, plans: {}};
+  for (const k in byT) {
+    const c = DATA.classes.find(c => (c.hrKeys || []).some(h => norm(h) === k));
+    IMPORT.map[k] = c ? c.id : '';
+  }
+  buildPlans();
+  showImport();
+}
+function buildPlans() {
+  IMPORT.plans = {};
+  for (const k in IMPORT.groups) {
+    const cid = IMPORT.map[k]; if (!cid) continue;
+    const c = getClass(cid);
+    const plan = IMPORT.plans[cid] = IMPORT.plans[cid] || {roster: [], links: {}, leaving: {}};
+    plan.roster.push(...IMPORT.groups[k].list.map((p, i) => Object.assign({key: k + ':' + i}, p)));
+  }
+  for (const cid in IMPORT.plans) {
+    const c = getClass(cid); const plan = IMPORT.plans[cid];
+    const used = new Set();
+    // 1. already-linked students match on first + last
+    for (const s of c.students.filter(s => s.linked)) {
+      const r = plan.roster.find(r => !used.has(r.key) && norm(r.last) === norm(s.last) && (norm(r.given) === norm(s.given || s.first) || norm(r.first) === norm(s.first)));
+      if (r) { plan.links[s.id] = r.key; used.add(r.key); }
+    }
+    // 2. unlinked chart names: first name, plus last initial or last name if the chart had one
+    for (const s of c.students.filter(s => !s.linked)) {
+      const cn = (s.chartName || s.first).trim();
+      const m = cn.match(/^(\S+)\s+(.+)$/);
+      const f = norm(m ? m[1] : cn), rest = m ? m[2].replace(/\.$/, '') : '';
+      const cands = plan.roster.filter(r => !used.has(r.key) && (norm(r.first) === f || norm(r.given) === norm(cn)) && (!rest || norm(r.last).startsWith(norm(rest))));
+      if (cands.length === 1) { plan.links[s.id] = cands[0].key; used.add(cands[0].key); }
+    }
+    for (const s of c.students) if (s.active && s.linked && !plan.links[s.id]) plan.leaving[s.id] = true;
+  }
+}
+function showImport() {
+  const tKeys = Object.keys(IMPORT.groups).sort();
+  const unmatchedT = tKeys.filter(k => !IMPORT.map[k]);
+  let html = `<p class="note">Rows are grouped by HR Teacher. Students are matched to the names already on each chart. Nothing changes until you click Apply.</p>`;
+  html += `<details class="cls" ${unmatchedT.length ? 'open' : ''}><summary>Homeroom teachers in the file (${tKeys.length})${unmatchedT.length ? ` - ${unmatchedT.length} not matched to a class` : ''}</summary><div class="inner"><table class="t"><tbody>
+    ${tKeys.map(k => `<tr><td>${esc(IMPORT.groups[k].label)} <span class="small muted">(${IMPORT.groups[k].list.length})</span></td><td><select class="inp" data-act="impMap" data-k="${esc(k)}"><option value="">Skip</option>${DATA.classes.map(c => `<option value="${c.id}" ${IMPORT.map[k] === c.id ? 'selected' : ''}>${esc(c.title)} (${esc(c.school)})</option>`).join('')}</select></td></tr>`).join('')}
+    </tbody></table></div></details>`;
+  for (const cid in IMPORT.plans) {
+    const c = getClass(cid); const plan = IMPORT.plans[cid]; const names = displayNames(c);
+    const linkedKeys = new Set(Object.values(plan.links));
+    const freeRoster = plan.roster.filter(r => !linkedKeys.has(r.key));
+    const unresolved = c.students.filter(s => s.active && !plan.links[s.id] && !s.linked);
+    const auto = c.students.filter(s => plan.links[s.id]);
+    const leaving = c.students.filter(s => s.active && s.linked && !plan.links[s.id]);
+    const rosterOpt = (sid) => { const cur = plan.links[sid]; return plan.roster.filter(r => !linkedKeys.has(r.key) || r.key === cur).sort((a, b) => a.first.localeCompare(b.first)).map(r => `<option value="${esc(r.key)}" ${r.key === cur ? 'selected' : ''}>${esc(r.given)} ${esc(r.last)}</option>`).join(''); };
+    const warn = unresolved.length || freeRoster.length || leaving.length;
+    html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)} - ${auto.length} matched${unresolved.length ? `, <span style="color:var(--warn)">${unresolved.length} need a match</span>` : ''}${freeRoster.length ? `, ${freeRoster.length} new` : ''}${leaving.length ? `, ${leaving.length} not in file` : ''}</summary><div class="inner">`;
+    const noMatch = (sid) => `<option value="">Keep on the chart, not linked yet</option><option value="__left" ${plan.leaving[sid] && !plan.links[sid] ? 'selected' : ''}>Not in this class anymore (mark as left)</option>`;
+    if (unresolved.length) html += `<h4 style="margin:6px 0">Chart names that need a match</h4><p class="note">Usually a nickname. Pick the roster name it belongs to.</p><table class="t"><tbody>${unresolved.map(s => `<tr><td><b>${esc(names[s.id])}</b></td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
+    if (freeRoster.length) html += `<h4 style="margin:10px 0 6px">New students (added as Not seated)</h4><div class="small">${freeRoster.map(r => esc(r.given + ' ' + r.last)).join(', ')}</div>`;
+    if (leaving.length) html += `<h4 style="margin:10px 0 6px">On the chart but not in the file</h4>${leaving.map(s => `<label class="row small"><input type="checkbox" data-act="impLeave" data-c="${cid}" data-s="${s.id}" ${plan.leaving[s.id] ? 'checked' : ''}> Mark ${esc(names[s.id])} as left</label>`).join('')}`;
+    if (auto.length) html += `<details style="margin-top:8px"><summary class="small">Matched (${auto.length})</summary><table class="t"><tbody>${auto.map(s => `<tr><td>${esc(names[s.id])}</td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table></details>`;
+    html += `</div></details>`;
+  }
+  openModal('Import Aspen roster', html, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="impApply">Apply</button>`);
+}
+function applyImport() {
+  let pending = 0, leaving = 0;
+  for (const cid in IMPORT.plans) { const c = getClass(cid), plan = IMPORT.plans[cid]; for (const s of c.students) { if (s.active && !s.linked && !plan.links[s.id] && !plan.leaving[s.id]) pending++; if (s.active && plan.leaving[s.id]) leaving++; } }
+  if ((pending || leaving) && !confirm(`${leaving} student${leaving === 1 ? '' : 's'} will be marked as left.${pending ? `\n${pending} chart name${pending === 1 ? '' : 's'} will stay on the chart without a roster match (you can import again later).` : ''}\n\nApply the roster?`)) return;
+  let added = 0, linked = 0, left = 0;
+  for (const cid in IMPORT.plans) {
+    const c = getClass(cid); const plan = IMPORT.plans[cid];
+    const byKey = Object.fromEntries(plan.roster.map(r => [r.key, r]));
+    const before = displayNames(c);
+    const used = new Set();
+    for (const s of c.students) {
+      const k = plan.links[s.id];
+      if (k && byKey[k]) {
+        const r = byKey[k]; used.add(k);
+        const wasLinked = s.linked;
+        s.first = r.first; s.given = r.given; s.last = r.last; s.linked = true; s.active = true;
+        if (!wasLinked) { s._keep = before[s.id]; linked++; }
+      } else if (s.active && plan.leaving[s.id]) { s.active = false; left++; }
+    }
+    for (const r of plan.roster) if (!used.has(r.key)) { c.students.push({id: uid('s'), first: r.first, given: r.given, last: r.last, preferred: '', active: true, linked: true}); added++; }
+    // keep the name that was on the slides when it differs from the automatic one (nicknames, chosen full names)
+    const after = displayNames(c);
+    for (const s of c.students) if (s._keep) { if (s._keep !== after[s.id]) s.preferred = s._keep; delete s._keep; }
+    // students who left lose their seat in the current version
+    const v = latest(c);
+    if (v) for (const sp in v.assign) { const st = studentById(c, v.assign[sp]); if (!st || !st.active) delete v.assign[sp]; }
+  }
+  closeModal(); save(); renderAll();
+  toast(`Roster applied: ${linked} matched, ${added} new, ${left} marked as left.`);
+}
+
+/* ---------------- demo mode ---------------- */
+const FAKE_FIRST = ['Avery', 'Blake', 'Casey', 'Devon', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jules', 'Kai', 'Lane', 'Morgan', 'Nico', 'Oakley', 'Parker', 'Quinn', 'Reese', 'Sage', 'Tatum', 'Umi', 'Vale', 'Wren', 'Xan', 'Yael', 'Zion', 'Arden', 'Bay', 'Cove', 'Dell', 'Ellis', 'Fern', 'Gale', 'Hollis', 'Ira', 'Jade', 'Kit', 'Lark', 'Mika', 'Noor'];
+const FAKE_LAST = ['Applegate', 'Brookside', 'Cobble', 'Dunmore', 'Everly', 'Foxglove', 'Greenway', 'Hartwell', 'Ironwood', 'Juniper', 'Kettle', 'Larkspur', 'Mossgrove', 'Northam', 'Oakhurst', 'Pebble'];
+function enterDemo() {
+  const base = DATA ? JSON.parse(JSON.stringify(DATA)) : null;
+  if (!base) { alert('Open your data file first. Demo mode copies your layouts and swaps every name for a fake one.'); return; }
+  REAL = DATA; DEMO = true;
+  for (const c of base.classes) {
+    c.students.forEach((s, i) => { s.first = FAKE_FIRST[(i * 7 + c.title.length) % FAKE_FIRST.length]; s.given = s.first; s.last = FAKE_LAST[(i * 3 + c.title.length) % FAKE_LAST.length]; s.preferred = ''; s.chartName = s.first; s.linked = true; });
+    if (c.bop) for (const g of c.bop.songs) if (g.suggestedBy && g.suggestedBy.kind === 'other') g.suggestedBy.name = 'Staff member';
+  }
+  DATA = base;
+  document.body.classList.add('demo'); $('#demoBanner').classList.remove('hidden');
+  closeModal(); renderAll();
+}
+function exitDemo() {
+  DATA = REAL; REAL = null; DEMO = false;
+  document.body.classList.remove('demo'); $('#demoBanner').classList.add('hidden');
+  renderAll();
+}
+
+/* ---------------- data menu ---------------- */
+function dataMenu() {
+  const s = DATA ? DATA.settings : {};
+  const fileLine = FILE.connected ? `<div class="msg ok">Saving to <b>${esc(FILE.name())}</b>. Every change is written to the file right away.</div>`
+    : FILE.needsReconnect ? `<div class="msg warn">Linked to <b>${esc(FILE.name())}</b>, but Chrome needs permission again. <button class="btn sm" data-act="reconnect">Allow editing</button></div>`
+    : `<div class="msg bad">${FILE.supported ? 'Not linked to a data file. Changes are kept in this browser only.' : 'This browser can\'t save to a file directly. Changes are kept in this browser; download backups often.'}</div>`;
+  openModal('Data and settings', `
+    <div class="dsec"><h3>Data file</h3>${fileLine}
+      <div class="row"><button class="btn" data-act="openFile">${FILE.handle ? 'Open a different data file' : 'Open data file'}</button><button class="btn" data-act="newFile">Save to a new data file</button><button class="btn" data-act="downloadBackup">Download a backup copy</button>${FILE.handle ? '<button class="btn sm" data-act="unlinkFile">Unlink file</button>' : ''}</div>
+      <p class="note">Put the data file in your Google Drive folder (Google Drive for desktop) and open the same file at home and at school. The app always keeps the newest copy. Student names and rules never leave your computers.</p></div>
+    ${DATA ? `<div class="dsec"><h3>Schedule</h3>
+      <label class="row"><input type="checkbox" data-act="setAuto" ${s.autoSchedule ? 'checked' : ''}> Show the scheduled class automatically</label>
+      <div class="row" style="margin-top:6px">Switch to the next class <input class="inp" type="number" min="0" max="30" style="width:60px" data-act="setFlip" value="${s.flipMinutes}"> minutes before it starts</div>
+      <p class="note">Using the clicker or picking a class yourself pauses the automatic switch until the next scheduled change. Each class's times are in Edit, Settings.</p></div>
+    <div class="dsec"><h3>Roster and classes</h3><div class="row"><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="addClass">Add a class</button></div></div>
+    <div class="dsec"><h3>Sharing screenshots safely</h3><button class="btn" data-act="demo">Demo mode (fake names)</button><p class="note">Copies everything and swaps every student name for a fake one, so you can share screenshots when something needs fixing. Nothing in demo mode is saved.</p></div>` : ''}
+    <div class="dsec"><h3>Keys</h3><p class="note">Page Down, Right or Down: next class (or next Bop or Flop step). Page Up, Left or Up: back. F: full screen. B: switch chart and Bop or Flop views. Esc: leave full screen.</p></div>`,
+    `<button class="btn" data-act="closeModal">Done</button>`);
+}
+
+function addClassDialog() {
+  const layouts = Object.values(DATA.layouts);
+  openModal('Add a class', `
+    <div class="field"><label>Title on the chart</label><input class="inp" id="ncTitle" placeholder="Grade 3 - Mrs. Example"></div>
+    <div class="row"><div class="field" style="flex:1"><label>School</label><input class="inp" id="ncSchool" list="schoolList2" value="${esc((DATA.settings.schools || [])[0] || '')}"><datalist id="schoolList2">${(DATA.settings.schools || []).map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+    <div class="field" style="width:90px"><label>Grade</label><select class="inp" id="ncGrade">${['K', '1', '2', '3', '4', '5'].map(g => `<option>${g}</option>`).join('')}</select></div></div>
+    <div class="field"><label>Aspen HR teacher last name(s)</label><input class="inp" id="ncHr"></div>
+    <div class="field"><label>Room layout</label><select class="inp" id="ncLayout">${layouts.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div>`,
+    `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="addClassGo">Add class</button>`);
+}
+
+/* ---------------- modal + toast ---------------- */
+function openModal(title, body, foot) { $('#mTitle').textContent = title; $('#mBody').innerHTML = body; $('#mFoot').innerHTML = foot || ''; $('#modalBack').classList.remove('hidden'); }
+function closeModal() { $('#modalBack').classList.add('hidden'); }
+let toastTimer;
+function toast(t) {
+  let el = $('#toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#111318;color:#fff;border:1px solid #3a404b;padding:10px 16px;border-radius:9px;z-index:60;max-width:80vw;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.4)'; document.body.appendChild(el); }
+  el.textContent = t; el.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.style.display = 'none', 5000);
+}
+
+/* ---------------- events ---------------- */
+document.addEventListener('click', async (e) => {
+  const sp = e.target.closest('.stage [data-spot]');
+  if (sp && $('#stageWrap').contains(sp)) { onStageClick(sp.dataset.spot); return; }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act; const c = curClass();
+  if (a.tagName === 'SELECT' || (a.tagName === 'INPUT' && a.type !== 'button')) return;
+  switch (act) {
+    case 'home': UI.viewVersion = null; renderHome(); break;
+    case 'now': { const s = DATA && autoSlot(); UI.override = null; if (s) openClass(s.c.id); break; }
+    case 'toggleAuto': if (DATA) { DATA.settings.autoSchedule = !DATA.settings.autoSchedule; UI.override = null; save(); renderAutoBtn(); tick(); } break;
+    case 'present': togglePresent(); break;
+    case 'dataMenu': if (FILE.needsReconnect && a.id === 'status') { FILE.reconnect(); } else dataMenu(); break;
+    case 'reconnect': closeModal(); await FILE.reconnect(); break;
+    case 'openFile': closeModal(); FILE.openPicker(); break;
+    case 'newFile': closeModal(); FILE.createNew(DATA || upgrade({app: 'seating-chart', format: 1, settings: {}, layouts: {}, classes: []})); break;
+    case 'downloadBackup': if (DATA) download(); break;
+    case 'unlinkFile': if (confirm('Stop saving to this file? Your data stays in this browser.')) { await FILE.disconnect(); closeModal(); } break;
+    case 'demo': enterDemo(); break;
+    case 'exitDemo': exitDemo(); break;
+    case 'open': openClass(a.dataset.id, {manual: true}); break;
+    case 'prevClass': stepClass(-1); break;
+    case 'nextClass': stepClass(1); break;
+    case 'shuffle': doShuffle(); break;
+    case 'undoShuffle': undoShuffle(); break;
+    case 'toolSwap': UI.tool = UI.tool === 'swap' ? 'none' : 'swap'; UI.pick = null; if (UI.tool === 'swap' && UI.drawer === 'spots') closeDrawer(true); renderClass(); break;
+    case 'pickUnseated': UI.tool = 'swap'; UI.pick = UI.pick && UI.pick.student === a.dataset.id ? null : {spot: null, student: a.dataset.id}; renderClass(); break;
+    case 'toggleBop': UI.bopView[c.id] = bopActive(c) ? 'chart' : 'bop'; UI.bopStep = 0; renderClass(); break;
+    case 'drawer': openDrawer(a.dataset.tab); break;
+    case 'tab': openDrawer(a.dataset.tab); break;
+    case 'closeDrawer': closeDrawer(); break;
+    case 'backToCurrent': UI.viewVersion = null; renderClass(); renderDrawer(); break;
+    case 'restoreVersion': { const v = shownVersion(c); const cur = latest(c); c.versions.push({n: cur.n + 1, date: todayISO(), assign: JSON.parse(JSON.stringify(v.assign)), by: 'restore', note: 'Restored from v' + v.n}); UI.viewVersion = null; save(); renderClass(); renderDrawer(); break; }
+    case 'viewVersion': { const n = Number(a.dataset.n); UI.viewVersion = latest(c).n === n ? null : n; renderClass(); renderDrawer(); break; }
+    case 'histStudent': UI.histStudent = a.dataset.id || null; renderDrawer(); break;
+    case 'setTool': UI.tool = UI.tool === a.dataset.tool ? 'none' : a.dataset.tool; UI.sel.clear(); UI.nbSpot = null; renderStageArea(); renderDrawer(); break;
+    case 'zoneAdd': case 'zoneRemove': {
+      const z = ($('#zoneName').value || '').trim(); if (!z) { alert('Type a zone name first.'); return; }
+      for (const s of c.spots) if (UI.sel.has(s.id)) { s.zones = s.zones || []; if (act === 'zoneAdd') { if (!s.zones.includes(z)) s.zones.push(z); } else s.zones = s.zones.filter(x => x !== z); }
+      save(); renderStageArea(); renderDrawer(); break;
+    }
+    case 'lockSel': case 'unlockSel': for (const s of c.spots) if (UI.sel.has(s.id)) s.lock = act === 'lockSel'; save(); renderStageArea(); renderDrawer(); break;
+    case 'clearSel': UI.sel.clear(); renderStageArea(); renderDrawer(); break;
+    case 'addStudent': { const n = prompt('First name (you can fill in the rest in the table):'); if (!n) return; c.students.push({id: uid('s'), first: n.trim(), last: '', preferred: '', active: true, linked: true}); save(); renderDrawer(); renderTray(); break; }
+    case 'stuActive': { const s = studentById(c, a.dataset.id); s.active = !s.active; if (!s.active) { const v = latest(c); if (v) for (const k in v.assign) if (v.assign[k] === s.id) delete v.assign[k]; } save(); renderDrawer(); renderStageArea(); renderTray(); break; }
+    case 'ruleAdd': {
+      const s = $('#ruleS').value, t = $('#ruleT').value, x = $('#ruleX').value;
+      if (!s || !x) { alert('Pick a student and a target.'); return; }
+      if (t === 'apart') { if (c.rules.some(r => r.type === 'apart' && ((r.s === s && r.t === x) || (r.s === x && r.t === s)))) { alert('That pair is already listed.'); return; } c.rules.push({id: uid('r'), type: 'apart', s, t: x}); }
+      else {
+        if (t === 'must') { c.rules = c.rules.filter(r => !(r.type === 'must' && r.s === s) && !(r.type === 'never' && r.s === s && r.zone === x)); }
+        else { if (c.rules.some(r => r.type === 'must' && r.s === s && r.zone === x)) { alert('That student is already required to sit there.'); return; } if (c.rules.some(r => r.type === 'never' && r.s === s && r.zone === x)) return; }
+        c.rules.push({id: uid('r'), type: t, s, zone: x});
+      }
+      save(); renderDrawer(); break;
+    }
+    case 'ruleDel': c.rules = c.rules.filter(r => r.id !== a.dataset.id); save(); renderDrawer(); break;
+    case 'rotReset': if (confirm('Start a new round? Everyone becomes eligible again.')) { c.rotation.served = []; c.rotation.lastRound = []; save(); renderDrawer(); } break;
+    case 'songSave': {
+      const by = $('#sgBy').value, other = $('#sgOther').value.trim();
+      const song = {song: $('#sgSong').value.trim(), artist: $('#sgArtist').value.trim(), year: $('#sgYear').value.trim(), country: $('#sgCountry').value.trim(), genre: $('#sgGenre').value.trim(), youtube: $('#sgYt').value.trim(),
+        suggestedBy: by && by !== '__other' ? {kind: 'student', id: by} : (other ? {kind: 'other', name: other} : null)};
+      if (!song.song && !song.youtube) { alert('Add at least a song title or a YouTube link.'); return; }
+      if (song.youtube && !ytInfo(song.youtube)) { alert('That does not look like a YouTube link.'); return; }
+      const e2 = UI.songEdit && c.bop.songs.find(s => s.id === UI.songEdit);
+      if (e2) Object.assign(e2, song); else { const n = Object.assign({id: uid('g'), date: todayISO()}, song); c.bop.songs.push(n); c.bop.currentSongId = n.id; }
+      UI.songEdit = null; UI.bopStep = 0; save(); renderDrawer(); renderStageArea(); break;
+    }
+    case 'songEdit': UI.songEdit = a.dataset.id || null; renderDrawer(); break;
+    case 'songCurrent': c.bop.currentSongId = a.dataset.id; UI.bopStep = 0; save(); renderDrawer(); renderStageArea(); break;
+    case 'songDel': if (confirm('Delete this song from the history?')) { c.bop.songs = c.bop.songs.filter(s => s.id !== a.dataset.id); if (c.bop.currentSongId === a.dataset.id) c.bop.currentSongId = null; save(); renderDrawer(); renderStageArea(); } break;
+    case 'schedAdd': c.schedule.push({day: 1, start: '09:00', end: '09:45'}); save(); renderDrawer(); break;
+    case 'schedDel': c.schedule.splice(Number(a.dataset.i), 1); save(); renderDrawer(); break;
+    case 'deleteClass': if (confirm(`Delete ${c.title} and all its history? This cannot be undone (unless you have a backup).`)) { DATA.classes = DATA.classes.filter(x => x !== c); UI.classId = null; save(); closeDrawer(true); renderHome(); } break;
+    case 'importRoster': closeModal(); startImport(); break;
+    case 'impApply': applyImport(); break;
+    case 'addClass': addClassDialog(); break;
+    case 'addClassGo': {
+      const L = DATA.layouts[$('#ncLayout').value]; if (!L) return;
+      const title = $('#ncTitle').value.trim() || 'New class';
+      const nc = {id: uid('c'), school: $('#ncSchool').value.trim() || 'School', grade: $('#ncGrade').value, title, hrKeys: $('#ncHr').value.split(',').map(x => x.trim()).filter(Boolean), layout: L.id, neighborFactor: DEFAULT_FACTOR, caption: '', schedule: [],
+        spots: L.spots.map(s => ({id: s.id, zones: s.chair ? ['chairs'] : [], lock: false})), students: [], rules: [], rotation: L.spots.some(s => s.chair) ? {zone: 'chairs', served: [], lastRound: []} : null, versions: [], bop: $('#ncGrade').value === '5' ? {enabled: true, defaultView: 'bop', songs: []} : null};
+      DATA.classes.push(nc); if (!(DATA.settings.schools || []).includes(nc.school)) DATA.settings.schools.push(nc.school);
+      save(); closeModal(); openClass(nc.id, {manual: true}); openDrawer('settings'); break;
+    }
+    case 'closeModal': closeModal(); break;
+  }
+});
+document.addEventListener('change', (e) => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const c = curClass(); const act = a.dataset.act;
+  switch (act) {
+    case 'stuField': { const s = studentById(c, a.dataset.id); s[a.dataset.f] = a.value.trim(); if (a.dataset.f === 'first') s.given = s.first; save(); renderDrawer(); renderStageArea(); renderTray(); break; }
+    case 'ruleType': UI.ruleType = a.value; UI.ruleStudent = $('#ruleS').value; renderDrawer(); break;
+    case 'ruleStudent': UI.ruleStudent = a.value; if ((UI.ruleType || 'must') === 'apart') renderDrawer(); break;
+    case 'rotZone': c.rotation = a.value ? {zone: a.value, served: currentlyIn(c, a.value), lastRound: []} : null; save(); renderDrawer(); break;
+    case 'rotServed': { const s = new Set(c.rotation.served || []); a.checked ? s.add(a.dataset.id) : s.delete(a.dataset.id); c.rotation.served = [...s]; save(); renderDrawer(); break; }
+    case 'histStudent': UI.histStudent = a.value || null; renderDrawer(); break;
+    case 'bopEnabled': c.bop.enabled = a.checked; save(); renderClass(); renderDrawer(); break;
+    case 'bopDefault': c.bop.defaultView = a.checked ? 'bop' : 'chart'; delete UI.bopView[c.id]; save(); renderClass(); break;
+    case 'clsField': c[a.dataset.f] = a.value; save(); renderClass(); break;
+    case 'clsHr': c.hrKeys = a.value.split(',').map(x => x.trim()).filter(Boolean); save(); break;
+    case 'clsFactor': c.neighborFactor = Number(a.value); save(); renderDrawer(); renderStageArea(); break;
+    case 'schedF': { const s = c.schedule[Number(a.dataset.i)]; s[a.dataset.f] = a.dataset.f === 'day' ? Number(a.value) : a.value; c.schedule.sort((x, y) => x.day - y.day || x.start.localeCompare(y.start)); save(); renderDrawer(); break; }
+    case 'clsLayout': {
+      if (!confirm('Change the room layout? This class\'s spots, zones and current seating will be cleared. History stays.')) { a.value = c.layout; return; }
+      const L = DATA.layouts[a.value]; c.layout = L.id;
+      c.spots = L.spots.map(s => ({id: s.id, zones: s.chair ? ['chairs'] : [], lock: false}));
+      const cur = latest(c); c.versions.push({n: (cur ? cur.n : 0) + 1, date: todayISO(), assign: {}, by: 'manual', note: 'Layout changed'});
+      save(); renderClass(); renderDrawer(); break;
+    }
+    case 'setAuto': DATA.settings.autoSchedule = a.checked; UI.override = null; save(); renderAutoBtn(); break;
+    case 'setFlip': DATA.settings.flipMinutes = Math.max(0, Number(a.value) || 0); save(); break;
+    case 'impMap': IMPORT.map[a.dataset.k] = a.value; buildPlans(); showImport(); break;
+    case 'impLink': {
+      const plan = IMPORT.plans[a.dataset.c];
+      for (const sid in plan.links) if (plan.links[sid] === a.value && a.value) delete plan.links[sid];
+      if (a.value && a.value !== '__left') { plan.links[a.dataset.s] = a.value; delete plan.leaving[a.dataset.s]; }
+      else { delete plan.links[a.dataset.s]; if (a.value === '__left') plan.leaving[a.dataset.s] = true; else delete plan.leaving[a.dataset.s]; }
+      showImport(); break;
+    }
+    case 'impLeave': IMPORT.plans[a.dataset.c].leaving[a.dataset.s] = a.checked; break;
+  }
+});
+function currentlyIn(c, z) {
+  const v = latest(c); if (!v) return [];
+  const zs = new Set(activeSpots(c).filter(s => (s.zones || []).includes(z)).map(s => s.id));
+  return Object.entries(v.assign).filter(([sp]) => zs.has(sp)).map(([, id]) => id);
+}
+$('#fileInput').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const d = JSON.parse(await f.text()); if (d.app !== 'seating-chart') throw new Error('not a seating chart data file'); DATA = upgrade(d); await IDB.set('data', DATA); afterDataLoaded(); }
+  catch (err) { alert('Could not open: ' + err.message); }
+});
+$('#csvInput').addEventListener('change', (e) => { const f = e.target.files[0]; if (f && DATA) onCSV(f); });
+
+/* keyboard: clicker sends Page Up / Page Down; the foot pedal may send arrows */
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+  if (!$('#modalBack').classList.contains('hidden')) { if (e.key === 'Escape') closeModal(); return; }
+  const c = curClass();
+  const next = ['PageDown', 'ArrowRight', 'ArrowDown'].includes(e.key);
+  const prev = ['PageUp', 'ArrowLeft', 'ArrowUp'].includes(e.key);
+  if ((next || prev) && DATA) {
+    e.preventDefault();
+    if (UI.view === 'class' && c && bopActive(c) && currentSong(c) && UI.viewVersion == null) {
+      if (next && UI.bopStep < 2) { UI.bopStep++; renderStageArea(); return; }
+      if (prev && UI.bopStep > 0) { UI.bopStep--; renderStageArea(); return; }
+    }
+    stepClass(next ? 1 : -1);
+    return;
+  }
+  if (e.key === 'f' || e.key === 'F') togglePresent();
+  else if ((e.key === 'b' || e.key === 'B') && c && c.bop && c.bop.enabled && UI.view === 'class') { UI.bopView[c.id] = bopActive(c) ? 'chart' : 'bop'; UI.bopStep = 0; renderClass(); }
+  else if (e.key === 'Escape') { if (document.body.classList.contains('present')) togglePresent(false); else if (UI.pick) { UI.pick = null; renderStageArea(); renderTray(); } else if (UI.tool !== 'none') { UI.tool = 'none'; renderClass(); renderDrawer(); } }
+});
+
+function togglePresent(force) {
+  const on = force ?? !document.body.classList.contains('present');
+  if (on && UI.view !== 'class') { const s = DATA && autoSlot(); if (s) openClass(s.c.id); else return; }
+  document.body.classList.toggle('present', on);
+  if (on) { UI.tool = 'none'; UI.pick = null; if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); }
+  else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  setTimeout(renderStageArea, 60);
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('present')) { document.body.classList.remove('present'); setTimeout(renderClass, 60); } });
+let rT; window.addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (UI.view === 'class') renderStageArea(); }, 80); });
+// the YouTube frame can grab keyboard focus if clicked; take it back so the clicker keeps working
+window.addEventListener('blur', () => setTimeout(() => { if (document.activeElement && document.activeElement.tagName === 'IFRAME') { window.focus(); document.activeElement.blur(); } }, 400));
+
+/* ---------------- startup ---------------- */
+function afterDataLoaded() {
+  renderStatus(); renderAutoBtn();
+  const s = DATA.settings.autoSchedule && autoSlot();
+  if (s) openClass(s.c.id); else renderHome();
+}
+(async function init() {
+  try { const d = await IDB.get('data'); if (d && d.app === 'seating-chart') DATA = upgrade(d); } catch (e) {}
+  await FILE.init();
+  if (DATA) afterDataLoaded(); else { renderStatus(); renderHome(); }
+  setInterval(tick, 15000);
+})();
+</script>
+</body>
+</html>
