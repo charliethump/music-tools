@@ -106,11 +106,44 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 #spLink{flex:1;background:#111;color:#ccc;border:1px solid #444;border-radius:8px;padding:8px;font-size:13px}
 #spCopied{color:#8fd18f;font-size:14px}
 .sp-note{color:#888;font-size:13px;margin-top:14px}
+/* sub plan start screen */
+#subStart{position:fixed;inset:0;z-index:56;overflow:auto;display:none;background:radial-gradient(ellipse at 50% 0%,#33363d 0%,#17181c 70%);color:#eee;font-family:Arial,sans-serif;cursor:auto}
+#subStart .sp-wrap{max-width:1100px}
+#subStart h1{font-family:"Chalkboard SE","Comic Sans MS",cursive;font-size:46px;margin:0;color:#ffc83d}
+#subStart h2{font-size:22px;color:#ffc83d;margin:0 0 8px}
+.sub-cols{display:grid;grid-template-columns:1.25fr 1fr;gap:34px;margin-top:20px}
+@media (max-width:900px){.sub-cols{grid-template-columns:1fr}}
+#subStart p,#subStart li{font-size:19px;line-height:1.45;color:#e4e4e4}
+#subStart ol{margin:0 0 10px;padding-left:1.4em}
+#subStart li{margin-bottom:9px}
+#subStart b{color:#fff}
+.sub-btns{display:flex;flex-wrap:wrap;gap:12px;margin:6px 0 22px}
+#subStart .sp-btn{font-size:19px}
+#subStart .sp-btn.big{font-size:24px;padding:14px 30px}
+#subHeard{color:#8fd18f;font-size:16px;align-self:center}
+body.sub .faint{display:none!important}
+body.sub #fsBtn,body.sub #subHomeBtn{display:block!important}
+#subHomeBtn{left:6px;bottom:4px}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:18px;z-index:60;background:#1a1c20}
 </style>
 </head>
 <body>
 <div id="loading">Loading…</div>
+<div id="subStart">
+  <div class="sp-wrap">
+    <h1>Max Found Two Sticks</h1>
+    <p id="subSummary" class="sp-sub" style="font-size:20px;margin-top:10px"></p>
+    <div class="sub-cols">
+      <div><h2>How it works</h2><ol id="subHow"></ol></div>
+      <div>
+        <h2>Before you start</h2><ol id="subBefore"></ol>
+        <div class="sub-btns"><button id="subTest" class="sp-btn">🔊 Test the sound</button><span id="subHeard"></span></div>
+        <div class="sub-btns"><button id="subGo" class="sp-btn primary big">Start the book ▶</button></div>
+        <h2>When you finish</h2><ol id="subAfter"></ol>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="book"><div id="shift">
   <div class="half" id="baseL"></div><div class="half" id="baseR"></div>
   <div id="underShade"></div>
@@ -195,6 +228,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 <div id="toast"></div>
 <div id="pages"><div id="pagesGrid"></div></div>
 <button class="faint" id="setupBtn" title="Setup page">⚙ setup</button>
+<button class="faint" id="subHomeBtn" title="Back to the start screen">↩ start screen</button>
 <div id="splash">
   <div class="sp-wrap">
     <h1>Max Found Two Sticks</h1>
@@ -214,10 +248,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
     </div>
     <div class="sp-actions">
       <button id="spCopy" class="sp-btn">Copy link with these settings</button>
+      <button id="spSubCopy" class="sp-btn">Copy sub plan link</button>
       <button id="spStart" class="sp-btn primary">Start the book ▶</button>
     </div>
     <div id="spLinkRow"><input id="spLink" readonly><span id="spCopied"></span></div>
-    <p class="sp-note">Opening a copied link goes straight to the cover with these settings. The ⚙ setup button (bottom left) brings this page back.</p>
+    <p class="sp-note">Opening a copied link goes straight to the cover with these settings. The ⚙ setup button (bottom left) brings this page back. The sub plan link opens a locked, keyboard-and-mouse version with its own instructions and no setup page.</p>
   </div>
 </div>
 
@@ -254,6 +289,33 @@ const AMB_DUCK = 0.18;             // background level while the drummer plays
 const AUTO_FULLSCREEN = true;      // go full screen on the first press (browsers don't allow it before a click or key)
 const END_FADE_SEC = 10;           // background sounds fade out over this long when The End appears
 const FLIP_MS = 950;
+
+/* ---------- Sub plan version (open the file with ?sub at the end of the address) ----------
+   Same book, locked: no setup page, every rhythm page is Echo, no glows, no wind steps,
+   no finale, no hidden keys. One press shows the rhythm card, then the drummer comes up on his own. */
+const SUB = new URLSearchParams(location.search).has('sub') || /(^|[#&])sub(=1)?($|&)/.test(location.hash);
+const SUB_SETTINGS = { echoCount: true, echoPlay: true, syl: false, bpm: 80 };
+const SUB_DRUMMER_DELAY = 1000;   // ms between the card appearing and the drummer coming up
+// Everything the sub reads (edit freely)
+const SUB_TEXT = {
+  summary: 'A first grade read-aloud. You read the book out loud. On the rhythm pages, a drummer on the screen plays a rhythm and the class echoes it back on their rhythm sticks.',
+  how: [
+    'Read the words on each page out loud.',
+    '<b>Next:</b> press <b>→</b> or the <b>space bar</b>, or click the right side of the screen. <b>Back:</b> press <b>←</b> or click the left side.',
+    'On some pages, pressing <b>→</b> brings up a rhythm card instead of turning the page. A second later the drummer comes up on his own. He counts “1, 2, ready, go!” and plays the rhythm while the sign says <b>Listen!</b> Students listen with sticks still.',
+    'Then the sign says <b>Echo!</b> He counts off again and the class plays the rhythm back on their sticks with him. When he drops away, press <b>→</b> to turn the page.',
+    'To stop the drummer early, click him or press <b>Esc</b>.',
+    'The book ends with <b>The End</b>.'
+  ],
+  before: [
+    'Turn the computer’s sound on and up, then click <b>Test the sound</b>.',
+    'Hand out two rhythm sticks to each student, whatever way works for you: by name, by rug row color, or with helpers.'
+  ],
+  after: [
+    'Collect the rhythm sticks and put them away.',
+    'Press <b>Esc</b> to leave full screen, then close this tab.'
+  ],
+};
 const T = { cardMove: 600, rise: 650, fall: 600 };
 const HIT = '#ff7a00', ECHO = '#1e88e5';
 const DRUMMER_SOUND = 'click';    // the drummer always plays stick clicks
@@ -446,11 +508,11 @@ function enterPage() {
   setAmbience(p.amb || {});
   updateModeTag();
   $('sylTag').style.display = st.idx === 0 ? '' : 'none';
-  if (p.story === 'finale') $('endChoice').style.display = 'flex';
+  if (p.story === 'finale' && !SUB) $('endChoice').style.display = 'flex';
   if (p.rhythm) {
     showPatch(true);
-    showHomeCard(!CARDS_START_HIDDEN);
-    if (CARDS_START_HIDDEN) setTimeout(() => { if (PAGES[st.idx] === p && !st.flipping) popCard(); }, 500);
+    showHomeCard(!CARDS_START_HIDDEN && !SUB);   // sub version: the card appears on the first press
+    if (CARDS_START_HIDDEN && !SUB) setTimeout(() => { if (PAGES[st.idx] === p && !st.flipping) popCard(); }, 500);
   }
   if (p.story === 'rain') rainStart();
   if (p.story === 'sun') $('sun').animate([{ opacity: 0 }, { opacity: .85, offset: .35 }, { opacity: .25 }], { duration: 4000, fill: 'forwards' });
@@ -476,9 +538,10 @@ async function next() {
   if (st.busy || st.flipping) return;
   initAudio();
   const p = PAGES[st.idx];
-  if (p.glow && !st.glowOn && st.step === 0) { st.glowOn = true; showGlow(p.glow); return; }
+  if (p.glow && !SUB && !st.glowOn && st.step === 0) { st.glowOn = true; showGlow(p.glow); return; }
   if (p.rhythm) {
     const mode = st.modes[st.idx];
+    if (SUB && st.step === 0) { st.step = 1; await subRhythm(); return; }
     if (st.step === 0) {
       hideGlow();
       if (mode === 'echo') { st.step = 1; await runPlay({ echo: true }); }
@@ -488,7 +551,7 @@ async function next() {
     if (st.step === 1 && mode === 'volunteer') { st.step = 2; await runPlay({ echo: false, fromCenter: true }); return; }
     return flipTo(st.idx + 1);
   }
-  if (p.story === 'wind') {
+  if (p.story === 'wind' && !SUB) {
     if (st.step < 3) { windStep(st.step); st.step++; return; }
     clearWind();
   }
@@ -511,7 +574,7 @@ function resetPage() {
   stopAll(true);
   const i = st.idx; leavePage(); st.step = 0;
   const p = PAGES[i];
-  if (p.rhythm) showHomeCard(true);
+  if (p.rhythm) showHomeCard(!SUB);
   if (p.story === 'rain') rainStart();
   if (p.story === 'wind' && audioCtx) {   // undo the gust / calm
     const L = amb.layers.wind; if (L && L.lp) L.lp.frequency.setTargetAtTime(2600, audioCtx.currentTime, 0.5);
@@ -836,7 +899,17 @@ async function volunteerEnlarge() {
   await moveCard('center', 700);
   st.busy = false;
 }
+// Sub version: card pops in, then the drummer comes up and runs the echo on his own
+async function subRhythm() {
+  st.busy = true;
+  const tok = st.playToken;
+  if (cardEl.style.display !== 'block') { popCard(); sfx.whoosh(0.4); }
+  await sleep(SUB_DRUMMER_DELAY);
+  if (tok !== st.playToken) return;     // stopped during the pause
+  await runPlay({ echo: true });
+}
 function replay() {
+  if (SUB) return;
   const p = PAGES[st.idx];
   if (p.story === 'finale') { if (!st.busy && st.step === 0) { initAudio(); st.step = 1; $('endChoice').style.display = 'none'; runFinale(); } return; }
   if (!p.rhythm || st.busy || st.flipping) return;
@@ -1596,6 +1669,29 @@ $('spCopy').onclick = async () => {
   catch (e) { $('spLink').select(); $('spCopied').textContent = 'Select and copy the link'; }
 };
 $('splash').addEventListener('click', e => e.stopPropagation());
+$('subStart').addEventListener('click', e => e.stopPropagation());
+$('subStart').addEventListener('keydown', e => e.stopPropagation());
+function subURL() { return location.href.split('#')[0].split('?')[0] + '?sub'; }
+$('spSubCopy').onclick = async () => {
+  const url = subURL(); $('spLink').value = url; $('spLinkRow').style.display = 'flex';
+  try { await navigator.clipboard.writeText(url); $('spCopied').textContent = 'Sub plan link copied!'; }
+  catch (e) { $('spLink').select(); $('spCopied').textContent = 'Select and copy the link'; }
+};
+function openSubStart() {
+  if (st.busy) stopAll(true);
+  $('subStart').style.display = 'block'; $('subStart').scrollTop = 0;
+}
+function subBegin() {
+  $('subStart').style.display = 'none';
+  initAudio(); autoFullscreen();
+}
+$('subSummary').textContent = SUB_TEXT.summary;
+$('subHow').innerHTML = SUB_TEXT.how.map(t => `<li>${t}</li>`).join('');
+$('subBefore').innerHTML = SUB_TEXT.before.map(t => `<li>${t}</li>`).join('');
+$('subAfter').innerHTML = SUB_TEXT.after.map(t => `<li>${t}</li>`).join('');
+$('subTest').onclick = () => { initAudio(); instrument('click', getCtx().currentTime + 0.05, 0); instrument('click', getCtx().currentTime + 0.55, 1); sfx.chime(); $('subHeard').textContent = 'You should hear two stick clicks and a chime.'; };
+$('subGo').onclick = subBegin;
+$('subHomeBtn').onclick = e => { e.stopPropagation(); openSubStart(); };
 $('splash').addEventListener('keydown', e => e.stopPropagation());
 let autoFsDone = false;
 function autoFullscreen() {
@@ -1605,7 +1701,7 @@ function autoFullscreen() {
 }
 // first press anywhere in the book (not on the setup page, where Start does it)
 ['keydown', 'pointerdown'].forEach(t => addEventListener(t, e => {
-  if ($('splash').style.display === 'block') return;
+  if ($('splash').style.display === 'block' || $('subStart').style.display === 'block') return;
   if (t === 'keydown' && (e.key === 'Escape' || e.key === 'f' || e.key === 'F')) return;
   autoFullscreen();
 }, true));
@@ -1627,8 +1723,15 @@ function closePages() { $('pages').style.display = 'none'; }
 document.addEventListener('keydown', e => {
   if ($('splash').style.display === 'block') { if (e.key === 'Enter') { e.preventDefault(); closeSplash(); autoFullscreen(); } return; }
   if ($('pages').style.display === 'flex') { if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') closePages(); return; }
+  if (SUB && $('subStart').style.display === 'block') { if (e.key === 'Enter') { e.preventDefault(); subBegin(); } return; }
   if (e.repeat) return;
   const k = e.key;
+  if (SUB) {                      // sub version: next, back and stop only
+    if (['PageDown', 'ArrowRight', 'ArrowDown', ' ', 'Enter'].includes(k)) { e.preventDefault(); next(); }
+    else if (['PageUp', 'ArrowLeft', 'ArrowUp', 'Backspace'].includes(k)) { e.preventDefault(); initAudio(); back(); }
+    else if (k === 'Escape') { if (st.busy) stopAll(); }
+    return;
+  }
   if (['PageDown', 'ArrowRight', 'ArrowDown', ' ', 'Enter'].includes(k)) { e.preventDefault(); next(); }
   else if (['PageUp', 'ArrowLeft', 'ArrowUp', 'Backspace'].includes(k)) { e.preventDefault(); initAudio(); back(); }
   else if (k === 'Escape') { if (st.busy) stopAll(); }
@@ -1678,12 +1781,19 @@ addEventListener('resize', layout);
   if (DRUMMER_IMAGES) { drummerEl.querySelector('svg').style.display = 'none'; $('drummerImg').style.display = 'block'; }
   await Promise.all(st.urls.map(u => { const im = new Image(); im.src = u; return im.decode().catch(() => {}); }));
   armL.style.transform = `rotate(${-ARM.ready}deg)`; armR.style.transform = `rotate(${ARM.ready}deg)`;
-  const fromLink = parseHash();
-  if (fromLink) applySettings(fromLink);
+  const fromLink = SUB ? null : parseHash();
+  if (SUB) {                      // locked settings; nothing is saved on this computer
+    document.body.classList.add('sub');
+    Object.assign(st, SUB_SETTINGS, { finaleEcho: false });
+    st.modes = PAGES.map(p => p.rhythm ? 'echo' : null);
+    document.title = 'Max Found Two Sticks (Sub)';
+  }
+  else if (fromLink) applySettings(fromLink);
   else { try { const saved = JSON.parse(localStorage.getItem('mfts-settings') || 'null'); if (saved) applySettings(saved); } catch (e) {} }
   layout(); paintSpread(0); enterPage();
   $('loading').remove();
-  if (!fromLink) openSplash();
+  if (SUB) openSubStart();
+  else if (!fromLink) openSplash();
 })();
 </script>
 </body>
