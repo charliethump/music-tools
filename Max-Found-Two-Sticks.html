@@ -124,9 +124,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 body.sub .faint{display:none!important}
 body.sub #subHomeBtn{display:block!important}
 #subHomeBtn{left:6px;bottom:4px}
-#subNav{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:30;display:none;gap:14px}
+#subNav{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:30;display:none;gap:10px}
 body.sub.reading #subNav{display:flex}
-#subNav button{font:bold 20px Arial,sans-serif;border-radius:12px;padding:11px 22px;cursor:pointer;border:1px solid #555;background:#2a2d33;color:#eee;box-shadow:0 .4vh 1.2vh rgba(0,0,0,.4);white-space:nowrap}
+#subNav button{font:bold 15px Arial,sans-serif;border-radius:9px;padding:6px 14px;opacity:.92;cursor:pointer;border:1px solid #555;background:#2a2d33;color:#eee;box-shadow:0 .4vh 1.2vh rgba(0,0,0,.4);white-space:nowrap}
 #subNav button.primary{background:#ffc83d;color:#222;border-color:#ffc83d}
 #subNav button.echo{background:#1e88e5;color:#fff;border-color:#1e88e5}
 #subNav button:disabled{opacity:.35;cursor:default}
@@ -426,7 +426,7 @@ const BOOK_AR = 2048 / 1300;
 const bookEl = $('book'), shiftEl = $('shift');
 function layout() {
   const W = innerWidth, H = innerHeight;
-  const navH = SUB ? 76 : 0;            // sub version: room for the Previous / Next buttons
+  const navH = 0;                       // the sub version buttons sit on top of the book
   let bw = W * 0.96, bh = bw / BOOK_AR;
   if (bh > H * 0.93 - navH) { bh = H * 0.93 - navH; bw = bh * BOOK_AR; }
   Object.assign(bookEl.style, { width: bw + 'px', height: bh + 'px', left: (W - bw) / 2 + 'px', top: (H - navH - bh) / 2 + 'px' });
