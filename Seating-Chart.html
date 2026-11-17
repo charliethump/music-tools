@@ -31,6 +31,13 @@ input,select,textarea{font:inherit}
 #status.ok{border-color:#2f6b45;color:#9fe0b4}
 #status.warn{border-color:#8a6116;color:#f6d38b}
 #status.bad{border-color:#8f2a22;color:#f4b0aa}
+body.viewer .editor-only{display:none!important}
+body.viewer [data-act="importRoster"],body.viewer [data-act="addClass"],body.viewer [data-act="newYear"],body.viewer [data-act="weekly"],body.viewer [data-act="deleteClass"],body.viewer [data-act="addStudent"]{display:none!important}
+#viewBanner{background:#0f766e;color:#fff;text-align:center;font-size:13px;padding:5px;font-weight:600}
+body.viewer.vtemp #viewBanner{background:#b45309}
+body.viewer #main{top:73px}
+body.present #viewBanner{display:none}
+textarea.code{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;border:1px solid #c7c3ba;border-radius:6px;padding:6px;word-break:break-all}
 #demoBanner{background:#7c3aed;color:#fff;text-align:center;font-size:13px;padding:5px;font-weight:600}
 
 /* ---------- layout ---------- */
@@ -178,10 +185,28 @@ details.cls{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;bac
 details.cls summary{padding:8px 11px;cursor:pointer;font-weight:600}
 details.cls .inner{padding:4px 12px 12px}
 @media (max-width:900px){#drawer{width:100%;position:absolute;inset:0;z-index:20}}
+.rc{display:inline-block;min-width:20px;text-align:center;font-size:12px;font-weight:700;padding:1px 6px;border-radius:999px;background:#e8e1f7;color:#4c2a8a}
+.rc.wait{background:var(--warnbg);color:#6b4407;font-weight:600}
+.pend{border:1px solid #e9cf8f;background:#fffaf0;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.pend .rule{border-bottom-color:#f1e2bd}
+#printArea{display:none}
+@media print{
+  @page{margin:0.6in}
+  html,body{background:#fff!important;color:#000!important;height:auto}
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block!important;font-family:Arial,Helvetica,sans-serif;color:#000}
+  #printArea h1{font-size:20pt;margin:0 0 2pt}
+  #printArea .pmeta{font-size:10pt;color:#444;margin-bottom:12pt}
+  #printArea table{width:100%;border-collapse:collapse;font-size:11pt}
+  #printArea th{text-align:left;border-bottom:1.5pt solid #000;padding:4pt 6pt;font-size:10pt}
+  #printArea td{border-bottom:0.5pt solid #999;padding:5pt 6pt}
+  #printArea td.n{color:#666;width:22pt}
+}
 </style>
 </head>
 <body>
 <div id="demoBanner" class="hidden">DEMO MODE - fake names - nothing here is saved. <button class="tb" style="margin-left:8px;padding:2px 9px" data-act="exitDemo">Exit demo</button></div>
+<div id="viewBanner" class="hidden"></div>
 <div id="bar">
   <span class="brand">Seating Charts</span>
   <button class="tb" data-act="home">Classes</button>
@@ -210,6 +235,7 @@ details.cls .inner{padding:4px 12px 12px}
 <div id="modalBack" class="hidden"><div id="modal"><div class="mh"><h2 id="mTitle"></h2><button class="btn sm" data-act="closeModal">Close</button></div><div class="mb" id="mBody"></div><div class="mf" id="mFoot"></div></div></div>
 <input type="file" id="fileInput" accept=".json,application/json" class="hidden">
 <input type="file" id="csvInput" accept=".csv,text/csv" class="hidden">
+<div id="printArea"></div>
 
 <script>
 "use strict";
@@ -313,9 +339,22 @@ const FILE = {
           DATA = upgrade(fileData); await IDB.set('data', DATA); this.setDirty(false);
         } else await this.write();
       }
+      if (!this.known) this.known = fileData.savedAt || '';
     } else if (DATA) {
       await this.write();
     }
+  },
+  /* pick up changes Drive synced in from another computer */
+  async refresh() {
+    if (!this.handle || !this.connected || this.dirty || this.saving || DEMO || !DATA) return;
+    if (!$('#modalBack').classList.contains('hidden')) return;
+    let f; try { f = await this.readFile(); } catch (e) { return; }
+    if (!f || f.app !== 'seating-chart' || !f.savedAt || f.savedAt === this.known || f.savedAt === DATA.savedAt) { if (f && f.savedAt) this.known = f.savedAt; return; }
+    if (Date.parse(f.savedAt) < Date.parse(DATA.savedAt || 0)) return;
+    DATA = upgrade(f); this.known = f.savedAt; await IDB.set('data', DATA);
+    renderAll(); if (UI.drawer && curClass()) renderDrawer();
+    toast('Loaded the newest changes from your data file.');
+    if (syncOn()) { SYNC.dirty = true; schedulePush(); }
   },
   async openPicker() {
     if (!this.supported) { $('#fileInput').click(); return; }
@@ -326,7 +365,7 @@ const FILE = {
       const d = JSON.parse(txt);
       if (d.app !== 'seating-chart') throw new Error('That file is not a seating chart data file.');
       this.handle = h; await IDB.set('fileHandle', h);
-      DATA = upgrade(d); await IDB.set('data', DATA);
+      DATA = upgrade(d); await IDB.set('data', DATA); this.known = d.savedAt || '';
       this.connected = p === 'granted'; this.needsReconnect = !this.connected; this.setDirty(false);
       if (this.connected && !d.savedAt) await this.write();
       afterDataLoaded();
@@ -346,9 +385,19 @@ const FILE = {
     if (!this.handle || !this.connected || DEMO) return;
     this.saving = true; renderStatus();
     try {
+      // before saving, make sure another computer hasn't changed the file since this page last read it
+      let f = null; try { f = await this.readFile(); } catch (e) { f = null; }
+      if (f && f.app === 'seating-chart' && f.savedAt && this.known && f.savedAt !== this.known && f.savedAt !== DATA.savedAt) {
+        const when = new Date(f.savedAt).toLocaleString();
+        if (confirm(`Your data file was changed on another computer (${when}) after this page loaded.\n\nOK = load that newer version (the change you just made here is dropped)\nCancel = keep this computer's version and overwrite the file`)) {
+          DATA = upgrade(f); this.known = f.savedAt; await IDB.set('data', DATA); this.setDirty(false);
+          this.saving = false; renderAll(); if (UI.drawer && curClass()) renderDrawer(); return;
+        }
+      }
       const w = await this.handle.createWritable();
       await w.write(JSON.stringify(DATA, null, 1));
       await w.close();
+      this.known = DATA.savedAt || '';
       this.setDirty(false); this.lastError = '';
     } catch (e) {
       this.lastError = e.message; this.connected = false; this.needsReconnect = true;
@@ -363,22 +412,229 @@ let saveTimer = null;
 function save() {
   if (!DATA || DEMO) return;
   DATA.savedAt = new Date().toISOString();
-  FILE.setDirty(true);
+  if (SYNC.cfg) SYNC.dirty = true;
   clearTimeout(saveTimer);
+  if (VIEWER) {   // school PC: no data file, just this browser plus the shared copy
+    renderStatus();
+    saveTimer = setTimeout(async () => { try { await IDB.set('data', DATA); } catch (e) {} schedulePush(); renderStatus(); }, 300);
+    return;
+  }
+  FILE.setDirty(true);
   renderStatus();
   saveTimer = setTimeout(async () => {
     try { await IDB.set('data', DATA); } catch (e) {}
     if (FILE.connected) await FILE.write();
     renderStatus();
+    schedulePush();
   }, 500);
 }
 
-function download() {
+/* ======================================================================
+   Sync: every computer shares one encrypted copy in a private GitHub
+   repo, pulling others' changes and pushing its own. Changes to
+   different classes merge automatically. Tokens and the passphrase
+   live only in each browser's storage, never in the data file.
+   ====================================================================== */
+const b64 = buf => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function gzip(str) { return new Uint8Array(await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); }
+async function gunzip(u8) { return await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
+const KEYCACHE = {};
+async function deriveKey(pass, salt, iter) {
+  const id = pass + '|' + salt + '|' + iter; if (KEYCACHE[id]) return KEYCACHE[id];
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return KEYCACHE[id] = await crypto.subtle.deriveKey({name: 'PBKDF2', salt: unb64(salt), iterations: iter, hash: 'SHA-256'}, base, {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt']);
+}
+async function encryptText(json, savedAt, pass, salt) {
+  const iter = 310000, key = await deriveKey(pass, salt, iter);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name: 'AES-GCM', iv}, key, await gzip(json));
+  return {app: 'seating-chart-enc', v: 1, savedAt: savedAt || '', iter, salt, iv: b64(iv), ct: b64(ct)};
+}
+async function decryptData(env, pass) {
+  const key = await deriveKey(pass, env.salt, env.iter);
+  let pt; try { pt = await crypto.subtle.decrypt({name: 'AES-GCM', iv: unb64(env.iv)}, key, unb64(env.ct)); }
+  catch (e) { throw new Error('The passphrase does not match the shared copy. Check the passphrase, or make a new setup code on the Mac.'); }
+  return JSON.parse(await gunzip(new Uint8Array(pt)));
+}
+function newPassphrase() {
+  const A = 'abcdefghjkmnpqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(20));
+  return [...r].map(x => A[x % A.length]).join('').replace(/(.{5})(?!$)/g, '$1-');
+}
+const GH = {
+  url(cfg) { return `https://api.github.com/repos/${cfg.repo.trim()}/contents/${encodeURIComponent(cfg.path || 'seating-data.enc.json')}`; },
+  async req(cfg, token, opts = {}) {
+    let r;
+    try { r = await fetch(GH.url(cfg) + (opts.q || ''), {method: opts.method || 'GET', cache: 'no-store', headers: Object.assign({Authorization: 'Bearer ' + token.trim(), 'X-GitHub-Api-Version': '2022-11-28', Accept: opts.raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json'}, opts.body ? {'Content-Type': 'application/json'} : {}), body: opts.body}); }
+    catch (e) { throw new Error('Could not reach GitHub. Check the internet connection.'); }
+    return r;
+  },
+  why(r) { return r.status === 401 ? 'GitHub did not accept the token (it may have expired).' : r.status === 403 ? 'The token is not allowed to do that. Check its repository access and Contents permission.' : r.status === 404 ? 'GitHub could not find that repository with this token.' : 'GitHub error ' + r.status + '.'; }
+};
+
+/* ---- sync engine ---- */
+let VIEWER = false;   // true on a school PC (no data file)
+const SYNC = {cfg: null, sha: null, base: null, dirty: false, busy: false, err: '', checked: 0, timer: null, readOnly: false};
+const syncOn = () => !!(SYNC.cfg && SYNC.cfg.on !== false && SYNC.cfg.repo && SYNC.cfg.token && SYNC.cfg.pass);
+async function syncLoad() {
+  try {
+    SYNC.cfg = await IDB.get('sync') || null;
+    if (!SYNC.cfg) {   // settings from the publish-only version
+      const p = await IDB.get('publish');
+      if (p && p.repo && p.token && p.pass) { SYNC.cfg = {repo: p.repo, path: p.path, token: p.token, pass: p.pass, salt: p.salt, on: p.on, sha: p.sha, syncedAt: p.lastSavedAt || ''}; await IDB.set('sync', SYNC.cfg); }
+    }
+    if (SYNC.cfg) {
+      SYNC.sha = SYNC.cfg.sha || null; SYNC.readOnly = !!SYNC.cfg.readOnly;
+      SYNC.base = await IDB.get('syncBase') || null;
+      SYNC.dirty = !!(DATA && DATA.savedAt !== SYNC.cfg.syncedAt);
+    }
+  } catch (e) {}
+}
+async function syncPersist(syncedAt) {
+  if (!SYNC.cfg) return;
+  SYNC.cfg.sha = SYNC.sha; if (syncedAt !== undefined) SYNC.cfg.syncedAt = syncedAt;
+  try { await IDB.set('sync', SYNC.cfg); } catch (e) {}
+}
+async function setBase(json) { SYNC.base = json; try { await IDB.set('syncBase', json); } catch (e) {} }
+
+/* three-way merge: take each class (and each other part) from whichever side changed it since the last sync */
+function mergeData(base, L, R) {
+  const out = JSON.parse(JSON.stringify(R));
+  const J = x => JSON.stringify(x === undefined ? null : x);
+  const side = (b, l, r, hadBase) => { const sl = J(l), sr = J(r); if (sl === sr) return 'same'; if (hadBase) { const sb = J(b); if (sb === sl) return 'r'; if (sb === sr) return 'l'; } return 'both'; };
+  const conflicts = [];
+  const LABEL = {settings: 'App settings', people: 'Student memory', ruleBank: 'Rules from earlier years', year: 'School year', layouts: 'Room layouts'};
+  for (const k of new Set([...Object.keys(L), ...Object.keys(R)])) {
+    if (k === 'classes' || k === 'savedAt') continue;
+    const r = side(base && base[k], L[k], R[k], !!base);
+    if (r === 'l') out[k] = L[k];
+    else if (r === 'both') conflicts.push({label: LABEL[k] || k, apply: () => { out[k] = L[k]; }});
+  }
+  const bC = base ? Object.fromEntries(base.classes.map(c => [c.id, c])) : {};
+  const lC = Object.fromEntries(L.classes.map(c => [c.id, c])), rC = Object.fromEntries(R.classes.map(c => [c.id, c]));
+  const ids = [...new Set([...R.classes.map(c => c.id), ...L.classes.map(c => c.id)])];
+  const pickL = new Set(), drop = new Set();
+  for (const id of ids) {
+    const r = side(bC[id], lC[id], rC[id], !!base);
+    if (r === 'l') { if (lC[id]) pickL.add(id); else drop.add(id); }
+    else if (r === 'both') conflicts.push({label: (lC[id] || rC[id]).title, apply: () => { if (lC[id]) pickL.add(id); else drop.add(id); }});
+  }
+  if (conflicts.length && confirm(`Two computers changed the same thing before they synced:\n\n${conflicts.map(c => '- ' + c.label).join('\n')}\n\nOK = keep THIS computer's version of these\nCancel = keep the other computer's version`)) conflicts.forEach(c => c.apply());
+  out.classes = ids.filter(id => !drop.has(id) && (pickL.has(id) ? lC[id] : rC[id])).map(id => JSON.parse(JSON.stringify(pickL.has(id) ? lC[id] : rC[id])));
+  return out;
+}
+
+async function remoteGet() {
+  const r = await GH.req(SYNC.cfg, SYNC.cfg.token);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(GH.why(r));
+  const j = await r.json();
+  let txt;
+  if (j.content && j.encoding === 'base64') txt = new TextDecoder().decode(unb64(j.content.replace(/\s/g, '')));
+  else { const r2 = await GH.req(SYNC.cfg, SYNC.cfg.token, {raw: true}); if (!r2.ok) throw new Error(GH.why(r2)); txt = await r2.text(); }
+  const env = JSON.parse(txt);
+  if (env.app !== 'seating-chart-enc') throw new Error('The file in the repository is not seating chart data.');
+  return {sha: j.sha, env};
+}
+function refreshViews() {
+  if (!DATA) { renderHome(); return; }
+  if (UI.view === 'class' && !getClass(UI.classId)) { UI.classId = null; renderHome(); }
+  else renderAll();
+  if (UI.drawer && curClass()) renderDrawer();
+}
+async function pullCore() {
+  const got = await remoteGet();
+  SYNC.checked = Date.now(); SYNC.err = '';
+  if (!got || got.sha === SYNC.sha) return false;
+  const json = JSON.stringify(await decryptData(got.env, SYNC.cfg.pass));
+  const R = upgrade(JSON.parse(json));
+  if (!SYNC.cfg.salt) SYNC.cfg.salt = got.env.salt;
+  let syncedAt = R.savedAt;
+  if (!DATA || !SYNC.dirty || SYNC.readOnly) {
+    if (DATA && SYNC.readOnly && SYNC.dirty) toast('Updated from your other computer. Temporary changes on this PC were replaced.');
+    DATA = R; SYNC.dirty = false;
+  } else {
+    DATA = upgrade(mergeData(SYNC.base ? JSON.parse(SYNC.base) : null, DATA, R));
+    DATA.savedAt = new Date().toISOString(); syncedAt = R.savedAt;   // merged result still needs pushing
+  }
+  SYNC.sha = got.sha; await setBase(json); await syncPersist(syncedAt);
+  try { await IDB.set('data', DATA); } catch (e) {}
+  if (!VIEWER && FILE.connected) await FILE.write();
+  refreshViews();
+  return true;
+}
+async function pushCore() {
+  for (let tries = 0; tries < 4; tries++) {
+    if (!SYNC.cfg.salt) SYNC.cfg.salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+    const at = DATA.savedAt, json = JSON.stringify(DATA);
+    const env = await encryptText(json, at, SYNC.cfg.pass, SYNC.cfg.salt);
+    const body = JSON.stringify(Object.assign({message: 'Seating data from ' + (VIEWER ? 'school PC' : 'Mac') + ' ' + new Date().toISOString().slice(0, 16), content: btoa(JSON.stringify(env))}, SYNC.sha ? {sha: SYNC.sha} : {}));
+    const r = await GH.req(SYNC.cfg, SYNC.cfg.token, {method: 'PUT', body});
+    if (r.ok) {
+      const j = await r.json();
+      SYNC.sha = j.content && j.content.sha; SYNC.dirty = DATA.savedAt !== at; SYNC.err = '';
+      await setBase(json); await syncPersist(at);
+      return;
+    }
+    if (r.status === 409 || r.status === 422) {   // another computer saved first: bring its changes in, then try again
+      SYNC.sha = SYNC.sha || 'unknown';
+      await pullCore();
+      if (!SYNC.dirty) return;
+      continue;
+    }
+    throw new Error(GH.why(r));
+  }
+  throw new Error('Could not save to GitHub after several tries.');
+}
+async function syncPull(opts = {}) {
+  if (!syncOn() || DEMO || SYNC.busy) return;
+  if (!opts.force && UI.view === 'class' && UI.bopStep) return;   // never interrupt a Bop or Flop reveal
+  if (!opts.force && !$('#modalBack').classList.contains('hidden')) return;
+  SYNC.busy = true; renderStatus();
+  try { await pullCore(); } catch (e) { SYNC.err = e.message; }
+  SYNC.busy = false; renderStatus();
+  if (SYNC.dirty && !SYNC.readOnly) schedulePush(500);
+}
+function schedulePush(ms) {
+  if (!syncOn() || SYNC.readOnly || DEMO) return;
+  clearTimeout(SYNC.timer); SYNC.timer = setTimeout(syncPush, ms ?? (VIEWER ? 2000 : 5000)); renderStatus();
+}
+async function syncPush() {
+  if (!syncOn() || SYNC.readOnly || DEMO || !DATA || !SYNC.dirty) { renderStatus(); return; }
+  if (SYNC.busy) { schedulePush(2000); return; }
+  SYNC.busy = true; renderStatus();
+  try { await pushCore(); } catch (e) { SYNC.err = e.message; }
+  SYNC.busy = false; renderStatus();
+  if (SYNC.dirty && !SYNC.err) schedulePush(1000);
+}
+function setupCode() {
+  const c = SYNC.cfg; if (!c || !c.token || !c.pass) return '';
+  return 'SEAT2.' + btoa(JSON.stringify({r: c.repo.trim(), p: c.path || 'seating-data.enc.json', t: c.token.trim(), k: c.pass}));
+}
+function parseSetupCode(code) {
+  const m = String(code || '').trim().match(/^SEAT([12])\.([A-Za-z0-9+/=]+)$/);
+  if (!m) throw new Error('That does not look like a setup code. It starts with SEAT2.');
+  const o = JSON.parse(atob(m[2])); if (!o.r || !o.t || !o.k) throw new Error('That setup code is incomplete.');
+  return {repo: o.r, path: o.p, token: o.t, pass: o.k, on: true, school: true, readOnly: m[1] === '1'};
+}
+function viewerSetupDialog() {
+  openModal('Set up as a school PC', `
+    <p class="note">Paste the setup code from the Mac (Data and settings, Sync, Copy setup code). This PC then shares the same seating data as your Mac: changes made here or there show up on the other within a couple of minutes.</p>
+    <textarea class="code" id="vsCode" rows="4" placeholder="SEAT2...."></textarea>
+    <div class="msg info">Anything already saved in this browser for the seating app is replaced by the shared copy.</div>`,
+    `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="vsGo">Set up this PC</button>`);
+}
+function applySchoolLook() {
+  document.body.classList.toggle('viewer', VIEWER && SYNC.readOnly);
+  $('#viewBanner').classList.toggle('hidden', !(VIEWER && SYNC.readOnly));
+}
+
+function download(name) {
   const blob = new Blob([JSON.stringify(DATA, null, 1)], {type: 'application/json'});
   const a = document.createElement('a');
   const d = new Date();
   a.href = URL.createObjectURL(blob);
-  a.download = 'seating-data-backup-' + d.toISOString().slice(0, 10) + '.json';
+  a.download = name || ('seating-data-backup-' + d.toISOString().slice(0, 10) + '.json');
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
@@ -387,6 +643,10 @@ function upgrade(d) {
   d.settings = Object.assign({autoSchedule: true, flipMinutes: 5, schools: ['SRS', 'EWS']}, d.settings || {});
   d.layouts = d.layouts || {};
   d.classes = d.classes || [];
+  d.settings.schoolAliases = d.settings.schoolAliases || {};
+  d.people = d.people || {};        // every student ever imported from Aspen, kept across years
+  d.ruleBank = d.ruleBank || [];    // rules from earlier years, waiting for approval
+  if (!d.year) { const t = new Date(), y = t.getMonth() >= 6 ? t.getFullYear() : t.getFullYear() - 1; d.year = `${y}-${String((y + 1) % 100).padStart(2, '0')}`; }
   for (const c of d.classes) {
     c.spots = c.spots || []; c.students = c.students || []; c.rules = c.rules || [];
     c.versions = c.versions || []; c.schedule = c.schedule || [];
@@ -799,6 +1059,26 @@ function renderAutoBtn() { const b = $('#autoBtn'); if (!DATA) return; b.textCon
 function renderStatus() {
   const el = $('#status'); el.className = '';
   if (DEMO) { el.textContent = 'Demo data, not saved'; el.classList.add('warn'); return; }
+  const ago = SYNC.checked ? Math.round((Date.now() - SYNC.checked) / 60000) : null;
+  const agoTxt = ago == null ? '' : ` · checked ${ago < 1 ? 'just now' : ago + ' min ago'}`;
+  if (VIEWER) {
+    el.title = SYNC.err || '';
+    if (SYNC.readOnly) {
+      document.body.classList.toggle('vtemp', SYNC.dirty);
+      $('#viewBanner').textContent = SYNC.dirty ? 'VIEW-ONLY PC - you made temporary changes. The next update replaces them. Paste a new setup code from the Mac to allow saving.' : 'VIEW-ONLY PC - changes made here are temporary. Paste a new setup code from the Mac to allow saving.';
+    }
+    if (!DATA) { el.textContent = SYNC.err ? 'Sync failed' : 'Waiting for data'; el.classList.add(SYNC.err ? 'bad' : 'warn'); return; }
+    if (SYNC.err) { el.textContent = 'Sync failed · working offline'; el.classList.add('bad'); return; }
+    if (SYNC.readOnly) { el.textContent = (SYNC.dirty ? 'Temporary changes' : 'Up to date') + agoTxt; el.classList.add(SYNC.dirty ? 'warn' : 'ok'); return; }
+    if (SYNC.dirty || SYNC.busy) { el.textContent = 'Syncing...'; el.classList.add('ok'); return; }
+    el.textContent = 'Synced' + agoTxt; el.classList.add('ok'); return;
+  }
+  if (syncOn() && DATA && FILE.connected && !FILE.saving && !FILE.dirty) {
+    el.title = SYNC.err || '';
+    if (SYNC.err) { el.textContent = 'Saved · sync failed'; el.classList.add('warn'); return; }
+    if (SYNC.dirty || SYNC.busy) { el.textContent = 'Saved · syncing...'; el.classList.add('ok'); return; }
+    el.textContent = 'Saved · synced' + agoTxt; el.classList.add('ok'); return;
+  }
   if (!DATA) { el.textContent = 'No data yet'; return; }
   if (FILE.saving) { el.textContent = 'Saving...'; return; }
   if (FILE.connected) { el.textContent = (FILE.dirty ? 'Saving to ' : 'Saved to ') + FILE.name(); el.classList.add('ok'); return; }
@@ -812,7 +1092,7 @@ function renderHome() {
   const h = $('#home');
   if (!DATA) { h.innerHTML = welcomeHTML(); return; }
   const auto = autoSlot();
-  let html = `<h1>Classes</h1><div class="sub">${DATA.classes.length} classes. ${auto ? `Schedule says: <b>${esc(auto.c.title)}</b> (${DAYS[auto.day]} ${fmtTime(minToT(auto.s))})` : 'No schedule set.'}</div>`;
+  let html = `<h1>Classes <span style="font-weight:400;color:#8a92a0;font-size:16px">${esc(DATA.year)}</span></h1><div class="sub">${DATA.classes.length} classes. ${auto ? `Schedule says: <b>${esc(auto.c.title)}</b> (${DAYS[auto.day]} ${fmtTime(minToT(auto.s))})` : 'No schedule set.'}</div>`;
   const schools = [...new Set([...(DATA.settings.schools || []), ...DATA.classes.map(c => c.school)])];
   for (const sc of schools) {
     const list = DATA.classes.filter(c => c.school === sc).sort((a, b) => (GRADE_ORDER[a.grade] ?? 9) - (GRADE_ORDER[b.grade] ?? 9) || a.title.localeCompare(b.title));
@@ -825,12 +1105,12 @@ function renderHome() {
       html += `<div class="card" data-act="open" data-id="${c.id}"><div class="thumb" data-thumb="${c.id}"></div><div class="meta">
         <div class="t">${esc(c.title)}</div>
         <div class="d">${esc(schedText(c))}<br>${v ? `v${v.n} &middot; ${fmtDate(v.date)}` : 'No chart yet'} &middot; ${activeStudents(c).length} students</div>
-        <div style="margin-top:5px">${auto && auto.c === c ? '<span class="pill now">Now</span>' : ''}${c.bop && c.bop.enabled ? '<span class="pill">Bop or Flop</span>' : ''}${unl ? `<span class="pill warn">${unl} not linked to roster</span>` : ''}${uns ? `<span class="pill warn">${uns} unseated</span>` : ''}</div>
+        <div style="margin-top:5px">${auto && auto.c === c ? '<span class="pill now">Now</span>' : ''}${c.bop && c.bop.enabled ? '<span class="pill">Bop or Flop</span>' : ''}${unl ? `<span class="pill warn">${unl} not linked to roster</span>` : ''}${pendingFor(c).length ? `<span class="pill warn">${pendingFor(c).length} rules to review</span>` : ''}${uns ? `<span class="pill warn">${uns} unseated</span>` : ''}</div>
       </div></div>`;
     }
     html += `</div></div>`;
   }
-  html += `<div class="row" style="margin-top:8px"><button class="tb" data-act="addClass">Add a class</button><button class="tb" data-act="importRoster">Import Aspen roster</button></div>`;
+  html += `<div class="row editor-only" style="margin-top:8px"><button class="tb" data-act="addClass">Add a class</button><button class="tb" data-act="importRoster">Import Aspen roster</button><button class="tb" data-act="weekly">Weekly schedule</button></div>`;
   h.innerHTML = html;
   for (const t of $$('[data-thumb]', h)) {
     const c = getClass(t.dataset.thumb);
@@ -841,13 +1121,15 @@ const minToT = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m %
 
 function welcomeHTML() {
   return `<div class="welcome"><h1>Seating Charts</h1>
-    <p>Student names and rules are saved only on this computer, in a data file you choose and in this browser's storage. Nothing is uploaded anywhere.</p>
+    <p>Student names and rules are saved on this computer, in a data file you choose and in this browser's storage. They only leave it if you turn on sync with school PCs, and then only encrypted, to your own private GitHub repository.</p>
     <p><b>First time?</b> Open the starter data file you downloaded (<code>seating-data-starter.json</code>). Chrome will ask to allow editing so changes save back to that file. Keep the file in your Google Drive folder if you want it on more than one computer.</p>
     <div class="row">
       <button class="tb primary" data-act="openFile">Open data file</button>
       <button class="tb" data-act="newFile">Start an empty data file</button>
       <button class="tb" data-act="demo">Try with fake names</button>
     </div>
+    <p style="margin-top:18px"><b>School PC?</b> Paste the setup code from your Mac to share its seating data.</p>
+    <div class="row"><button class="tb" data-act="viewerSetup">Set up as a school PC</button></div>
     ${FILE.supported ? '' : '<p class="small" style="color:#f6d38b;margin-top:14px">This browser cannot save directly to a file. Use Chrome or Edge for that. Here, changes stay in the browser and you can download a backup.</p>'}
   </div>`;
 }
@@ -885,8 +1167,9 @@ function renderClass() {
     <button class="tb ${UI.tool === 'swap' ? 'on' : ''}" data-act="toolSwap" ${viewingOld ? 'disabled' : ''} title="Click two names to swap them, or a name then an empty spot to move it. Edits the current version.">Move students</button>
     <span class="sep"></span>
     ${c.bop && c.bop.enabled ? `<button class="tb ${isBop ? 'on' : ''}" data-act="toggleBop" title="B">${isBop ? 'Bop or Flop view' : 'Chart view'}</button>` : ''}
+    <button class="tb ${UI.drawer === 'roster' ? 'on' : ''}" data-act="drawer" data-tab="roster">Roster${pendingFor(c).length ? ` <span class="pill warn" style="margin:0 0 0 4px">${pendingFor(c).length}</span>` : ''}</button>
     <button class="tb ${UI.drawer === 'history' ? 'on' : ''}" data-act="drawer" data-tab="history">History</button>
-    <button class="tb ${UI.drawer && UI.drawer !== 'history' ? 'on' : ''}" data-act="drawer" data-tab="${UI.drawer && UI.drawer !== 'history' ? UI.drawer : 'students'}">Edit</button>`;
+    <button class="tb ${UI.drawer && !['history', 'roster'].includes(UI.drawer) ? 'on' : ''}" data-act="drawer" data-tab="${UI.drawer && !['history', 'roster'].includes(UI.drawer) ? UI.drawer : 'rules'}">Edit</button>`;
   const vb = $('#verBanner');
   if (viewingOld) {
     vb.classList.remove('hidden');
@@ -989,7 +1272,7 @@ function toggleSpot(c, spotId) {
 }
 
 /* ---------------- drawer ---------------- */
-const TABS = [['students', 'Students'], ['spots', 'Spots'], ['rules', 'Rules'], ['rotation', 'Rotation'], ['history', 'History'], ['bop', 'Bop or Flop'], ['settings', 'Settings']];
+const TABS = [['roster', 'Roster'], ['spots', 'Spots'], ['rules', 'Rules'], ['rotation', 'Rotation'], ['history', 'History'], ['bop', 'Bop or Flop'], ['settings', 'Settings']];
 function openDrawer(tab) {
   if (UI.drawer === tab) { closeDrawer(); return; }
   UI.drawer = tab;
@@ -1008,30 +1291,46 @@ function renderDrawer() {
   const c = curClass(); if (!c || !UI.drawer) return;
   $('#drawerTabs').innerHTML = TABS.filter(([k]) => k !== 'bop' || c.grade === '5' || (c.bop && c.bop.enabled)).map(([k, l]) => `<button class="${UI.drawer === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('') + `<button class="x" data-act="closeDrawer" title="Close">&times;</button>`;
   const b = $('#drawerBody');
-  const fn = {students: drStudents, spots: drSpots, rules: drRules, rotation: drRotation, history: drHistory, bop: drBop, settings: drSettings}[UI.drawer];
+  const fn = {roster: drRoster, spots: drSpots, rules: drRules, rotation: drRotation, history: drHistory, bop: drBop, settings: drSettings}[UI.drawer];
   const st = b.scrollTop;
   b.innerHTML = fn(c);
   b.scrollTop = st;
   if (UI.drawer === 'history') fillHistoryThumbs(c);
 }
 
-function drStudents(c) {
+function ruleCount(c, id) { return c.rules.filter(r => r.s === id || r.t === id).length; }
+const rosterSort = (a, b) => (a.last || a.first || '').localeCompare(b.last || b.first || '') || (a.first || '').localeCompare(b.first || '');
+function aspenNameOf(s) { return s.linked && (s.aspenName || s.last) ? (s.aspenName || `${s.last}, ${s.given || s.first}`) : ''; }
+function drRoster(c) {
   const names = displayNames(c);
-  const v = latest(c); const where = {}; if (v) for (const k in v.assign) where[v.assign[k]] = k;
-  const rows = c.students.slice().sort((a, b) => (b.active - a.active) || names[a.id].localeCompare(names[b.id])).map(s => {
-    const g = where[s.id] ? spotGeo(c, where[s.id]) : null;
+  const wait = {}; for (const p of pendingFor(c)) { wait[p.s.id] = (wait[p.s.id] || 0) + 1; if (p.t) wait[p.t.id] = (wait[p.t.id] || 0) + 1; }
+  const list = c.students.filter(s => s.active || UI.rosterLeft).sort((a, b) => (b.active - a.active) || rosterSort(a, b));
+  const left = c.students.filter(s => !s.active).length;
+  const rows = list.map(s => {
+    const asp = aspenNameOf(s);
+    const n = ruleCount(c, s.id), w = wait[s.id] || 0;
     return `<tr style="${s.active ? '' : 'opacity:.55'}">
-      <td><b>${esc(names[s.id])}</b>${s.linked ? '' : ' <span class="pill warn" title="Not matched to an Aspen roster row yet">unlinked</span>'}<div class="small muted">${g ? esc(g.label) : (s.active ? 'Not seated' : 'Left class')}</div></td>
-      <td><input class="inp" data-act="stuField" data-f="first" data-id="${s.id}" value="${esc(s.first)}"></td>
-      <td><input class="inp" data-act="stuField" data-f="last" data-id="${s.id}" value="${esc(s.last)}"></td>
-      <td><input class="inp" data-act="stuField" data-f="preferred" data-id="${s.id}" value="${esc(s.preferred)}" placeholder="auto"></td>
+      <td>${asp ? esc(asp) : `<span class="pill warn" title="Not matched to an Aspen roster row yet">not linked</span><div class="row" style="gap:4px;margin-top:3px;flex-wrap:nowrap"><input class="inp" style="width:50%" data-act="stuField" data-f="first" data-id="${s.id}" value="${esc(s.first)}" placeholder="First"><input class="inp" style="width:50%" data-act="stuField" data-f="last" data-id="${s.id}" value="${esc(s.last)}" placeholder="Last"></div>`}${s.active ? '' : '<div class="small muted">Left class</div>'}</td>
+      <td><input class="inp" data-act="stuField" data-f="preferred" data-id="${s.id}" value="${esc(s.preferred)}" placeholder="${esc(names[s.id])}"></td>
+      <td>${n ? `<span class="rc" title="${n} rule${n === 1 ? '' : 's'}">${n}</span>` : ''}${w ? ` <span class="rc wait" title="Rules from earlier years waiting for your OK in the Rules tab">+${w}</span>` : ''}</td>
       <td><button class="btn sm" data-act="stuActive" data-id="${s.id}">${s.active ? 'Left' : 'Back'}</button></td></tr>`;
   }).join('');
-  return `<div class="dsec"><h3>Students (${activeStudents(c).length})</h3>
-    <p class="note">The chart shows <b>Preferred</b> exactly when it is filled in. Otherwise it shows the first name, adding a last initial or full last name only when two students in this class would look the same.</p>
-    <table class="t"><thead><tr><th>Shows as</th><th>First</th><th>Last</th><th>Preferred</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="row" style="margin-top:10px"><button class="btn" data-act="addStudent">Add a student</button><button class="btn" data-act="importRoster">Import Aspen roster</button></div>
-    <p class="note">"Left" keeps the student's history but removes them from the chart. To pin a student to one spot, lock that spot in the Spots tab.</p></div>`;
+  const nw = Object.keys(wait).length;
+  return `<div class="dsec"><h3>Roster - ${activeStudents(c).length} students</h3>
+    <table class="t"><thead><tr><th>Aspen name</th><th>Preferred name</th><th>Rules</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">No students yet. Import an Aspen roster.</td></tr>'}</tbody></table>
+    ${nw ? `<div class="msg warn" style="margin-top:8px">Rules from earlier years are waiting for your OK. <button class="btn sm" data-act="tab" data-tab="rules">Review them</button></div>` : ''}
+    <p class="note">Leave Preferred blank to use the automatic name (shown faintly): first name, plus a last initial or last name only when two students in this class would look the same. A preferred name follows the student to next year.</p>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="printRoster">Print roster</button><label class="row small" style="gap:4px"><input type="checkbox" data-act="printRules" ${UI.printRules ? 'checked' : ''}> Include rules column when printing</label></div>
+    <div class="row" style="margin-top:10px"><button class="btn" data-act="addStudent">Add a student</button><button class="btn" data-act="importRoster">Import Aspen roster</button>${left ? `<label class="row small" style="gap:4px"><input type="checkbox" data-act="rosterLeft" ${UI.rosterLeft ? 'checked' : ''}> Show ${left} who left</label>` : ''}</div>
+    <p class="note">"Left" keeps the student's history but takes them off the chart. To pin a student to one spot, lock that spot in Edit, Spots.</p></div>`;
+}
+function printRoster(c) {
+  const names = displayNames(c); const incl = !!UI.printRules;
+  const list = activeStudents(c).sort(rosterSort);
+  $('#printArea').innerHTML = `<h1>${esc(c.title)}</h1><div class="pmeta">${esc(c.school)} &middot; ${esc(DATA.year)} school year &middot; ${list.length} students &middot; printed ${fmtDate(todayISO())}</div>
+    <table><thead><tr><th></th><th>Aspen name</th><th>Preferred name</th><th>On the chart</th>${incl ? '<th>Rules</th>' : ''}</tr></thead><tbody>
+    ${list.map((s, i) => `<tr><td class="n">${i + 1}</td><td>${esc(aspenNameOf(s) || (s.last ? `${s.last}, ${s.first}` : s.first))}</td><td>${esc(s.preferred)}</td><td>${esc(names[s.id])}</td>${incl ? `<td>${ruleCount(c, s.id) || ''}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+  window.print();
 }
 
 function drSpots(c) {
@@ -1087,7 +1386,13 @@ function drRules(c) {
     return `<div class="rule"><span style="${inactive ? 'opacity:.5' : ''}">${esc(txt)}${inactive ? ' <span class="small muted">(not active)</span>' : ''}</span><button class="btn sm danger" data-act="ruleDel" data-id="${r.id}">Remove</button></div>`;
   }).join('') || '<p class="note">No rules for this class.</p>';
   const probs = ruleProblems(c);
-  return `<div class="dsec"><h3>Add a rule</h3>
+  const pend = pendingFor(c);
+  const pendHTML = pend.length ? `<div class="dsec pend"><h3 style="color:#6b4407">From earlier years: waiting for your OK (${pend.length})</h3>
+    ${pend.map(p => { const miss = p.b.type !== 'apart' && !zones.includes(p.b.zone);
+      return `<div class="rule"><span>${esc(bankText(p, names))}<div class="small muted">from ${esc(p.b.fromYear)}${miss ? ` - this class has no "${esc(p.b.zone)}" zone yet` : ''}</div></span><button class="btn sm primary" data-act="bankOk" data-id="${p.b.id}" ${miss ? 'disabled' : ''}>Approve</button><button class="btn sm" data-act="bankNo" data-id="${p.b.id}">Dismiss</button></div>`; }).join('')}
+    <p class="note">Approved rules start working right away. Dismissed ones are forgotten. Anything you leave here waits, and comes back next year if you still haven't decided.</p>
+    ${pend.filter(p => p.b.type === 'apart' || zones.includes(p.b.zone)).length > 1 ? '<button class="btn sm" data-act="bankOkAll">Approve all</button>' : ''}</div>` : '';
+  return pendHTML + `<div class="dsec"><h3>Add a rule</h3>
     <div class="field"><label>Student</label><select class="inp" id="ruleS" data-act="ruleStudent">${studentOptions(c, sSel)}</select></div>
     <div class="field"><label>Rule</label><select class="inp" id="ruleT" data-act="ruleType">
       <option value="must" ${t === 'must' ? 'selected' : ''}>must sit in...</option>
@@ -1097,7 +1402,7 @@ function drRules(c) {
     <button class="btn primary" data-act="ruleAdd">Add rule</button></div>
     <div class="dsec"><h3>Rules for this class</h3>${rules}</div>
     ${probs.length ? `<div class="dsec">${probs.map(p => `<div class="msg bad">${esc(p)}</div>`).join('')}</div>` : (c.rules.length ? '<div class="msg ok">Every rule can be met on this layout.</div>' : '')}
-    <p class="note">Rules belong to the student, not their name, so nickname changes and duplicate names never break them. For real distance between two students, zones work better than keep-apart.</p>`;
+    <p class="note">Rules belong to the student, not their name, so nickname changes and duplicate names never break them. Rules for students linked to Aspen are remembered into next year. For real distance between two students, zones work better than keep-apart.</p>`;
 }
 
 function drRotation(c) {
@@ -1222,86 +1527,183 @@ const teacherKey = t => norm(String(t).split(',')[0]).replace(/^(mrs?|ms|dr)\.?\
 
 let IMPORT = null;
 function startImport() { $('#csvInput').value = ''; $('#csvInput').click(); }
+function schoolCodes() { return [...new Set([...(DATA.settings.schools || []), ...DATA.classes.map(c => c.school)])].filter(Boolean); }
+function schoolInitials(raw) { const w = String(raw).split(/\s+/).filter(x => x && !/^(elementary|the|of|and)$/i.test(x)); return w.map(x => x[0]).join('').toUpperCase(); }
+function guessSchool(raw) {
+  const r = String(raw || '').trim(); if (!r) return '';
+  const al = DATA.settings.schoolAliases[norm(r)]; if (al) return al;
+  const codes = schoolCodes();
+  return codes.find(c => norm(c) === norm(r)) || codes.find(c => c.toUpperCase() === schoolInitials(r)) || codes.find(c => c.toUpperCase() === schoolInitials(r.replace(/\bschool\b/i, ''))) || '';
+}
+const GNUM = g => g === 'K' ? 0 : Number(g);
+function defaultLayout(school, grade) {
+  const same = DATA.classes.filter(c => c.school === school);
+  if (!same.length) return Object.keys(DATA.layouts)[0];
+  return same.slice().sort((a, b) => Math.abs(GNUM(a.grade) - GNUM(grade)) - Math.abs(GNUM(b.grade) - GNUM(grade)))[0].layout;
+}
+function makeClass(o) {
+  const L = DATA.layouts[o.layout] || Object.values(DATA.layouts)[0];
+  // copy spots and zones from the closest existing class on the same layout, so a new class starts ready to shuffle
+  const tmpl = DATA.classes.filter(c => c.layout === L.id && c.spots.length)
+    .sort((a, b) => ((b.school === o.school) - (a.school === o.school)) || Math.abs(GNUM(a.grade) - GNUM(o.grade)) - Math.abs(GNUM(b.grade) - GNUM(o.grade)))[0];
+  const spots = tmpl ? tmpl.spots.map(x => ({id: x.id, zones: (x.zones || []).slice(), lock: false})) : L.spots.map(x => ({id: x.id, zones: x.chair ? ['chairs'] : [], lock: false}));
+  const rotZone = tmpl && tmpl.rotation ? tmpl.rotation.zone : (spots.some(x => x.zones.includes('chairs')) ? 'chairs' : '');
+  return {id: uid('c'), school: o.school, grade: o.grade, title: o.title, hrKeys: o.hrKeys || [], layout: L.id,
+    neighborFactor: tmpl ? tmpl.neighborFactor : DEFAULT_FACTOR, caption: tmpl ? (tmpl.caption || '') : '', schedule: [],
+    spots, students: [], rules: [], rotation: rotZone ? {zone: rotZone, served: [], lastRound: []} : null, versions: [],
+    bop: o.grade === '5' ? {enabled: true, defaultView: 'bop', songs: []} : null};
+}
 async function onCSV(file) {
   const text = await file.text();
   const rows = parseCSV(text);
   if (rows.length < 2) { alert('That file has no rows.'); return; }
   const head = rows[0].map(h => norm(h));
-  const ni = head.findIndex(h => h === 'name' || h.includes('student') || h.includes('name'));
   const ti = head.findIndex(h => h.includes('teacher') || h === 'hr' || h.includes('homeroom'));
+  const ii = head.findIndex((h, i) => i !== ti && (/\bid\b/.test(h) || /lasid|sasid/.test(h)));
+  const si = head.findIndex((h, i) => i !== ti && i !== ii && h.includes('school'));
+  const ni = head.findIndex((h, i) => i !== ti && i !== ii && i !== si && (h.includes('name') || h.includes('student')));
   if (ni < 0 || ti < 0) { alert('Could not find the Name and HR Teacher columns in that file.'); return; }
   const byT = {};
   for (const r of rows.slice(1)) {
     if (!r[ni] || !r[ti]) continue;
-    const k = teacherKey(r[ti]);
-    (byT[k] = byT[k] || {label: r[ti].trim(), list: []}).list.push(splitName(r[ni]));
+    const schoolRaw = si >= 0 ? (r[si] || '').trim() : '';
+    const tk = teacherKey(r[ti]);
+    const k = (schoolRaw ? norm(schoolRaw) + '|' : '') + tk;
+    const p = splitName(r[ni]); p.raw = r[ni].trim(); p.aspenId = ii >= 0 ? (r[ii] || '').trim() : '';
+    (byT[k] = byT[k] || {label: r[ti].trim(), tkey: tk, schoolRaw, list: []}).list.push(p);
   }
-  IMPORT = {groups: byT, map: {}, plans: {}};
+  IMPORT = {groups: byT, map: {}, school: {}, newCls: {}, plans: {}, temp: {}, hasId: ii >= 0, hasSchool: si >= 0};
   for (const k in byT) {
-    const c = DATA.classes.find(c => (c.hrKeys || []).some(h => norm(h) === k));
+    const g = byT[k];
+    const code = guessSchool(g.schoolRaw);
+    IMPORT.school[k] = code || (g.schoolRaw ? schoolInitials(g.schoolRaw) : (schoolCodes()[0] || ''));
+    const c = DATA.classes.find(c => (c.hrKeys || []).some(h => norm(h) === g.tkey) && (!g.schoolRaw || c.school === IMPORT.school[k]));
     IMPORT.map[k] = c ? c.id : '';
   }
   buildPlans();
   showImport();
 }
+function planClass(cid) { return getClass(cid) || IMPORT.temp[cid]; }
+function newSpec(k) {
+  if (!IMPORT.newCls[k]) {
+    const last = IMPORT.groups[k].label.split(',')[0].trim();
+    const school = IMPORT.school[k] || schoolCodes()[0] || 'School';
+    IMPORT.newCls[k] = {grade: 'K', last, title: `Grade K – ${last}`, autoTitle: true, school, layout: defaultLayout(school, 'K')};
+  }
+  return IMPORT.newCls[k];
+}
 function buildPlans() {
-  IMPORT.plans = {};
+  IMPORT.plans = {}; IMPORT.temp = {};
   for (const k in IMPORT.groups) {
-    const cid = IMPORT.map[k]; if (!cid) continue;
-    const c = getClass(cid);
+    let cid = IMPORT.map[k]; if (!cid) continue;
+    if (cid === '__new') {
+      const sp = newSpec(k); cid = 'new:' + k;
+      IMPORT.temp[cid] = {id: cid, k, title: sp.title, school: sp.school, grade: sp.grade, students: []};
+    }
     const plan = IMPORT.plans[cid] = IMPORT.plans[cid] || {roster: [], links: {}, leaving: {}};
     plan.roster.push(...IMPORT.groups[k].list.map((p, i) => Object.assign({key: k + ':' + i}, p)));
   }
   for (const cid in IMPORT.plans) {
-    const c = getClass(cid); const plan = IMPORT.plans[cid];
+    const c = planClass(cid); const plan = IMPORT.plans[cid];
     const used = new Set();
-    // 1. already-linked students match on first + last
-    for (const s of c.students.filter(s => s.linked)) {
-      const r = plan.roster.find(r => !used.has(r.key) && norm(r.last) === norm(s.last) && (norm(r.given) === norm(s.given || s.first) || norm(r.first) === norm(s.first)));
-      if (r) { plan.links[s.id] = r.key; used.add(r.key); }
+    const link = (s, r) => { plan.links[s.id] = r.key; used.add(r.key); };
+    // 1. Aspen student ID
+    for (const s of c.students.filter(s => s.aspenId)) { const r = plan.roster.find(r => !used.has(r.key) && r.aspenId && r.aspenId === s.aspenId); if (r) link(s, r); }
+    // 2. already-linked students match on first + last
+    for (const s of c.students.filter(s => s.linked && !plan.links[s.id])) {
+      const r = plan.roster.find(r => !used.has(r.key) && (!r.aspenId || !s.aspenId) && norm(r.last) === norm(s.last) && (norm(r.given) === norm(s.given || s.first) || norm(r.first) === norm(s.first)));
+      if (r) link(s, r);
     }
-    // 2. unlinked chart names: first name, plus last initial or last name if the chart had one
-    for (const s of c.students.filter(s => !s.linked)) {
+    // 3. unlinked chart names: first name, plus last initial or last name if the chart had one
+    for (const s of c.students.filter(s => !s.linked && !plan.links[s.id])) {
       const cn = (s.chartName || s.first).trim();
       const m = cn.match(/^(\S+)\s+(.+)$/);
       const f = norm(m ? m[1] : cn), rest = m ? m[2].replace(/\.$/, '') : '';
       const cands = plan.roster.filter(r => !used.has(r.key) && (norm(r.first) === f || norm(r.given) === norm(cn)) && (!rest || norm(r.last).startsWith(norm(rest))));
-      if (cands.length === 1) { plan.links[s.id] = cands[0].key; used.add(cands[0].key); }
+      if (cands.length === 1) link(s, cands[0]);
     }
     for (const s of c.students) if (s.active && s.linked && !plan.links[s.id]) plan.leaving[s.id] = true;
   }
 }
 function showImport() {
-  const tKeys = Object.keys(IMPORT.groups).sort();
+  const tKeys = Object.keys(IMPORT.groups).sort((a, b) => (IMPORT.school[a] || '').localeCompare(IMPORT.school[b] || '') || IMPORT.groups[a].label.localeCompare(IMPORT.groups[b].label));
   const unmatchedT = tKeys.filter(k => !IMPORT.map[k]);
-  let html = `<p class="note">Rows are grouped by HR Teacher. Students are matched to the names already on each chart. Nothing changes until you click Apply.</p>`;
-  html += `<details class="cls" ${unmatchedT.length ? 'open' : ''}><summary>Homeroom teachers in the file (${tKeys.length})${unmatchedT.length ? ` - ${unmatchedT.length} not matched to a class` : ''}</summary><div class="inner"><table class="t"><tbody>
-    ${tKeys.map(k => `<tr><td>${esc(IMPORT.groups[k].label)} <span class="small muted">(${IMPORT.groups[k].list.length})</span></td><td><select class="inp" data-act="impMap" data-k="${esc(k)}"><option value="">Skip</option>${DATA.classes.map(c => `<option value="${c.id}" ${IMPORT.map[k] === c.id ? 'selected' : ''}>${esc(c.title)} (${esc(c.school)})</option>`).join('')}</select></td></tr>`).join('')}
+  const codes = schoolCodes();
+  const classOpts = (k) => DATA.classes.filter(c => !IMPORT.groups[k].schoolRaw || c.school === IMPORT.school[k]).map(c => `<option value="${c.id}" ${IMPORT.map[k] === c.id ? 'selected' : ''}>${esc(c.title)} (${esc(c.school)})</option>`).join('');
+  const layoutOpts = (sel) => Object.values(DATA.layouts).map(l => `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+  let html = `<p class="note">Rows are grouped by HR Teacher${IMPORT.hasSchool ? ' and school' : ''}. Students are matched to the names already on each chart${IMPORT.hasId ? ' and by Aspen student ID' : ''}. Nothing changes until you click Apply.</p>`;
+  if (!IMPORT.hasId) html += `<div class="msg warn">This file has no student ID column, so students are matched by name only. Adding the ID column in Aspen makes next year's matching reliable.</div>`;
+  html += `<details class="cls" ${unmatchedT.length || Object.values(IMPORT.map).includes('__new') ? 'open' : ''}><summary>Homeroom teachers in the file (${tKeys.length})${unmatchedT.length ? ` - ${unmatchedT.length} not matched to a class` : ''}</summary><div class="inner"><table class="t"><tbody>
+    ${tKeys.map(k => {
+      const g = IMPORT.groups[k];
+      const sch = g.schoolRaw ? `<div class="small muted">${esc(g.schoolRaw)} = <select class="inp" style="padding:1px 4px" data-act="impSchool" data-k="${esc(k)}">${[...new Set([...codes, IMPORT.school[k]])].map(x => `<option ${x === IMPORT.school[k] ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>` : '';
+      let row = `<tr><td>${esc(g.label)} <span class="small muted">(${g.list.length})</span>${sch}</td><td><select class="inp" data-act="impMap" data-k="${esc(k)}"><option value="">Skip</option><option value="__new" ${IMPORT.map[k] === '__new' ? 'selected' : ''}>Create a new class</option>${classOpts(k)}</select></td></tr>`;
+      if (IMPORT.map[k] === '__new') {
+        const sp = newSpec(k);
+        row += `<tr><td colspan="2" style="background:#f7f5f0"><div class="row">
+          <div class="field" style="width:70px;margin:0"><label>Grade</label><select class="inp" data-act="impNew" data-k="${esc(k)}" data-f="grade">${['K', '1', '2', '3', '4', '5'].map(x => `<option ${sp.grade === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+          <div class="field" style="flex:1;min-width:170px;margin:0"><label>Title on the chart</label><input class="inp" data-act="impNew" data-k="${esc(k)}" data-f="title" value="${esc(sp.title)}"></div>
+          <div class="field" style="margin:0"><label>Room layout</label><select class="inp" data-act="impNew" data-k="${esc(k)}" data-f="layout">${layoutOpts(sp.layout)}</select></div></div>
+          <div class="small muted" style="margin-top:4px">Spots and zones are copied from the closest ${esc(sp.school)} class on that layout. Set the class time in Data and settings, Weekly schedule.</div></td></tr>`;
+      }
+      return row;
+    }).join('')}
     </tbody></table></div></details>`;
   for (const cid in IMPORT.plans) {
-    const c = getClass(cid); const plan = IMPORT.plans[cid]; const names = displayNames(c);
+    const c = planClass(cid); const plan = IMPORT.plans[cid]; const names = displayNames(c);
     const linkedKeys = new Set(Object.values(plan.links));
     const freeRoster = plan.roster.filter(r => !linkedKeys.has(r.key));
+    const returning = freeRoster.filter(r => findPerson(r, c.school));
     const unresolved = c.students.filter(s => s.active && !plan.links[s.id] && !s.linked);
     const auto = c.students.filter(s => plan.links[s.id]);
     const leaving = c.students.filter(s => s.active && s.linked && !plan.links[s.id]);
     const rosterOpt = (sid) => { const cur = plan.links[sid]; return plan.roster.filter(r => !linkedKeys.has(r.key) || r.key === cur).sort((a, b) => a.first.localeCompare(b.first)).map(r => `<option value="${esc(r.key)}" ${r.key === cur ? 'selected' : ''}>${esc(r.given)} ${esc(r.last)}</option>`).join(''); };
-    const warn = unresolved.length || freeRoster.length || leaving.length;
-    html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)} - ${auto.length} matched${unresolved.length ? `, <span style="color:var(--warn)">${unresolved.length} need a match</span>` : ''}${freeRoster.length ? `, ${freeRoster.length} new` : ''}${leaving.length ? `, ${leaving.length} not in file` : ''}</summary><div class="inner">`;
     const noMatch = (sid) => `<option value="">Keep on the chart, not linked yet</option><option value="__left" ${plan.leaving[sid] && !plan.links[sid] ? 'selected' : ''}>Not in this class anymore (mark as left)</option>`;
+    const warn = unresolved.length || freeRoster.length || leaving.length;
+    html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)}${c.id.startsWith('new:') ? ' <span class="pill now">new class</span>' : ''} - ${auto.length} matched${unresolved.length ? `, <span style="color:var(--warn)">${unresolved.length} need a match</span>` : ''}${freeRoster.length ? `, ${freeRoster.length} new` : ''}${leaving.length ? `, ${leaving.length} not in file` : ''}</summary><div class="inner">`;
     if (unresolved.length) html += `<h4 style="margin:6px 0">Chart names that need a match</h4><p class="note">Usually a nickname. Pick the roster name it belongs to.</p><table class="t"><tbody>${unresolved.map(s => `<tr><td><b>${esc(names[s.id])}</b></td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
-    if (freeRoster.length) html += `<h4 style="margin:10px 0 6px">New students (added as Not seated)</h4><div class="small">${freeRoster.map(r => esc(r.given + ' ' + r.last)).join(', ')}</div>`;
+    if (freeRoster.length) html += `<h4 style="margin:10px 0 6px">New to this class (added as Not seated)</h4><div class="small">${freeRoster.map(r => esc(r.given + ' ' + r.last)).join(', ')}</div>${returning.length ? `<div class="small muted" style="margin-top:4px">${returning.length} of them were here in an earlier year. Their preferred names come back, and any rules from earlier years wait in Rules for your OK.</div>` : ''}`;
     if (leaving.length) html += `<h4 style="margin:10px 0 6px">On the chart but not in the file</h4>${leaving.map(s => `<label class="row small"><input type="checkbox" data-act="impLeave" data-c="${cid}" data-s="${s.id}" ${plan.leaving[s.id] ? 'checked' : ''}> Mark ${esc(names[s.id])} as left</label>`).join('')}`;
     if (auto.length) html += `<details style="margin-top:8px"><summary class="small">Matched (${auto.length})</summary><table class="t"><tbody>${auto.map(s => `<tr><td>${esc(names[s.id])}</td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table></details>`;
     html += `</div></details>`;
   }
+  const keep = $('#mBody') && !$('#modalBack').classList.contains('hidden') ? $('#mBody').scrollTop : 0;
   openModal('Import Aspen roster', html, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="impApply">Apply</button>`);
+  $('#mBody').scrollTop = keep;
 }
+
+/* people: every student ever imported, so preferred names and rules carry across years */
+function findPerson(r, school) {
+  const P = DATA.people;
+  if (r.aspenId) { const k = Object.keys(P).find(k => P[k].aspenId === r.aspenId); if (k) return k; }
+  return Object.keys(P).find(k => { const p = P[k]; return (!r.aspenId || !p.aspenId) && p.school === school && norm(p.last) === norm(r.last) && norm(p.given) === norm(r.given); }) || null;
+}
+function upsertPerson(r, school, pid) {
+  pid = pid || findPerson(r, school) || uid('p');
+  const p = DATA.people[pid] = DATA.people[pid] || {preferred: ''};
+  Object.assign(p, {aspenId: r.aspenId || p.aspenId || '', school, last: r.last, given: r.given, first: r.first, aspenName: r.raw || `${r.last}, ${r.given}`, seen: DATA.year});
+  return pid;
+}
+
 function applyImport() {
   let pending = 0, leaving = 0;
-  for (const cid in IMPORT.plans) { const c = getClass(cid), plan = IMPORT.plans[cid]; for (const s of c.students) { if (s.active && !s.linked && !plan.links[s.id] && !plan.leaving[s.id]) pending++; if (s.active && plan.leaving[s.id]) leaving++; } }
+  for (const cid in IMPORT.plans) { const c = planClass(cid), plan = IMPORT.plans[cid]; for (const s of c.students) { if (s.active && !s.linked && !plan.links[s.id] && !plan.leaving[s.id]) pending++; if (s.active && plan.leaving[s.id]) leaving++; } }
   if ((pending || leaving) && !confirm(`${leaving} student${leaving === 1 ? '' : 's'} will be marked as left.${pending ? `\n${pending} chart name${pending === 1 ? '' : 's'} will stay on the chart without a roster match (you can import again later).` : ''}\n\nApply the roster?`)) return;
-  let added = 0, linked = 0, left = 0;
+  // remember how Aspen spells each school
+  for (const k in IMPORT.groups) {
+    const g = IMPORT.groups[k];
+    if (g.schoolRaw && IMPORT.school[k]) DATA.settings.schoolAliases[norm(g.schoolRaw)] = IMPORT.school[k];
+    if (IMPORT.school[k] && IMPORT.map[k] && !(DATA.settings.schools || []).includes(IMPORT.school[k])) DATA.settings.schools.push(IMPORT.school[k]);
+  }
+  // create new classes
+  for (const cid of Object.keys(IMPORT.plans)) {
+    const t = IMPORT.temp[cid]; if (!t) continue;
+    const sp = IMPORT.newCls[t.k];
+    const nc = makeClass({title: sp.title.trim() || `Grade ${sp.grade} – ${sp.last}`, school: sp.school, grade: sp.grade, hrKeys: [sp.last], layout: sp.layout});
+    DATA.classes.push(nc);
+    IMPORT.plans[nc.id] = IMPORT.plans[cid]; delete IMPORT.plans[cid];
+  }
+  let added = 0, linked = 0, left = 0, back = 0;
   for (const cid in IMPORT.plans) {
     const c = getClass(cid); const plan = IMPORT.plans[cid];
     const byKey = Object.fromEntries(plan.roster.map(r => [r.key, r]));
@@ -1313,20 +1715,154 @@ function applyImport() {
         const r = byKey[k]; used.add(k);
         const wasLinked = s.linked;
         s.first = r.first; s.given = r.given; s.last = r.last; s.linked = true; s.active = true;
+        s.aspenName = r.raw; if (r.aspenId) s.aspenId = r.aspenId;
+        s.pid = upsertPerson(r, c.school, s.pid);
         if (!wasLinked) { s._keep = before[s.id]; linked++; }
       } else if (s.active && plan.leaving[s.id]) { s.active = false; left++; }
     }
-    for (const r of plan.roster) if (!used.has(r.key)) { c.students.push({id: uid('s'), first: r.first, given: r.given, last: r.last, preferred: '', active: true, linked: true}); added++; }
+    for (const r of plan.roster) if (!used.has(r.key)) {
+      const known = findPerson(r, c.school);
+      const pid = upsertPerson(r, c.school, known);
+      if (known) back++;
+      c.students.push({id: uid('s'), pid, first: r.first, given: r.given, last: r.last, aspenName: r.raw, aspenId: r.aspenId || '', preferred: DATA.people[pid].preferred || '', active: true, linked: true});
+      added++;
+    }
     // keep the name that was on the slides when it differs from the automatic one (nicknames, chosen full names)
     const after = displayNames(c);
     for (const s of c.students) if (s._keep) { if (s._keep !== after[s.id]) s.preferred = s._keep; delete s._keep; }
+    for (const s of c.students) if (s.pid && s.preferred) DATA.people[s.pid].preferred = s.preferred;
     // students who left lose their seat in the current version
     const v = latest(c);
     if (v) for (const sp in v.assign) { const st = studentById(c, v.assign[sp]); if (!st || !st.active) delete v.assign[sp]; }
   }
   closeModal(); save(); renderAll();
-  toast(`Roster applied: ${linked} matched, ${added} new, ${left} marked as left.`);
+  toast(`Roster applied: ${linked} matched, ${added} added${back ? ` (${back} returning)` : ''}, ${left} marked as left.`);
 }
+
+/* ---------------- rules from earlier years ---------------- */
+function sameRule(a, b) { return a.type === b.type && (a.type === 'apart' ? ((a.s === b.s && a.t === b.t) || (a.s === b.t && a.t === b.s)) : (a.s === b.s && a.zone === b.zone)); }
+function pendingFor(c) {
+  if (!DATA || !DATA.ruleBank || !DATA.ruleBank.length) return [];
+  const byPid = {}; for (const s of c.students) if (s.active && s.pid) byPid[s.pid] = s;
+  const out = [];
+  for (const b of DATA.ruleBank) {
+    if (b.appliedIn === DATA.year) continue;
+    const s = byPid[b.pid], t = b.tpid ? byPid[b.tpid] : null;
+    if (!s || (b.type === 'apart' && !t)) continue;
+    const as = {type: b.type, s: s.id, t: t && t.id, zone: b.zone};
+    if (c.rules.some(r => sameRule(r, as))) continue;
+    out.push({b, s, t});
+  }
+  return out;
+}
+function bankText(p, names) {
+  const a = names[p.s.id];
+  return p.b.type === 'must' ? `${a} must sit in ${p.b.zone}` : p.b.type === 'never' ? `${a} must never sit in ${p.b.zone}` : `${a} not next to ${names[p.t.id]}`;
+}
+function approveBank(c, id) {
+  const p = pendingFor(c).find(x => x.b.id === id); if (!p) return;
+  const r = {id: uid('r'), type: p.b.type, s: p.s.id};
+  if (p.b.type === 'apart') r.t = p.t.id; else r.zone = p.b.zone;
+  if (r.type === 'must') c.rules = c.rules.filter(x => !(x.type === 'must' && x.s === r.s));
+  c.rules.push(r); p.b.appliedIn = DATA.year;
+}
+
+/* ---------------- new school year ---------------- */
+function nextYearLabel(y) { const m = String(y || '').match(/(\d{4})/); const a = m ? Number(m[1]) + 1 : new Date().getFullYear(); return `${a}-${String((a + 1) % 100).padStart(2, '0')}`; }
+function rolloverSummary() {
+  const grads = new Set(), carry = [], lost = [];
+  for (const c of DATA.classes) if (c.grade === '5') for (const s of c.students) if (s.pid) grads.add(s.pid);
+  const names = {};
+  for (const c of DATA.classes) {
+    const n = displayNames(c);
+    for (const r of c.rules) {
+      const a = studentById(c, r.s), b = r.t ? studentById(c, r.t) : null;
+      if (c.grade === '5') continue;
+      if (!a || !a.pid || (r.type === 'apart' && (!b || !b.pid))) lost.push(`${c.title}: ${n[r.s] || '?'}${r.type === 'apart' ? ' / ' + (n[r.t] || '?') : ''}`);
+      else carry.push(r);
+    }
+  }
+  const waiting = DATA.ruleBank.filter(b => b.appliedIn !== DATA.year && !grads.has(b.pid) && !grads.has(b.tpid)).length;
+  return {grads, carry: carry.length, lost, waiting};
+}
+function newYearDialog() {
+  const ny = UI.ny;
+  const sum = rolloverSummary();
+  const schools = schoolCodes();
+  const cls = schools.map(sc => `<div style="margin-bottom:8px"><b>${esc(sc)}</b><div style="columns:2;margin-top:4px">${DATA.classes.filter(c => c.school === sc).sort((a, b) => GNUM(b.grade) - GNUM(a.grade) || a.title.localeCompare(b.title)).map(c => `<label class="row small" style="gap:5px;break-inside:avoid"><input type="checkbox" data-act="nyKeep" data-id="${c.id}" ${ny.keep.has(c.id) ? 'checked' : ''}> ${esc(c.title)}</label>`).join('')}</div></div>`).join('');
+  openModal('Start a new school year', `
+    <div class="dsec"><h3>1. Back up ${esc(DATA.year)}</h3>
+      <div class="row"><button class="btn ${ny.backup ? '' : 'primary'}" data-act="nyBackup">Download backup of ${esc(DATA.year)}</button>${ny.backup ? '<span class="msg ok" style="margin:0">Downloaded</span>' : ''}</div>
+      <p class="note">After the switch, this backup is the only copy of this year's charts, history and Bop or Flop songs. Keep it next to your data file. To look at it later, open it with Data and settings, Open a different data file.</p></div>
+    <div class="dsec"><h3>2. New school year</h3><input class="inp" data-act="nyYear" value="${esc(ny.year)}" style="width:110px"></div>
+    <div class="dsec"><h3>3. Classes to keep</h3>
+      <p class="note">A kept class keeps its title, Aspen teacher, room layout, spots and zones, ready for a new roster. Students, seating, rules and songs are cleared. Uncheck classes that won't exist next year. You can add new classes during the roster import.</p>
+      <div class="row" style="margin-bottom:8px"><button class="btn sm" data-act="nyAll">Keep all</button><button class="btn sm" data-act="nyNone">Keep none</button></div>
+      ${cls}
+      <label class="row small" style="margin-top:6px"><input type="checkbox" data-act="nySched" ${ny.keepSchedule ? 'checked' : ''}> Keep the class times too (usually off, since the schedule changes)</label></div>
+    <div class="dsec"><h3>4. What carries over</h3>
+      <div class="msg info">${sum.carry} rule${sum.carry === 1 ? '' : 's'} from ${esc(DATA.year)}${sum.waiting ? ` plus ${sum.waiting} still waiting from before` : ''} will be held for your OK. Each one shows up in a class's Rules tab once that student is on a new roster. Preferred names carry over too.</div>
+      ${sum.lost.length ? `<div class="msg warn"><b>${sum.lost.length} rule${sum.lost.length === 1 ? '' : 's'} can't carry over</b> because the student isn't linked to Aspen. Import this year's roster first to fix that.<div class="small" style="margin-top:4px">${sum.lost.map(esc).join('<br>')}</div></div>` : ''}
+      ${sum.grads.size ? `<div class="msg info">${sum.grads.size} grade 5 students are moving on. Their rules and records are removed.</div>` : ''}</div>`,
+    `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="nyGo" ${ny.backup ? '' : 'disabled'}>Start ${esc(ny.year)}</button>`);
+}
+function doRollover() {
+  const ny = UI.ny; const old = DATA.year;
+  const sum = rolloverSummary();
+  // 1. rules: earlier entries applied this year are replaced by this year's class rules
+  let bank = DATA.ruleBank.filter(b => b.appliedIn !== old);
+  for (const c of DATA.classes) {
+    if (c.grade === '5') continue;
+    for (const r of c.rules) {
+      const a = studentById(c, r.s), b = r.t ? studentById(c, r.t) : null;
+      if (!a || !a.pid || (r.type === 'apart' && (!b || !b.pid))) continue;
+      const e = {type: r.type, pid: a.pid, tpid: b ? b.pid : null, zone: r.zone || null};
+      const dup = bank.find(x => x.type === e.type && (e.type === 'apart' ? ((x.pid === e.pid && x.tpid === e.tpid) || (x.pid === e.tpid && x.tpid === e.pid)) : (x.pid === e.pid && x.zone === e.zone)));
+      if (dup) { dup.appliedIn = null; dup.fromYear = old; } else bank.push(Object.assign({id: uid('b'), fromYear: old, appliedIn: null}, e));
+    }
+  }
+  bank = bank.filter(b => !sum.grads.has(b.pid) && !sum.grads.has(b.tpid));
+  DATA.ruleBank = bank;
+  for (const pid of sum.grads) delete DATA.people[pid];
+  // 2. classes
+  DATA.classes = DATA.classes.filter(c => ny.keep.has(c.id));
+  for (const c of DATA.classes) {
+    c.students = []; c.versions = []; c.rules = [];
+    for (const sp of c.spots) sp.lock = false;
+    if (c.rotation) c.rotation = {zone: c.rotation.zone, served: [], lastRound: []};
+    if (c.bop) { c.bop.songs = []; c.bop.currentSongId = null; }
+    if (!ny.keepSchedule) c.schedule = [];
+  }
+  DATA.year = ny.year;
+  UI.classId = null; UI.viewVersion = null; UI.bopView = {};
+  save(); closeDrawer(true); renderHome();
+  openModal(`${DATA.year} is ready`, `<p>Next steps:</p><ol style="line-height:1.7"><li>Import the new Aspen roster. Choose "Create a new class" for any new teacher.</li><li>Set the new class times in the weekly schedule.</li><li>Review the rules from earlier years in each class's Rules tab.</li><li>Shuffle each class to make its first chart.</li></ol>`,
+    `<button class="btn" data-act="weekly">Weekly schedule</button><button class="btn primary" data-act="importRoster">Import Aspen roster</button>`);
+}
+
+/* ---------------- weekly schedule ---------------- */
+function weekDialog() {
+  const classOpts = (sel) => schoolCodes().map(sc => `<optgroup label="${esc(sc)}">${DATA.classes.filter(c => c.school === sc).sort((a, b) => GNUM(b.grade) - GNUM(a.grade) || a.title.localeCompare(b.title)).map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</optgroup>`).join('');
+  let html = '<p class="note">Every class time for the week. Classes switch automatically during these times (and a few minutes before, per Data and settings).</p>';
+  for (let d = 1; d <= 5; d++) {
+    const slots = [];
+    DATA.classes.forEach(c => c.schedule.forEach((s, i) => { if (s.day === d) slots.push({c, s, i}); }));
+    slots.sort((a, b) => a.s.start.localeCompare(b.s.start));
+    const clash = new Set();
+    for (let i = 1; i < slots.length; i++) if (slots[i].s.start < slots[i - 1].s.end) { clash.add(i); clash.add(i - 1); }
+    html += `<div class="dsec"><h3>${DAYS_LONG[d]}</h3>` + slots.map((x, n) => `<div class="row" style="margin-bottom:6px;flex-wrap:nowrap">
+        <input class="inp" type="time" data-act="wkF" data-c="${x.c.id}" data-i="${x.i}" data-f="start" value="${x.s.start}" style="${clash.has(n) ? 'border-color:#d97706' : ''}"> to
+        <input class="inp" type="time" data-act="wkF" data-c="${x.c.id}" data-i="${x.i}" data-f="end" value="${x.s.end}">
+        <select class="inp" style="flex:1" data-act="wkClass" data-c="${x.c.id}" data-i="${x.i}">${classOpts(x.c.id)}</select>
+        <button class="btn sm danger" data-act="wkDel" data-c="${x.c.id}" data-i="${x.i}">&times;</button></div>`).join('') +
+      (clash.size ? '<div class="small" style="color:var(--warn);margin-bottom:6px">Two class times overlap.</div>' : '') +
+      `<select class="inp" data-act="wkAdd" data-day="${d}"><option value="">Add a class time...</option>${classOpts('')}</select></div>`;
+  }
+  const keep = !$('#modalBack').classList.contains('hidden') && $('#mTitle').textContent === 'Weekly schedule' ? $('#mBody').scrollTop : 0;
+  openModal('Weekly schedule', html, `<button class="btn primary" data-act="closeModalRender">Done</button>`);
+  $('#mBody').scrollTop = keep;
+}
+const addMin = (t, n) => { const m = toMin(t) + n; return minToT(Math.min(m, 23 * 60 + 59)); };
 
 /* ---------------- demo mode ---------------- */
 const FAKE_FIRST = ['Avery', 'Blake', 'Casey', 'Devon', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jules', 'Kai', 'Lane', 'Morgan', 'Nico', 'Oakley', 'Parker', 'Quinn', 'Reese', 'Sage', 'Tatum', 'Umi', 'Vale', 'Wren', 'Xan', 'Yael', 'Zion', 'Arden', 'Bay', 'Cove', 'Dell', 'Ellis', 'Fern', 'Gale', 'Hollis', 'Ira', 'Jade', 'Kit', 'Lark', 'Mika', 'Noor'];
@@ -1336,9 +1872,10 @@ function enterDemo() {
   if (!base) { alert('Open your data file first. Demo mode copies your layouts and swaps every name for a fake one.'); return; }
   REAL = DATA; DEMO = true;
   for (const c of base.classes) {
-    c.students.forEach((s, i) => { s.first = FAKE_FIRST[(i * 7 + c.title.length) % FAKE_FIRST.length]; s.given = s.first; s.last = FAKE_LAST[(i * 3 + c.title.length) % FAKE_LAST.length]; s.preferred = ''; s.chartName = s.first; s.linked = true; });
+    c.students.forEach((s, i) => { s.first = FAKE_FIRST[(i * 7 + c.title.length) % FAKE_FIRST.length]; s.given = s.first; s.last = FAKE_LAST[(i * 3 + c.title.length) % FAKE_LAST.length]; s.preferred = ''; s.chartName = s.first; s.linked = true; s.aspenName = `${s.last}, ${s.first}`; s.aspenId = ''; });
     if (c.bop) for (const g of c.bop.songs) if (g.suggestedBy && g.suggestedBy.kind === 'other') g.suggestedBy.name = 'Staff member';
   }
+  for (const k in base.people) base.people[k] = {preferred: '', school: base.people[k].school};
   DATA = base;
   document.body.classList.add('demo'); $('#demoBanner').classList.remove('hidden');
   closeModal(); renderAll();
@@ -1350,7 +1887,39 @@ function exitDemo() {
 }
 
 /* ---------------- data menu ---------------- */
+function schoolMenu() {
+  const when = SYNC.checked ? new Date(SYNC.checked).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : 'never';
+  const s = DATA ? DATA.settings : {};
+  openModal('Data and settings', `
+    <div class="dsec"><h3>Sync</h3>
+      ${SYNC.err ? `<div class="msg bad">${esc(SYNC.err)}<br>Working from the copy saved on this PC. Changes made now sync once the connection is back.</div>`
+        : `<div class="msg ok">${SYNC.readOnly ? 'View-only: this PC gets updates but cannot save changes.' : 'This PC and your Mac share the same seating data.'} Last checked ${esc(when)}.</div>`}
+      ${SYNC.readOnly ? '<div class="msg warn">This PC was set up with a view-only code. To allow saving, copy a new setup code on the Mac (Data and settings, Sync) and use "Set up again" below.</div>' : ''}
+      <div class="row"><button class="btn primary" data-act="vsCheck">Sync now</button>${SYNC.readOnly && SYNC.dirty ? '<button class="btn" data-act="vsDiscard">Undo my temporary changes</button>' : ''}<button class="btn" data-act="viewerSetup">Set up again</button></div>
+      <p class="note">This PC checks for changes every 90 seconds and whenever the app comes back on screen. Its own changes are sent within a few seconds.</p></div>
+    ${DATA ? `<div class="dsec"><h3>Schedule</h3><label class="row"><input type="checkbox" data-act="setAuto" ${s.autoSchedule ? 'checked' : ''}> Show the scheduled class automatically</label>
+      <div class="row" style="margin-top:6px">Switch to the next class <input class="inp" type="number" min="0" max="30" style="width:60px" data-act="setFlip" value="${s.flipMinutes}"> minutes before it starts</div>
+      <div class="row editor-only" style="margin-top:8px"><button class="btn" data-act="weekly">Weekly schedule</button><button class="btn" data-act="importRoster">Import Aspen roster</button></div></div>` : ''}
+    <div class="dsec"><h3>Keys</h3><p class="note">Page Down, Right or Down: next class (or next Bop or Flop step). Page Up, Left or Up: back. F: full screen. B: switch chart and Bop or Flop views. Esc: leave full screen.</p></div>
+    <div class="dsec"><h3>Stop</h3><button class="btn danger" data-act="vsRemove">Remove the setup from this PC</button><p class="note">Deletes the seating data from this browser. The shared copy and your Mac are not affected.</p></div>`,
+    `<button class="btn" data-act="closeModal">Done</button>`);
+}
+function syncSection() {
+  const c = SYNC.cfg || {};
+  const st = !syncOn() ? '<div class="msg info">Off. Turn it on to share the seating data with your school PCs.</div>'
+    : SYNC.err ? `<div class="msg bad">${esc(SYNC.err)}</div>`
+    : `<div class="msg ok">Syncing. Last checked ${SYNC.checked ? esc(new Date(SYNC.checked).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})) : 'not yet'}.</div>`;
+  return `<div class="dsec"><h3>Sync with school PCs</h3>${st}
+    <p class="note">This Mac and your school PCs share one encrypted copy in a private GitHub repository. Changes from any of them show up on the others within a couple of minutes. Changes to different classes merge on their own; if two computers change the same class before syncing, you're asked which to keep.</p>
+    <div class="field"><label>Private repository (owner/name)</label><input class="inp" id="pbRepo" value="${esc(c.repo || '')}" placeholder="charliethump/seating-data"></div>
+    <div class="field"><label>Token (Contents: read and write)</label><input class="inp" id="pbToken" type="password" value="${esc(c.token || '')}" placeholder="github_pat_..."></div>
+    <div class="field"><label>Encryption passphrase</label><div class="row" style="flex-wrap:nowrap"><input class="inp" id="pbPass" style="flex:1" value="${esc(c.pass || '')}"><button class="btn sm" data-act="pbGen">New</button></div><span class="small muted">Save it in your password manager. Changing it means making new setup codes for the school PCs.</span></div>
+    <label class="row small"><input type="checkbox" id="pbOn" ${c.on ? 'checked' : ''}> Sync automatically</label>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="pbSave">Save and sync now</button><button class="btn" data-act="pbCode" ${c.token && c.pass ? '' : 'disabled'}>Copy setup code</button></div>
+    <div id="pbCodeBox"></div></div>`;
+}
 function dataMenu() {
+  if (VIEWER) { schoolMenu(); return; }
   const s = DATA ? DATA.settings : {};
   const fileLine = FILE.connected ? `<div class="msg ok">Saving to <b>${esc(FILE.name())}</b>. Every change is written to the file right away.</div>`
     : FILE.needsReconnect ? `<div class="msg warn">Linked to <b>${esc(FILE.name())}</b>, but Chrome needs permission again. <button class="btn sm" data-act="reconnect">Allow editing</button></div>`
@@ -1358,14 +1927,20 @@ function dataMenu() {
   openModal('Data and settings', `
     <div class="dsec"><h3>Data file</h3>${fileLine}
       <div class="row"><button class="btn" data-act="openFile">${FILE.handle ? 'Open a different data file' : 'Open data file'}</button><button class="btn" data-act="newFile">Save to a new data file</button><button class="btn" data-act="downloadBackup">Download a backup copy</button>${FILE.handle ? '<button class="btn sm" data-act="unlinkFile">Unlink file</button>' : ''}</div>
-      <p class="note">Put the data file in your Google Drive folder (Google Drive for desktop) and open the same file at home and at school. The app always keeps the newest copy. Student names and rules never leave your computers.</p></div>
+      <p class="note">Keep the data file in your Google Drive folder. If it is opened on more than one computer, the app always keeps the newest copy.</p></div>
+    ${DATA ? syncSection() : ''}
     ${DATA ? `<div class="dsec"><h3>Schedule</h3>
       <label class="row"><input type="checkbox" data-act="setAuto" ${s.autoSchedule ? 'checked' : ''}> Show the scheduled class automatically</label>
       <div class="row" style="margin-top:6px">Switch to the next class <input class="inp" type="number" min="0" max="30" style="width:60px" data-act="setFlip" value="${s.flipMinutes}"> minutes before it starts</div>
-      <p class="note">Using the clicker or picking a class yourself pauses the automatic switch until the next scheduled change. Each class's times are in Edit, Settings.</p></div>
-    <div class="dsec"><h3>Roster and classes</h3><div class="row"><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="addClass">Add a class</button></div></div>
+      <div class="row" style="margin-top:8px"><button class="btn" data-act="weekly">Weekly schedule</button></div>
+      <p class="note">Using the clicker or picking a class yourself pauses the automatic switch until the next scheduled change.</p></div>
+    <div class="dsec"><h3>Roster and classes</h3><div class="row"><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="addClass">Add a class</button></div>
+      <p class="note">Aspen export columns: Name and HR Teacher are required. Student ID and School are used when present.</p></div>
+    <div class="dsec"><h3>School year: ${esc(DATA.year)}</h3><button class="btn" data-act="newYear">Start a new school year</button>
+      <p class="note">Backs up this year, clears the rosters and charts and keeps the class setups you choose. Rules for students linked to Aspen are held for your OK next year.${DATA.ruleBank.filter(b => b.appliedIn !== DATA.year).length ? ` ${DATA.ruleBank.filter(b => b.appliedIn !== DATA.year).length} rules from earlier years are waiting right now.` : ''}</p></div>
     <div class="dsec"><h3>Sharing screenshots safely</h3><button class="btn" data-act="demo">Demo mode (fake names)</button><p class="note">Copies everything and swaps every student name for a fake one, so you can share screenshots when something needs fixing. Nothing in demo mode is saved.</p></div>` : ''}
-    <div class="dsec"><h3>Keys</h3><p class="note">Page Down, Right or Down: next class (or next Bop or Flop step). Page Up, Left or Up: back. F: full screen. B: switch chart and Bop or Flop views. Esc: leave full screen.</p></div>`,
+    <div class="dsec"><h3>Keys</h3><p class="note">Page Down, Right or Down: next class (or next Bop or Flop step). Page Up, Left or Up: back. F: full screen. B: switch chart and Bop or Flop views. Esc: leave full screen.</p></div>
+    <div class="dsec"><h3>Is this a school PC?</h3><button class="btn" data-act="viewerSetup">Set up this computer as a school PC</button><p class="note">Use the setup code from your Mac. Data saved in this browser is replaced by the shared copy.</p></div>`,
     `<button class="btn" data-act="closeModal">Done</button>`);
 }
 
@@ -1470,12 +2045,63 @@ document.addEventListener('click', async (e) => {
     case 'addClass': addClassDialog(); break;
     case 'addClassGo': {
       const L = DATA.layouts[$('#ncLayout').value]; if (!L) return;
-      const title = $('#ncTitle').value.trim() || 'New class';
-      const nc = {id: uid('c'), school: $('#ncSchool').value.trim() || 'School', grade: $('#ncGrade').value, title, hrKeys: $('#ncHr').value.split(',').map(x => x.trim()).filter(Boolean), layout: L.id, neighborFactor: DEFAULT_FACTOR, caption: '', schedule: [],
-        spots: L.spots.map(s => ({id: s.id, zones: s.chair ? ['chairs'] : [], lock: false})), students: [], rules: [], rotation: L.spots.some(s => s.chair) ? {zone: 'chairs', served: [], lastRound: []} : null, versions: [], bop: $('#ncGrade').value === '5' ? {enabled: true, defaultView: 'bop', songs: []} : null};
-      DATA.classes.push(nc); if (!(DATA.settings.schools || []).includes(nc.school)) DATA.settings.schools.push(nc.school);
+      const school = $('#ncSchool').value.trim() || 'School';
+      const nc = makeClass({title: $('#ncTitle').value.trim() || 'New class', school, grade: $('#ncGrade').value, hrKeys: $('#ncHr').value.split(',').map(x => x.trim()).filter(Boolean), layout: L.id});
+      DATA.classes.push(nc); if (!(DATA.settings.schools || []).includes(school)) DATA.settings.schools.push(school);
       save(); closeModal(); openClass(nc.id, {manual: true}); openDrawer('settings'); break;
     }
+    case 'printRoster': printRoster(c); break;
+    case 'viewerSetup': viewerSetupDialog(); break;
+    case 'vsGo': {
+      let cfg; try { cfg = parseSetupCode($('#vsCode').value); } catch (err) { alert(err.message); return; }
+      await IDB.set('sync', cfg); await IDB.del('syncBase'); await IDB.del('data'); await IDB.del('fileHandle'); await IDB.del('publish'); await IDB.del('viewer'); await IDB.del('viewerCache');
+      FILE.handle = null; FILE.connected = false; FILE.needsReconnect = false;
+      DATA = null; VIEWER = true; SYNC.cfg = cfg; SYNC.sha = null; SYNC.base = null; SYNC.dirty = false; SYNC.readOnly = cfg.readOnly; SYNC.err = '';
+      applySchoolLook(); closeModal();
+      await syncPull({force: true});
+      if (SYNC.err) alert('Set up, but the first sync failed:\n' + SYNC.err);
+      else { toast('This PC now shares your seating data.'); afterDataLoaded(); }
+      break;
+    }
+    case 'vsCheck': await syncPull({force: true}); await syncPush(); schoolMenu(); break;
+    case 'vsDiscard': SYNC.sha = null; SYNC.dirty = false; await syncPull({force: true}); schoolMenu(); break;
+    case 'vsRemove': if (confirm('Remove the setup from this PC? The seating data is deleted from this browser. Your Mac and the shared copy are not affected.')) { await IDB.del('sync'); await IDB.del('syncBase'); await IDB.del('data'); location.reload(); } break;
+    case 'pbGen': if (!$('#pbPass').value || confirm('Make a new passphrase? School PCs will need a new setup code.')) $('#pbPass').value = newPassphrase(); break;
+    case 'pbSave': {
+      const prev = SYNC.cfg || {};
+      const pass = $('#pbPass').value.trim(), repo = $('#pbRepo').value.trim();
+      const cfg = Object.assign({}, prev, {repo, path: prev.path || 'seating-data.enc.json', token: $('#pbToken').value.trim(), pass, on: $('#pbOn').checked, school: false, readOnly: false});
+      if (!/^[\w.-]+\/[\w.-]+$/.test(cfg.repo)) { alert('Type the repository as owner/name, e.g. charliethump/seating-data'); return; }
+      if (!cfg.token || !cfg.pass) { alert('The token and passphrase are both needed.'); return; }
+      if (pass.length < 12) { alert('Use a longer passphrase (the New button makes a strong one).'); return; }
+      if (prev.pass !== pass || prev.repo !== repo) { cfg.salt = b64(crypto.getRandomValues(new Uint8Array(16))); cfg.sha = null; SYNC.sha = null; await setBase(null); }
+      SYNC.cfg = cfg; await IDB.set('sync', cfg);
+      if (cfg.on) {
+        SYNC.dirty = true;
+        if (prev.pass !== pass && prev.pass) {   // new passphrase: overwrite the shared copy with this Mac's data
+          const g = await GH.req(cfg, cfg.token); SYNC.sha = g.ok ? (await g.json()).sha : null;
+          try { SYNC.busy = true; await pushCore(); } catch (err) { SYNC.err = err.message; } SYNC.busy = false;
+        } else { await syncPull({force: true}); await syncPush(); }
+      }
+      dataMenu(); break;
+    }
+    case 'pbCode': {
+      const code = setupCode(); if (!code) return;
+      try { await navigator.clipboard.writeText(code); toast('Setup code copied.'); } catch (err) {}
+      $('#pbCodeBox').innerHTML = `<div class="field" style="margin-top:8px"><label>Setup code (copied). Paste it once on each school PC.</label><textarea class="code" rows="4" readonly>${esc(code)}</textarea><span class="small muted">It unlocks and can change the seating data, so treat it like a password. Delete it from wherever you send it after setup.</span></div>`;
+      break;
+    }
+    case 'bankOk': approveBank(c, a.dataset.id); save(); renderDrawer(); renderClass(); break;
+    case 'bankOkAll': { const zs = classZones(c); for (const p of pendingFor(c)) if (p.b.type === 'apart' || zs.includes(p.b.zone)) approveBank(c, p.b.id); save(); renderDrawer(); renderClass(); break; }
+    case 'bankNo': if (confirm('Forget this rule? It will not come back in later years.')) { DATA.ruleBank = DATA.ruleBank.filter(b => b.id !== a.dataset.id); save(); renderDrawer(); renderClass(); } break;
+    case 'newYear': UI.ny = {backup: false, year: nextYearLabel(DATA.year), keep: new Set(DATA.classes.map(x => x.id)), keepSchedule: false}; newYearDialog(); break;
+    case 'nyBackup': download(`seating-data-${DATA.year}-backup.json`); UI.ny.backup = true; newYearDialog(); break;
+    case 'nyAll': UI.ny.keep = new Set(DATA.classes.map(x => x.id)); newYearDialog(); break;
+    case 'nyNone': UI.ny.keep = new Set(); newYearDialog(); break;
+    case 'nyGo': if (confirm(`Start ${UI.ny.year}? ${DATA.classes.length - UI.ny.keep.size} classes will be removed and every roster and chart cleared. Your backup is the way back.`)) doRollover(); break;
+    case 'weekly': weekDialog(); break;
+    case 'wkDel': { const cc = getClass(a.dataset.c); cc.schedule.splice(Number(a.dataset.i), 1); save(); weekDialog(); break; }
+    case 'closeModalRender': closeModal(); renderAll(); break;
     case 'closeModal': closeModal(); break;
   }
 });
@@ -1483,7 +2109,29 @@ document.addEventListener('change', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const c = curClass(); const act = a.dataset.act;
   switch (act) {
-    case 'stuField': { const s = studentById(c, a.dataset.id); s[a.dataset.f] = a.value.trim(); if (a.dataset.f === 'first') s.given = s.first; save(); renderDrawer(); renderStageArea(); renderTray(); break; }
+    case 'stuField': { const s = studentById(c, a.dataset.id); s[a.dataset.f] = a.value.trim(); if (a.dataset.f === 'first') s.given = s.first; if (a.dataset.f === 'preferred' && s.pid && DATA.people[s.pid]) DATA.people[s.pid].preferred = s.preferred; save(); renderDrawer(); renderStageArea(); renderTray(); break; }
+    case 'printRules': UI.printRules = a.checked; break;
+    case 'rosterLeft': UI.rosterLeft = a.checked; renderDrawer(); break;
+    case 'impSchool': { const raw = IMPORT.groups[a.dataset.k].schoolRaw; for (const k in IMPORT.groups) if (IMPORT.groups[k].schoolRaw === raw) { IMPORT.school[k] = a.value; if (IMPORT.newCls[k]) IMPORT.newCls[k].school = a.value; } buildPlans(); showImport(); break; }
+    case 'impNew': {
+      const sp = newSpec(a.dataset.k); const f = a.dataset.f;
+      if (f === 'title') { sp.title = a.value; sp.autoTitle = false; }
+      else sp[f] = a.value;
+      if (f === 'grade') { if (sp.autoTitle) sp.title = `Grade ${sp.grade} – ${sp.last}`; sp.layout = defaultLayout(sp.school, sp.grade); }
+      buildPlans(); showImport(); break;
+    }
+    case 'nyYear': UI.ny.year = a.value.trim() || UI.ny.year; newYearDialog(); break;
+    case 'nyKeep': a.checked ? UI.ny.keep.add(a.dataset.id) : UI.ny.keep.delete(a.dataset.id); break;
+    case 'nySched': UI.ny.keepSchedule = a.checked; break;
+    case 'wkF': { const cc = getClass(a.dataset.c); const sl = cc.schedule[Number(a.dataset.i)]; sl[a.dataset.f] = a.value; if (sl.end <= sl.start) sl.end = addMin(sl.start, 45); cc.schedule.sort((x, y) => x.day - y.day || x.start.localeCompare(y.start)); save(); weekDialog(); break; }
+    case 'wkClass': { const from = getClass(a.dataset.c), to = getClass(a.value); const [sl] = from.schedule.splice(Number(a.dataset.i), 1); to.schedule.push(sl); to.schedule.sort((x, y) => x.day - y.day || x.start.localeCompare(y.start)); save(); weekDialog(); break; }
+    case 'wkAdd': {
+      if (!a.value) break; const d = Number(a.dataset.day); const to = getClass(a.value);
+      const ends = DATA.classes.flatMap(x => x.schedule.filter(s => s.day === d).map(s => s.end)).sort();
+      const start = ends.length ? ends[ends.length - 1] : '09:00';
+      to.schedule.push({day: d, start, end: addMin(start, 45)}); to.schedule.sort((x, y) => x.day - y.day || x.start.localeCompare(y.start));
+      save(); weekDialog(); break;
+    }
     case 'ruleType': UI.ruleType = a.value; UI.ruleStudent = $('#ruleS').value; renderDrawer(); break;
     case 'ruleStudent': UI.ruleStudent = a.value; if ((UI.ruleType || 'must') === 'apart') renderDrawer(); break;
     case 'rotZone': c.rotation = a.value ? {zone: a.value, served: currentlyIn(c, a.value), lastRound: []} : null; save(); renderDrawer(); break;
@@ -1504,7 +2152,7 @@ document.addEventListener('change', (e) => {
     }
     case 'setAuto': DATA.settings.autoSchedule = a.checked; UI.override = null; save(); renderAutoBtn(); break;
     case 'setFlip': DATA.settings.flipMinutes = Math.max(0, Number(a.value) || 0); save(); break;
-    case 'impMap': IMPORT.map[a.dataset.k] = a.value; buildPlans(); showImport(); break;
+    case 'impMap': IMPORT.map[a.dataset.k] = a.value; if (a.value === '__new') newSpec(a.dataset.k); buildPlans(); showImport(); break;
     case 'impLink': {
       const plan = IMPORT.plans[a.dataset.c];
       for (const sid in plan.links) if (plan.links[sid] === a.value && a.value) delete plan.links[sid];
@@ -1568,10 +2216,30 @@ function afterDataLoaded() {
   if (s) openClass(s.c.id); else renderHome();
 }
 (async function init() {
+  // a school PC set up with the earlier view-only version
+  try {
+    const old = await IDB.get('viewer');
+    if (old && !(await IDB.get('sync'))) {
+      await IDB.set('sync', {repo: old.r, path: old.p, token: old.t, pass: old.k, on: true, school: true, readOnly: true});
+      try { const env = await IDB.get('viewerCache'); if (env) await IDB.set('data', await decryptData(env, old.k)); } catch (e) {}
+      await IDB.del('viewer'); await IDB.del('viewerCache');
+    }
+  } catch (e) {}
+  let sc = null; try { sc = await IDB.get('sync'); } catch (e) {}
+  VIEWER = !!(sc && sc.school);
   try { const d = await IDB.get('data'); if (d && d.app === 'seating-chart') DATA = upgrade(d); } catch (e) {}
-  await FILE.init();
+  if (!VIEWER) await FILE.init();
+  await syncLoad();
+  applySchoolLook();
   if (DATA) afterDataLoaded(); else { renderStatus(); renderHome(); }
+  if (syncOn()) { await syncPull({force: true}); if (DATA && UI.view === 'home' && DATA.settings.autoSchedule) afterDataLoaded(); }
   setInterval(tick, 15000);
+  setInterval(() => syncPull(), VIEWER ? 90000 : 120000);
+  setInterval(renderStatus, 60000);
+  if (!VIEWER) setInterval(() => FILE.refresh(), 60000);
+  const onBack = () => { if (!VIEWER) FILE.refresh(); if (Date.now() - SYNC.checked > 20000) syncPull(); };
+  window.addEventListener('focus', onBack);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onBack(); });
 })();
 </script>
 </body>
