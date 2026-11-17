@@ -212,6 +212,9 @@ details.cls .inner{padding:4px 12px 12px}
   <button class="tb" data-act="home">Classes</button>
   <button class="tb" data-act="now" title="Jump to the class the schedule says is on now">Now</button>
   <button class="tb" id="autoBtn" data-act="toggleAuto" title="Automatically show the scheduled class">Auto: on</button>
+  <span style="width:1px;height:22px;background:#333a45;margin:0 2px"></span>
+  <button class="tb" id="undoBtn" data-act="undo" disabled title="Undo (Ctrl+Z / Cmd+Z)">&#8630; Undo</button>
+  <button class="tb" id="redoBtn" data-act="redo" disabled title="Redo (Ctrl+Y / Cmd+Shift+Z)">Redo &#8631;</button>
   <span class="spacer"></span>
   <span id="status" data-act="dataMenu">Loading...</span>
   <button class="tb" data-act="dataMenu">Data and settings</button>
@@ -409,9 +412,68 @@ const FILE = {
 };
 
 let saveTimer = null;
-function save() {
+/* ---------------- undo / redo ----------------
+   Every saved change keeps a snapshot of the data from just before it.
+   Undo puts that snapshot back (and it syncs like any other change). */
+const NOUNDO = {};
+const UNDO = {stack: [], redo: [], last: null, ref: null, label: null};
+function undoPrime(label) {
   if (!DATA || DEMO) return;
+  if (UNDO.ref !== DATA) { UNDO.ref = DATA; UNDO.last = JSON.stringify(DATA); UNDO.stack = []; UNDO.redo = []; }
+  UNDO.label = label || null;
+}
+const canUndo = () => !!DATA && !DEMO && UNDO.ref === DATA && UNDO.stack.length > 0;
+const canRedo = () => !!DATA && !DEMO && UNDO.ref === DATA && UNDO.redo.length > 0;
+function renderUndo() {
+  const u = $('#undoBtn'), r = $('#redoBtn'); if (!u) return;
+  u.disabled = !canUndo(); r.disabled = !canRedo();
+  u.title = canUndo() ? `Undo: ${UNDO.stack[UNDO.stack.length - 1].label} (Ctrl+Z / Cmd+Z)` : 'Nothing to undo';
+  r.title = canRedo() ? `Redo: ${UNDO.redo[UNDO.redo.length - 1].label} (Ctrl+Y / Cmd+Shift+Z)` : 'Nothing to redo';
+}
+function applySnapshot(json, cls) {
+  DATA = upgrade(JSON.parse(json)); UNDO.ref = DATA;
+  if (cls && getClass(cls) && UI.view === 'class') UI.classId = cls;
+  UI.sel.clear(); UI.pick = null;
+  save(NOUNDO); refreshViews();
+}
+function undo() {
+  if (!canUndo()) return;
+  const e = UNDO.stack.pop();
+  UNDO.redo.push({label: e.label, json: UNDO.last, cls: UI.classId});
+  applySnapshot(e.json, e.cls); toast('Undone: ' + e.label);
+}
+function redo() {
+  if (!canRedo()) return;
+  const e = UNDO.redo.pop();
+  UNDO.stack.push({label: e.label, json: UNDO.last, cls: UI.classId});
+  applySnapshot(e.json, e.cls); toast('Redone: ' + e.label);
+}
+function actionLabel(act, a, c) {
+  const nm = id => (c && displayNames(c)[id]) || 'a student';
+  const L = {
+    shuffle: 'Shuffle', addStudent: 'Add a student', ruleAdd: 'Add a rule', ruleDel: 'Remove a rule', bankOk: 'Approve a rule', bankOkAll: 'Approve rules', bankNo: 'Dismiss a rule',
+    zoneAdd: 'Add a zone', zoneRemove: 'Remove a zone', lockSel: 'Lock spots', unlockSel: 'Unlock spots', rotReset: 'New rotation round', rotZone: 'Rotation zone', rotServed: 'Rotation turn',
+    songSave: 'Save a song', songCurrent: 'Change the current song', songDel: 'Delete a song', schedAdd: 'Schedule change', schedDel: 'Schedule change', schedF: 'Schedule change',
+    wkF: 'Schedule change', wkClass: 'Schedule change', wkAdd: 'Schedule change', wkDel: 'Schedule change', impApply: 'Roster import', nyGo: 'Start a new school year',
+    addClassGo: 'Add a class', restoreVersion: 'Restore an old version', clsField: 'Class settings', clsHr: 'Class settings', clsFactor: 'Neighbor factor', clsLayout: 'Room layout',
+    bopEnabled: 'Bop or Flop setting', bopDefault: 'Bop or Flop setting', setAuto: 'Schedule setting', setFlip: 'Schedule setting', toggleAuto: 'Schedule setting'
+  };
+  if (act === 'stuActive') { const st = c && studentById(c, a.dataset.id); return st ? `${nm(st.id)} ${st.active ? 'marked as left' : 'brought back'}` : 'Roster change'; }
+  if (act === 'stuField') return (a.dataset.f === 'preferred' ? 'Preferred name for ' : 'Name change for ') + nm(a.dataset.id);
+  if (act === 'deleteClass') return 'Delete ' + (c ? c.title : 'a class');
+  return L[act] || 'Change';
+}
+
+function save(opt) {
+  if (!DATA || DEMO) return;
+  if (opt !== NOUNDO && UNDO.ref === DATA && UNDO.last) {
+    UNDO.stack.push({label: UNDO.label || 'Change', json: UNDO.last, cls: UI.classId});
+    if (UNDO.stack.length > 40) UNDO.stack.shift();
+    UNDO.redo = [];
+  }
   DATA.savedAt = new Date().toISOString();
+  UNDO.last = JSON.stringify(DATA); UNDO.ref = DATA; UNDO.label = null;
+  renderUndo();
   if (SYNC.cfg) SYNC.dirty = true;
   clearTimeout(saveTimer);
   if (VIEWER) {   // school PC: no data file, just this browser plus the shared copy
@@ -537,6 +599,7 @@ async function remoteGet() {
   return {sha: j.sha, env};
 }
 function refreshViews() {
+  renderUndo();
   if (!DATA) { renderHome(); return; }
   if (UI.view === 'class' && !getClass(UI.classId)) { UI.classId = null; renderHome(); }
   else renderAll();
@@ -1156,14 +1219,12 @@ function renderClass() {
   const v = latest(c);
   const viewingOld = UI.viewVersion != null && v && UI.viewVersion !== v.n;
   const isBop = bopActive(c);
-  const canUndo = v && v.by === 'shuffle' && !viewingOld;
   const tools = $('#classTools');
   tools.innerHTML = `<span class="ct">${esc(c.title)}</span>
     <button class="tb" data-act="prevClass" title="Previous class (Page Up)">&larr;</button>
     <button class="tb" data-act="nextClass" title="Next class (Page Down)">&rarr;</button>
     <span class="sep"></span>
     <button class="tb primary" data-act="shuffle" ${viewingOld ? 'disabled' : ''}>Shuffle into a new version</button>
-    <button class="tb" data-act="undoShuffle" ${canUndo ? '' : 'disabled'}>Undo shuffle</button>
     <button class="tb ${UI.tool === 'swap' ? 'on' : ''}" data-act="toolSwap" ${viewingOld ? 'disabled' : ''} title="Click two names to swap them, or a name then an empty spot to move it. Edits the current version.">Move students</button>
     <span class="sep"></span>
     ${c.bop && c.bop.enabled ? `<button class="tb ${isBop ? 'on' : ''}" data-act="toggleBop" title="B">${isBop ? 'Bop or Flop view' : 'Chart view'}</button>` : ''}
@@ -1969,11 +2030,14 @@ function toast(t) {
 /* ---------------- events ---------------- */
 document.addEventListener('click', async (e) => {
   const sp = e.target.closest('.stage [data-spot]');
-  if (sp && $('#stageWrap').contains(sp)) { onStageClick(sp.dataset.spot); return; }
+  if (sp && $('#stageWrap').contains(sp)) { undoPrime(UI.tool === 'spots' ? 'Turn a spot on or off' : 'Move students'); onStageClick(sp.dataset.spot); return; }
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act; const c = curClass();
   if (a.tagName === 'SELECT' || (a.tagName === 'INPUT' && a.type !== 'button')) return;
+  if (act !== 'undo' && act !== 'redo') undoPrime(actionLabel(act, a, c));
   switch (act) {
+    case 'undo': undo(); break;
+    case 'redo': redo(); break;
     case 'home': UI.viewVersion = null; renderHome(); break;
     case 'now': { const s = DATA && autoSlot(); UI.override = null; if (s) openClass(s.c.id); break; }
     case 'toggleAuto': if (DATA) { DATA.settings.autoSchedule = !DATA.settings.autoSchedule; UI.override = null; save(); renderAutoBtn(); tick(); } break;
@@ -2010,7 +2074,15 @@ document.addEventListener('click', async (e) => {
     case 'lockSel': case 'unlockSel': for (const s of c.spots) if (UI.sel.has(s.id)) s.lock = act === 'lockSel'; save(); renderStageArea(); renderDrawer(); break;
     case 'clearSel': UI.sel.clear(); renderStageArea(); renderDrawer(); break;
     case 'addStudent': { const n = prompt('First name (you can fill in the rest in the table):'); if (!n) return; c.students.push({id: uid('s'), first: n.trim(), last: '', preferred: '', active: true, linked: true}); save(); renderDrawer(); renderTray(); break; }
-    case 'stuActive': { const s = studentById(c, a.dataset.id); s.active = !s.active; if (!s.active) { const v = latest(c); if (v) for (const k in v.assign) if (v.assign[k] === s.id) delete v.assign[k]; } save(); renderDrawer(); renderStageArea(); renderTray(); break; }
+    case 'stuActive': {
+      const s = studentById(c, a.dataset.id); const v = latest(c); const nm = displayNames(c)[s.id];
+      s.active = !s.active;
+      if (!s.active) { s.leftSpot = null; if (v) for (const k in v.assign) if (v.assign[k] === s.id) { s.leftSpot = k; delete v.assign[k]; } }
+      else if (s.leftSpot && v && !v.assign[s.leftSpot] && c.spots.some(x => x.id === s.leftSpot)) { v.assign[s.leftSpot] = s.id; s.leftSpot = null; }
+      save(); renderDrawer(); renderStageArea(); renderTray();
+      toast(s.active ? `${nm} is back${unseated(c).some(x => x.id === s.id) ? ' (not seated yet)' : ' in their old spot'}.` : `${nm} marked as left. Undo with Ctrl+Z / Cmd+Z.`);
+      break;
+    }
     case 'ruleAdd': {
       const s = $('#ruleS').value, t = $('#ruleT').value, x = $('#ruleX').value;
       if (!s || !x) { alert('Pick a student and a target.'); return; }
@@ -2108,6 +2180,7 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('change', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const c = curClass(); const act = a.dataset.act;
+  undoPrime(actionLabel(act, a, c));
   switch (act) {
     case 'stuField': { const s = studentById(c, a.dataset.id); s[a.dataset.f] = a.value.trim(); if (a.dataset.f === 'first') s.given = s.first; if (a.dataset.f === 'preferred' && s.pid && DATA.people[s.pid]) DATA.people[s.pid].preferred = s.preferred; save(); renderDrawer(); renderStageArea(); renderTray(); break; }
     case 'printRules': UI.printRules = a.checked; break;
@@ -2179,6 +2252,9 @@ $('#csvInput').addEventListener('change', (e) => { const f = e.target.files[0]; 
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, textarea, select, [contenteditable]')) return;
   if (!$('#modalBack').classList.contains('hidden')) { if (e.key === 'Escape') closeModal(); return; }
+  const k = (e.key || '').toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (e.ctrlKey && k === 'y') { e.preventDefault(); redo(); return; }
   const c = curClass();
   const next = ['PageDown', 'ArrowRight', 'ArrowDown'].includes(e.key);
   const prev = ['PageUp', 'ArrowLeft', 'ArrowUp'].includes(e.key);
@@ -2211,6 +2287,7 @@ window.addEventListener('blur', () => setTimeout(() => { if (document.activeElem
 
 /* ---------------- startup ---------------- */
 function afterDataLoaded() {
+  renderUndo();
   renderStatus(); renderAutoBtn();
   const s = DATA.settings.autoSchedule && autoSlot();
   if (s) openClass(s.c.id); else renderHome();
