@@ -75,7 +75,9 @@ body.demo #main{top:73px}
 /* ---------- class view ---------- */
 #classView{flex:1;display:flex;flex-direction:column;min-height:0}
 #classTools{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#171a20;border-bottom:1px solid #2a2f37;flex-wrap:wrap}
-#classTools .ct{font-weight:650;margin-right:6px}
+#classTools .ct{font-weight:650;width:300px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 4px}
+#classTools .fixed-w{min-width:92px;text-align:center}
+#classTools .bopT{margin-left:auto;min-width:150px;text-align:center}
 #classTools .sep{width:1px;height:22px;background:#333a45;margin:0 4px}
 #verBanner{background:var(--warnbg);color:#5b3b05;padding:6px 12px;font-size:13px;display:flex;gap:10px;align-items:center}
 #verBanner button{border:1px solid #c9a253;background:#fff8e6;border-radius:6px;padding:3px 9px}
@@ -213,8 +215,8 @@ details.cls .inner{padding:4px 12px 12px}
   <button class="tb" data-act="now" title="Jump to the class the schedule says is on now">Now</button>
   <button class="tb" id="autoBtn" data-act="toggleAuto" title="Automatically show the scheduled class">Auto: on</button>
   <span style="width:1px;height:22px;background:#333a45;margin:0 2px"></span>
-  <button class="tb" id="undoBtn" data-act="undo" disabled title="Undo (Ctrl+Z / Cmd+Z)">&#8630; Undo</button>
-  <button class="tb" id="redoBtn" data-act="redo" disabled title="Redo (Ctrl+Y / Cmd+Shift+Z)">Redo &#8631;</button>
+  <button class="tb" id="undoBtn" data-act="undo" disabled title="Undo (Ctrl+Z / Cmd+Z)"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:-3px"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg> Undo</button>
+  <button class="tb" id="redoBtn" data-act="redo" disabled title="Redo (Ctrl+Y / Cmd+Shift+Z)"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:-3px"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg> Redo</button>
   <span class="spacer"></span>
   <span id="status" data-act="dataMenu">Loading...</span>
   <button class="tb" data-act="dataMenu">Data and settings</button>
@@ -1220,17 +1222,17 @@ function renderClass() {
   const viewingOld = UI.viewVersion != null && v && UI.viewVersion !== v.n;
   const isBop = bopActive(c);
   const tools = $('#classTools');
-  tools.innerHTML = `<span class="ct">${esc(c.title)}</span>
-    <button class="tb" data-act="prevClass" title="Previous class (Page Up)">&larr;</button>
+  tools.innerHTML = `<button class="tb" data-act="prevClass" title="Previous class (Page Up)">&larr;</button>
     <button class="tb" data-act="nextClass" title="Next class (Page Down)">&rarr;</button>
+    <span class="ct" title="${esc(c.title)}">${esc(c.title)}</span>
     <span class="sep"></span>
     <button class="tb primary" data-act="shuffle" ${viewingOld ? 'disabled' : ''}>Shuffle into a new version</button>
     <button class="tb ${UI.tool === 'swap' ? 'on' : ''}" data-act="toolSwap" ${viewingOld ? 'disabled' : ''} title="Click two names to swap them, or a name then an empty spot to move it. Edits the current version.">Move students</button>
     <span class="sep"></span>
-    ${c.bop && c.bop.enabled ? `<button class="tb ${isBop ? 'on' : ''}" data-act="toggleBop" title="B">${isBop ? 'Bop or Flop view' : 'Chart view'}</button>` : ''}
-    <button class="tb ${UI.drawer === 'roster' ? 'on' : ''}" data-act="drawer" data-tab="roster">Roster${pendingFor(c).length ? ` <span class="pill warn" style="margin:0 0 0 4px">${pendingFor(c).length}</span>` : ''}</button>
+    <button class="tb fixed-w ${UI.drawer === 'roster' ? 'on' : ''}" data-act="drawer" data-tab="roster">Roster${pendingFor(c).length ? ` <span class="pill warn" style="margin:0 0 0 4px">${pendingFor(c).length}</span>` : ''}</button>
     <button class="tb ${UI.drawer === 'history' ? 'on' : ''}" data-act="drawer" data-tab="history">History</button>
-    <button class="tb ${UI.drawer && !['history', 'roster'].includes(UI.drawer) ? 'on' : ''}" data-act="drawer" data-tab="${UI.drawer && !['history', 'roster'].includes(UI.drawer) ? UI.drawer : 'rules'}">Edit</button>`;
+    <button class="tb ${UI.drawer && !['history', 'roster'].includes(UI.drawer) ? 'on' : ''}" data-act="drawer" data-tab="${UI.drawer && !['history', 'roster'].includes(UI.drawer) ? UI.drawer : 'rules'}">Edit</button>
+    ${c.bop && c.bop.enabled ? `<button class="tb bopT ${isBop ? 'on' : ''}" data-act="toggleBop" title="Switch views (B)">${isBop ? 'Bop or Flop view' : 'Chart view'}</button>` : ''}`;
   const vb = $('#verBanner');
   if (viewingOld) {
     vb.classList.remove('hidden');
