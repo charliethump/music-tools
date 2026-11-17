@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Seating Charts</title>
+<link rel="preconnect" href="https://www.youtube.com">
+<link rel="preconnect" href="https://i.ytimg.com">
+<link rel="preconnect" href="https://www.google.com">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='10' fill='%231b2a4a'/%3E%3Cg stroke='%231b2a4a' stroke-width='2'%3E%3Crect x='8' y='8' width='16' height='16' fill='%23c0392b'/%3E%3Crect x='24' y='8' width='16' height='16' fill='%231e7a46'/%3E%3Crect x='40' y='8' width='16' height='16' fill='%23e67e22'/%3E%3Crect x='8' y='24' width='16' height='16' fill='%2385b33f'/%3E%3Crect x='24' y='24' width='16' height='16' fill='%237d3c98'/%3E%3Crect x='40' y='24' width='16' height='16' fill='%232f6fd6'/%3E%3C/g%3E%3Crect x='10' y='44' width='12' height='12' rx='2' fill='%23f2b632'/%3E%3Crect x='26' y='44' width='12' height='12' rx='2' fill='%23f2b632'/%3E%3Crect x='42' y='44' width='12' height='12' rx='2' fill='%23f2b632'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -122,6 +125,8 @@ body.present #stageWrap{background:#000}
 .bopPanel{flex:1;min-width:0;display:flex;flex-direction:column;gap:2.2%;padding:2.4% 2.2%;background:linear-gradient(180deg,#1d2230,#151924);font-family:Arial,Helvetica,sans-serif;color:#fff}
 .bopVideo{position:relative;width:100%;aspect-ratio:16/9;background:#05070b;border-radius:calc(var(--bh)*0.012);overflow:hidden;flex:none;box-shadow:0 2px 10px rgba(0,0,0,.4)}
 .bopVideo iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+#bopPlayer{position:fixed;z-index:5;background:#000;overflow:hidden;border-radius:6px}
+#bopPlayer iframe{width:100%;height:100%;border:0;display:block}
 .bopCover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4%;background:radial-gradient(circle at 50% 40%,#2b3550,#0b0e15)}
 .bopCover .big{font-weight:800;font-size:calc(var(--bh)*0.052);letter-spacing:.5px}
 .bopCover .big .b{color:#4ade80}.bopCover .big .f{color:#f87171}
@@ -872,7 +877,7 @@ function renderBop(c, version, availW, availH) {
   const showInfo = step >= 1;
   let video;
   if (song && yt && step >= 1) {
-    video = `<iframe src="https://www.youtube.com/embed/${yt.id}?autoplay=1&rel=0&modestbranding=1&playsinline=1${yt.start ? '&start=' + yt.start : ''}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen title="Song video"></iframe>`;
+    video = '';   // the player (#bopPlayer) sits on top of this box
   } else {
     video = `<div class="bopCover"><div class="big"><span class="b">Bop</span> or <span class="f">Flop</span>?</div><div class="small">${song ? (yt ? 'Press next to play' : 'No video link for this song') : 'No song set for today'}</div></div>`;
   }
@@ -891,6 +896,127 @@ function renderBop(c, version, availW, availH) {
   box.appendChild(panel);
   return box;
 }
+/* ---- Bop or Flop video player ----
+   One YouTube player that sits on top of the chart instead of inside it, so
+   redrawing (reveals, full screen, resizing) never restarts the video. It loads
+   paused while the class is still guessing, so pressing next starts it faster. */
+const PLAYER = {key: null, el: null, frame: null, ready: false, state: -1, played: false, start: 0, fallback: null, listenTimer: null};
+function ytCmd(func, args = []) { try { PLAYER.frame.contentWindow.postMessage(JSON.stringify({event: 'command', func, args, id: 1, channel: 'widget'}), '*'); } catch (e) {} }
+function killPlayer() {
+  if (PLAYER.el) PLAYER.el.remove();
+  clearTimeout(PLAYER.fallback); clearInterval(PLAYER.listenTimer);
+  Object.assign(PLAYER, {key: null, el: null, frame: null, ready: false, state: -1, played: false});
+}
+function makePlayer(key, yt, autoplay) {
+  killPlayer();
+  const el = document.createElement('div'); el.id = 'bopPlayer';
+  const f = document.createElement('iframe');
+  f.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture'; f.allowFullscreen = true; f.title = 'Song video';
+  f.src = `https://www.youtube.com/embed/${yt.id}?enablejsapi=1&origin=${encodeURIComponent(location.origin)}&rel=0&modestbranding=1&playsinline=1${yt.start ? '&start=' + yt.start : ''}${autoplay ? '&autoplay=1' : ''}`;
+  el.style.visibility = 'hidden';
+  el.appendChild(f); document.body.appendChild(el);
+  Object.assign(PLAYER, {key, el, frame: f, ready: false, state: -1, played: !!autoplay, start: yt.start || 0});
+  f.addEventListener('load', () => {
+    let n = 0; clearInterval(PLAYER.listenTimer);
+    PLAYER.listenTimer = setInterval(() => {
+      if (PLAYER.frame !== f || PLAYER.ready || ++n > 40) { clearInterval(PLAYER.listenTimer); return; }
+      try { f.contentWindow.postMessage(JSON.stringify({event: 'listening', id: 1, channel: 'widget'}), '*'); } catch (e) {}
+    }, 250);
+  });
+}
+window.addEventListener('message', (e) => {
+  if (!PLAYER.frame || e.source !== PLAYER.frame.contentWindow) return;
+  let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch (x) { return; }
+  if (!d || !d.event) return;
+  if (d.event === 'onReady' || d.event === 'initialDelivery' || d.event === 'infoDelivery') PLAYER.ready = true;
+  let st = null;
+  if (d.event === 'onStateChange' && typeof d.info === 'number') st = d.info;
+  if (d.event === 'infoDelivery' && d.info && typeof d.info.playerState === 'number') st = d.info.playerState;
+  if (st !== null) { PLAYER.state = st; if (st === 1 || st === 3) clearTimeout(PLAYER.fallback); }
+});
+function syncPlayer() {
+  const ph = document.querySelector('#stageWrap .bopVideo');
+  const c = curClass(); const song = c && currentSong(c); const yt = song && ytInfo(song.youtube);
+  if (UI.view !== 'class' || !ph || !yt || UI.viewVersion != null) { killPlayer(); return; }
+  const key = c.id + '|' + song.id + '|' + song.youtube;
+  if (PLAYER.key !== key) makePlayer(key, yt, false);
+  const r = ph.getBoundingClientRect();
+  Object.assign(PLAYER.el.style, {left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', visibility: UI.bopStep >= 1 ? 'visible' : 'hidden'});
+  if (UI.bopStep >= 1 && !PLAYER.played) {
+    if (!PLAYER.ready) { makePlayer(key, yt, true); syncPlayer(); return; }   // preloading didn't connect: load it the plain way
+    PLAYER.played = true; ytCmd('playVideo');
+    clearTimeout(PLAYER.fallback);
+    PLAYER.fallback = setTimeout(() => {   // the player ignored the play command: load it the plain way
+      if (PLAYER.key === key && PLAYER.state !== 1 && PLAYER.state !== 3 && UI.bopStep >= 1) { makePlayer(key, yt, true); syncPlayer(); }
+    }, 2500);
+  } else if (UI.bopStep === 0 && PLAYER.played) {
+    PLAYER.played = false; clearTimeout(PLAYER.fallback);
+    ytCmd('pauseVideo'); ytCmd('seekTo', [PLAYER.start, true]);
+  }
+}
+
+/* ---- fill song details from a YouTube link ----
+   Only the video link, title and artist are sent: to noembed.com (reads the
+   video title) and MusicBrainz (an open music database). No student data. */
+function cleanSongTitle(t) {
+  return String(t)
+    .replace(/\s*[\(\[][^\)\]]*(official|video|audio|lyric|visuali[sz]er|remaster|\bhd\b|\b4k\b|\bmv\b|full song|clip)[^\)\]]*[\)\]]/gi, '')
+    .replace(/\s+[|•].*$/, '').replace(/\s+(ft\.?|feat\.?|featuring)\s.*$/i, '')
+    .replace(/[“”"]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+async function lookupSong(url) {
+  const yt = ytInfo(url); if (!yt) throw new Error('That does not look like a YouTube link.');
+  const watch = 'https://www.youtube.com/watch?v=' + yt.id;
+  let meta = null;
+  for (const u of ['https://noembed.com/embed?url=' + encodeURIComponent(watch), 'https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(watch)]) {
+    try { const r = await fetch(u); if (r.ok) { const j = await r.json(); if (j && j.title) { meta = j; break; } } } catch (e) {}
+  }
+  if (!meta) throw new Error('Could not read the video title. Type the details in by hand.');
+  const author = String(meta.author_name || '').replace(/\s*-\s*Topic$/i, '').replace(/\s*VEVO$/i, '').replace(/\s*Official$/i, '').trim();
+  const t = String(meta.title).replace(/[“”"]/g, '');
+  const m = t.match(/^(.+?)\s+[-–—:]\s+(.+)$/);
+  const out = m ? {artist: m[1].trim(), song: cleanSongTitle(m[2])} : {artist: author, song: cleanSongTitle(t)};
+  out.artist = out.artist.replace(/\s+(ft\.?|feat\.?|featuring|x|&)\s.*$/i, '').trim();
+  out.year = ''; out.country = ''; out.genre = ''; out.found = false;
+  try {
+    const q = `recording:"${out.song.replace(/"/g, '')}" AND artist:"${out.artist.replace(/"/g, '')}"`;
+    const r = await fetch('https://musicbrainz.org/ws/2/recording/?fmt=json&limit=25&query=' + encodeURIComponent(q), {headers: {Accept: 'application/json'}});
+    if (r.ok) {
+      const j = await r.json();
+      const recs = (j.recordings || []).filter(x => (x.score || 0) >= 80);
+      const years = recs.map(x => x['first-release-date']).filter(Boolean).map(d => d.slice(0, 4)).sort();
+      if (years.length) { out.year = years[0]; out.found = true; }
+      const ac = recs.length && recs[0]['artist-credit'] && recs[0]['artist-credit'][0];
+      if (ac && ac.artist) {
+        out.artist = ac.artist.name || ac.name || out.artist;
+        await new Promise(res => setTimeout(res, 1100));   // MusicBrainz allows one request per second
+        const a = await fetch(`https://musicbrainz.org/ws/2/artist/${ac.artist.id}?fmt=json&inc=genres`, {headers: {Accept: 'application/json'}});
+        if (a.ok) {
+          const aj = await a.json();
+          let country = '';
+          try { if (aj.country) country = new Intl.DisplayNames(['en'], {type: 'region'}).of(aj.country); } catch (e) {}
+          out.country = country || (aj.area && aj.area.name) || '';
+          const g = (aj.genres || []).slice().sort((x, y) => (y.count || 0) - (x.count || 0))[0];
+          if (g && g.name) out.genre = g.name[0].toUpperCase() + g.name.slice(1);
+        }
+      }
+    }
+  } catch (e) {}
+  return out;
+}
+async function fillSongFromLink(auto) {
+  const url = $('#sgYt') && $('#sgYt').value.trim(); const st = $('#sgLookup');
+  if (!url) { if (!auto) alert('Paste a YouTube link first.'); return; }
+  if (st) { st.className = 'msg info'; st.textContent = 'Looking up the song...'; }
+  try {
+    const r = await lookupSong(url);
+    if (!$('#sgYt') || $('#sgYt').value.trim() !== url) return;   // the form changed while we waited
+    const set = (id, v) => { if (v) $(id).value = v; };
+    set('#sgSong', r.song); set('#sgArtist', r.artist); set('#sgYear', r.year); set('#sgCountry', r.country); set('#sgGenre', r.genre);
+    if (st) { st.className = r.found ? 'msg ok' : 'msg warn'; st.textContent = r.found ? 'Filled in from YouTube and MusicBrainz. Check it, then save.' : 'Filled in the song and artist from YouTube. Year, country and genre were not found; type them in.'; }
+  } catch (e) { if (st) { st.className = 'msg bad'; st.textContent = e.message; } }
+}
+
 function bopActive(c) { if (!c || !c.bop || !c.bop.enabled) return false; const v = UI.bopView[c.id]; return v ? v === 'bop' : c.bop.defaultView === 'bop'; }
 
 /* ---------------- adjacency (for keep-apart rules) ---------------- */
@@ -1117,6 +1243,7 @@ function show(view) {
   UI.view = view;
   $('#home').classList.toggle('hidden', view !== 'home');
   $('#classView').classList.toggle('hidden', view !== 'class');
+  if (view !== 'class') killPlayer();
 }
 function renderAll() { renderStatus(); renderAutoBtn(); if (UI.view === 'home') renderHome(); else renderClass(); }
 function renderAutoBtn() { const b = $('#autoBtn'); if (!DATA) return; b.textContent = 'Auto: ' + (DATA.settings.autoSchedule ? 'on' : 'off'); b.classList.toggle('on', !!DATA.settings.autoSchedule); }
@@ -1268,6 +1395,7 @@ function renderStageArea() {
   if (UI.tool !== 'none' && hints[UI.tool] && !document.body.classList.contains('present')) {
     const h = document.createElement('div'); h.id = 'hint'; h.textContent = hints[UI.tool]; wrap.appendChild(h);
   }
+  syncPlayer();
 }
 
 function renderTray() {
@@ -1539,7 +1667,8 @@ function drBop(c) {
     <label class="row" style="margin-top:6px"><input type="checkbox" data-act="bopDefault" ${c.bop.defaultView === 'bop' ? 'checked' : ''}> Open in Bop or Flop view by default</label>
     <p class="note">In Bop or Flop view the clicker steps through: play the video and show the song info, then reveal who suggested it, then the next class. Back steps backward.</p></div>
     <div class="dsec"><h3>${e ? 'Edit song' : 'Add the next song'}</h3>
-      <div class="field"><label>YouTube link</label><input class="inp" id="sgYt" value="${esc(f.youtube)}" placeholder="https://www.youtube.com/watch?v=..."></div>
+      <div class="field"><label>YouTube link</label><div class="row" style="flex-wrap:nowrap"><input class="inp" id="sgYt" data-act="sgYtChange" style="flex:1" value="${esc(f.youtube)}" placeholder="https://www.youtube.com/watch?v=..."><button class="btn sm" data-act="sgFill">Fill from link</button></div></div>
+      <div id="sgLookup" class="hidden"></div>
       <div class="row"><div class="field" style="flex:1"><label>Song</label><input class="inp" id="sgSong" value="${esc(f.song)}"></div><div class="field" style="flex:1"><label>Artist</label><input class="inp" id="sgArtist" value="${esc(f.artist)}"></div></div>
       <div class="row"><div class="field" style="width:70px"><label>Year</label><input class="inp" id="sgYear" value="${esc(f.year)}"></div><div class="field" style="flex:1"><label>Country</label><input class="inp" id="sgCountry" value="${esc(f.country)}"></div><div class="field" style="flex:1"><label>Genre</label><input class="inp" id="sgGenre" value="${esc(f.genre)}"></div></div>
       <div class="field"><label>Suggested by</label><select class="inp" id="sgBy"><option value="">Pick a student...</option>${studentOptions(c, sb.kind === 'student' ? sb.id : null)}<option value="__other" ${sb.kind === 'other' ? 'selected' : ''}>Someone else (type below)</option></select></div>
@@ -2125,6 +2254,7 @@ document.addEventListener('click', async (e) => {
       save(); closeModal(); openClass(nc.id, {manual: true}); openDrawer('settings'); break;
     }
     case 'printRoster': printRoster(c); break;
+    case 'sgFill': fillSongFromLink(false); break;
     case 'viewerSetup': viewerSetupDialog(); break;
     case 'vsGo': {
       let cfg; try { cfg = parseSetupCode($('#vsCode').value); } catch (err) { alert(err.message); return; }
@@ -2186,6 +2316,7 @@ document.addEventListener('change', (e) => {
   switch (act) {
     case 'stuField': { const s = studentById(c, a.dataset.id); s[a.dataset.f] = a.value.trim(); if (a.dataset.f === 'first') s.given = s.first; if (a.dataset.f === 'preferred' && s.pid && DATA.people[s.pid]) DATA.people[s.pid].preferred = s.preferred; save(); renderDrawer(); renderStageArea(); renderTray(); break; }
     case 'printRules': UI.printRules = a.checked; break;
+    case 'sgYtChange': if (!$('#sgSong').value.trim() && !$('#sgArtist').value.trim() && a.value.trim()) fillSongFromLink(true); break;
     case 'rosterLeft': UI.rosterLeft = a.checked; renderDrawer(); break;
     case 'impSchool': { const raw = IMPORT.groups[a.dataset.k].schoolRaw; for (const k in IMPORT.groups) if (IMPORT.groups[k].schoolRaw === raw) { IMPORT.school[k] = a.value; if (IMPORT.newCls[k]) IMPORT.newCls[k].school = a.value; } buildPlans(); showImport(); break; }
     case 'impNew': {
