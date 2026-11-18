@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz Results Printer</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='16' y='4' width='32' height='18' rx='2' fill='%23fff' stroke='%232f5d9e' stroke-width='3'/%3E%3Crect x='4' y='20' width='56' height='26' rx='6' fill='%232f5d9e'/%3E%3Ccircle cx='50' cy='28' r='2.5' fill='%238fd19e'/%3E%3Crect x='14' y='38' width='36' height='22' rx='2' fill='%23fff' stroke='%232f5d9e' stroke-width='3'/%3E%3Cpath d='M24 49l5 5 10-10' fill='none' stroke='%231f7a3d' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#1d2330; --muted:#5d6577; --line:#d5d9e2; --bg:#e9ecf1; --panel:#ffffff;
+    --accent:#2f5d9e; --right:#1f7a3d; --wrong:#b3261e; --partial:#9a6a00; --soft:#f4f6f9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  button,select,input{font:inherit}
+  /* ---------- toolbar ---------- */
+  #toolbar{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+  #toolbar h1{font-size:17px;margin:0 8px 0 0;white-space:nowrap}
+  .tb-group{display:flex;align-items:center;gap:6px;font-size:14px}
+  .tb-group label{color:var(--muted)}
+  #toolbar input[type=text]{padding:5px 8px;border:1px solid var(--line);border-radius:6px;min-width:220px}
+  #toolbar select{padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .btn{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+  .btn:hover{background:var(--soft)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .checks{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px}
+  .checks label{display:flex;gap:5px;align-items:center;cursor:pointer}
+  #status{font-size:13px;color:var(--muted);margin-left:auto}
+  /* ---------- panels ---------- */
+  #panels{max-width:1100px;margin:14px auto 0;padding:0 16px}
+  details.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
+  details.panel summary{padding:10px 14px;cursor:pointer;font-weight:600;font-size:14px}
+  details.panel .inner{padding:0 14px 14px;font-size:14px}
+  .maptable{display:grid;grid-template-columns:max-content 1fr;gap:6px 12px;align-items:center;max-width:620px}
+  .maptable select{width:100%;padding:4px}
+  table.keytable{border-collapse:collapse;width:100%;font-size:13px}
+  table.keytable th,table.keytable td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:top}
+  table.keytable input[type=text]{width:100%;padding:3px 6px;border:1px solid var(--line);border-radius:4px}
+  table.keytable input[type=number]{width:64px;padding:3px 4px;border:1px solid var(--line);border-radius:4px}
+  .hint{color:var(--muted);font-size:13px;margin:6px 0 10px}
+  /* ---------- drop zone ---------- */
+  #drop{max-width:640px;margin:60px auto;background:var(--panel);border:2px dashed #9aa6bd;border-radius:12px;padding:40px 30px;text-align:center}
+  #drop.over{border-color:var(--accent);background:#f2f6fc}
+  #drop h2{margin:0 0 8px}
+  #drop p{color:var(--muted);margin:6px 0}
+  #drop ol{text-align:left;display:inline-block;color:var(--muted);font-size:14px;margin:14px 0}
+  /* ---------- sheets ---------- */
+  #sheets{padding:20px 0 60px}
+  .sheet{width:8.5in;min-height:11in;margin:0 auto 24px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);padding:.5in;position:relative}
+  .page{width:7.5in;font-size:11pt;line-height:1.3}
+  .sheet .one{position:absolute;top:8px;right:10px;font-size:12px;padding:3px 8px}
+  .phead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--ink);padding-bottom:.08in;margin-bottom:.1in;gap:.2in}
+  .phead .quiz{font-size:.9em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .phead .student{font-size:1.6em;font-weight:700;margin-top:2px}
+  .phead .section{font-size:.9em;color:var(--muted)}
+  .scorebox{text-align:right;white-space:nowrap}
+  .scorebox .big{font-size:1.8em;font-weight:700;line-height:1.1}
+  .scorebox .pct{font-size:1em;color:var(--muted)}
+  .scorebox .note{font-size:.8em;color:var(--partial)}
+  table.res{width:100%;border-collapse:collapse}
+  table.res th{font-size:.8em;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;border-bottom:1px solid var(--ink);padding:2px 4px}
+  table.res td{border-bottom:1px solid var(--line);padding:3px 4px;vertical-align:top}
+  table.res td.n{width:2em;color:var(--muted)}
+  table.res td.mark{width:1.6em;text-align:center;font-weight:700;font-size:1.1em}
+  table.res td.pts{width:3.6em;text-align:right;white-space:nowrap;color:var(--muted)}
+  table.res td.q{width:46%;border-right:1px solid var(--line)}
+  table.res th.q{border-right:1px solid var(--line)}
+  table.res td.q + td{padding-left:8px}
+  tr.wrong td{background:#fbefee}
+  tr.partial td{background:#fdf6e6}
+  tr.wrong .mark{color:var(--wrong)} tr.right .mark{color:var(--right)} tr.partial .mark{color:var(--partial)}
+  .resp{font-weight:600}
+  .resp.none{font-weight:400;font-style:italic;color:var(--muted)}
+  .key{font-size:.9em;margin-top:1px}
+  .key b{color:var(--right)}
+  .essay{border:1px solid var(--line);border-radius:4px;padding:3px 6px;background:var(--soft);font-weight:400;white-space:pre-wrap}
+  .ungraded{font-size:.85em;color:var(--partial);font-style:italic}
+  .notes{margin-top:.15in}
+  .notes .lbl{font-size:.85em;color:var(--muted);margin-bottom:2px}
+  .notes .ln{border-bottom:1px solid #aab;height:.32in}
+  .hidecol-q table.res td.q, .hidecol-q table.res th.q{display:none}
+  .hidecol-pts table.res td.pts, .hidecol-pts table.res th.pts{display:none}
+  /* ---------- print ---------- */
+  @page{size:letter;margin:.5in}
+  @media print{
+    body{background:#fff}
+    #toolbar,#panels,#drop,.sheet .one{display:none !important}
+    #sheets{padding:0}
+    .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;break-after:page;page-break-after:always}
+    .sheet:last-child{break-after:auto;page-break-after:auto}
+    .sheet.skip{display:none}
+    tr.wrong td,tr.partial td,.essay{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+  @media screen and (max-width:900px){ .sheet{transform-origin:top left} }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>Quiz Results Printer</h1>
+  <div class="tb-group">
+    <button class="btn" id="openBtn">Open CSV</button>
+    <input type="file" id="file" accept=".csv,text/csv" hidden>
+  </div>
+  <div class="tb-group"><label for="title">Title</label><input type="text" id="title" placeholder="Quiz title for the top of each page"></div>
+  <div class="tb-group"><label for="secFilter">Class</label><select id="secFilter"></select></div>
+  <div class="tb-group"><label for="stuFilter">Student</label><select id="stuFilter"></select></div>
+  <div class="tb-group"><label for="sortBy">Sort</label>
+    <select id="sortBy">
+      <option value="section">Class, then name</option>
+      <option value="name">Name</option>
+      <option value="last">Last name</option>
+      <option value="scoreDesc">Score (high to low)</option>
+      <option value="scoreAsc">Score (low to high)</option>
+    </select>
+  </div>
+  <div class="tb-group"><label for="baseSize">Text</label>
+    <select id="baseSize">
+      <option value="12">Large</option>
+      <option value="11" selected>Normal</option>
+      <option value="10">Small</option>
+    </select>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="optKey" checked> Show correct answers</label>
+    <label><input type="checkbox" id="optQ" checked> Show questions</label>
+    <label><input type="checkbox" id="optPts" checked> Show points</label>
+    <label><input type="checkbox" id="optNotes"> Teacher notes lines</label>
+    <label><input type="checkbox" id="optFit" checked> Fit each student on one page</label>
+  </div>
+  <button class="btn primary" id="printBtn">Print</button>
+  <span id="status"></span>
+</div>
+
+<div id="panels" hidden>
+  <details class="panel" id="keyPanel">
+    <summary>Answer key and points</summary>
+    <div class="inner">
+      <p class="hint">The key is filled in automatically from answers that earned full credit. Fix anything that looks off; changes show up on every page right away. Essay questions show the student's writing instead of a correct answer.</p>
+      <div id="keyTable"></div>
+    </div>
+  </details>
+  <details class="panel" id="mapPanel">
+    <summary>Column settings (only if something looks wrong)</summary>
+    <div class="inner" id="mapInner"></div>
+  </details>
+</div>
+
+<div id="drop">
+  <h2>Drop a Canvas Student Analysis CSV here</h2>
+  <p>or click <b>Open CSV</b> at the top. Everything stays on this computer.</p>
+  <ol>
+    <li>Canvas: open the quiz</li>
+    <li>Build</li>
+    <li>Reports</li>
+    <li>Student Analysis > Generate > Download</li>
+  </ol>
+  <p><button class="btn" id="sampleBtn">Try it with sample data</button></p>
+</div>
+
+<div id="sheets"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const LS = 'quizResultsPrinter.v1';
+  let raw = null;          // {headers, rows, fileName}
+  let format = null;       // 'long' | 'wide'
+  let map = {};            // long-format column roles
+  let model = null;        // {questions, students}
+  let overrides = {};      // per question key: {key, possible, essay}
+
+  /* ---------------- settings ---------------- */
+  const settingIds = ['title','sortBy','baseSize','optKey','optQ','optPts','optNotes','optFit'];
+  function loadSettings(){
+    try{
+      const s = JSON.parse(localStorage.getItem(LS) || '{}');
+      settingIds.forEach(id => { if (s[id] === undefined) return; const el = $('#'+id); if (el.type === 'checkbox') el.checked = s[id]; else el.value = s[id]; });
+    }catch(e){}
+  }
+  function saveSettings(){
+    try{
+      const s = {}; settingIds.forEach(id => { const el = $('#'+id); s[id] = el.type === 'checkbox' ? el.checked : el.value; });
+      localStorage.setItem(LS, JSON.stringify(s));
+    }catch(e){}
+  }
+
+  /* ---------------- helpers ---------------- */
+  function parseCSV(text){
+    text = text.replace(/^\uFEFF/, '');
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++){
+      const c = text[i];
+      if (q){
+        if (c === '"'){ if (text[i+1] === '"'){ f += '"'; i++; } else q = false; }
+        else f += c;
+      } else if (c === '"') q = true;
+      else if (c === ','){ row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r'){
+        if (c === '\r' && text[i+1] === '\n') i++;
+        row.push(f); rows.push(row); row = []; f = '';
+      } else f += c;
+    }
+    if (f !== '' || row.length){ row.push(f); rows.push(row); }
+    return rows.filter(r => r.some(x => x.trim() !== ''));
+  }
+  const decoder = document.createElement('textarea');
+  function clean(s){
+    if (s == null) return '';
+    s = String(s);
+    if (/<[a-z\/][^>]*>/i.test(s)){
+      s = s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n');
+      s = new DOMParser().parseFromString(s, 'text/html').body.textContent || '';
+    } else if (/&[a-z#0-9]+;/i.test(s)){
+      decoder.innerHTML = s; s = decoder.value;
+    }
+    return s.replace(/[ \t\u00a0]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+  }
+  function num(s){
+    if (s == null) return null;
+    s = String(s).trim(); if (s === '') return null;
+    const n = parseFloat(s); return isNaN(n) ? null : n;
+  }
+  function isNumHeader(h){ return /^\s*-?\d+(\.\d+)?\s*$/.test(h); }
+  function fmt(n){ return n == null ? '' : (Math.round(n * 100) / 100).toString(); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function truthy(s){ return /^(true|yes|1|y)$/i.test(String(s || '').trim()); }
+  function lastName(n){ const p = n.trim().split(/\s+/); if (n.includes(',')) return n.toLowerCase(); return (p[p.length-1] + ' ' + p.slice(0,-1).join(' ')).toLowerCase(); }
+
+  function findCol(headers, pats, excl, used){
+    for (const p of pats){
+      for (let i = 0; i < headers.length; i++){
+        if (used && used.has(i)) continue;
+        const h = headers[i].trim();
+        if (p.test(h) && !(excl && excl.test(h))) return i;
+      }
+    }
+    return -1;
+  }
+
+  /* ---------------- format detection ---------------- */
+  const ROLES = [
+    ['name',     'Student name',          [/student.?name/i, /^name$/i, /^student$/i, /^user.?name$/i], /sis|id$/i],
+    ['id',       'Student ID',            [/^student.?id$/i, /^user.?id$/i, /^id$/i, /^canvas.?(user.?)?id$/i], /sis/i],
+    ['section',  'Class / section',       [/section.?name/i, /^section$/i, /^course.?section$/i], /id/i],
+    ['attempt',  'Attempt',               [/attempt/i], /time|date/i],
+    ['pos',      'Question number',       [/position/i, /item.?(number|no|#|order)/i, /question.?(number|no|#|order)/i, /^item$/i], null],
+    ['itemId',   'Question ID',           [/item.?id/i, /question.?id/i], null],
+    ['qtext',    'Question text',         [/question.?text/i, /item.?body/i, /^question$/i, /^item.?title$/i, /^question/i, /stem/i, /^title$/i], /id|type|number|position|points|possible|#/i],
+    ['answer',   'Student answer',        [/student.?(answer|response)/i, /^answer$/i, /^response$/i, /^answers?/i, /response/i, /answer/i], /no.?response|correct|count|time/i],
+    ['correct',  'Correct answer (if any)',[/correct.?answer/i, /answer.?key/i], null],
+    ['points',   'Points earned',         [/points.?(earned|awarded|scored|received)/i, /^points$/i, /^score$/i, /^item.?score$/i, /points/i, /score/i], /possible|max|total/i],
+    ['possible', 'Points possible',       [/points.?possible/i, /possible/i, /max.?(points|score)/i], null],
+    ['type',     'Question type',         [/item.?type/i, /question.?type/i, /^type$/i], null],
+    ['noresp',   'No response flag',      [/no.?response/i], null],
+  ];
+
+  function detect(headers){
+    const m = {}; const used = new Set();
+    for (const [role, , pats, excl] of ROLES){
+      const i = findCol(headers, pats, excl, used);
+      m[role] = i; if (i >= 0) used.add(i);
+    }
+    // New Quizzes (2025+): one row per student, each question = ItemID, ItemType, <question>, EarnedPoints, Status
+    if (headers.filter(h => /^item.?id$/i.test(h)).length >= 2) return { format: 'grouped', map: m };
+    const numericPairs = headers.filter((h, i) => i > 0 && isNumHeader(h) && !isNumHeader(headers[i-1])).length;
+    const looksLong = m.answer >= 0 && (m.qtext >= 0 || m.pos >= 0 || m.itemId >= 0) && numericPairs < 2;
+    return { format: looksLong ? 'long' : 'wide', map: m };
+  }
+
+  /* ---------------- model building ---------------- */
+  function buildLong(){
+    const { headers, rows } = raw; const m = map;
+    const qs = new Map(); const studs = new Map(); let order = 0;
+    const get = (r, k) => m[k] >= 0 ? r[m[k]] : undefined;
+    for (const r of rows){
+      const name = clean(get(r, 'name')) || '(no name)';
+      const sid = (m.id >= 0 && String(get(r,'id')).trim()) || name;
+      const attempt = num(get(r, 'attempt')) ?? 1;
+      const qtext = clean(get(r, 'qtext'));
+      const qkey = (m.itemId >= 0 && String(get(r,'itemId')).trim()) || (m.pos >= 0 && String(get(r,'pos')).trim()) || qtext;
+      if (!qkey) continue;
+      if (!qs.has(qkey)) qs.set(qkey, { key: qkey, pos: num(get(r,'pos')), first: order++, text: qtext, possible: null, typeStr: '', correctCol: '' });
+      const q = qs.get(qkey);
+      if (!q.text && qtext) q.text = qtext;
+      const pp = num(get(r, 'possible')); if (pp != null) q.possible = Math.max(q.possible ?? 0, pp);
+      if (m.type >= 0 && !q.typeStr) q.typeStr = String(get(r,'type') || '');
+      if (m.correct >= 0 && !q.correctCol) q.correctCol = clean(get(r,'correct'));
+      let s = studs.get(sid);
+      if (!s || attempt > s.attempt){ s = { id: sid, name, section: clean(get(r,'section')), attempt, ans: {} }; studs.set(sid, s); }
+      else if (attempt < s.attempt) continue;
+      const resp = clean(get(r, 'answer'));
+      s.ans[qkey] = { resp, pts: num(get(r, 'points')), noresp: (m.noresp >= 0 && truthy(get(r,'noresp'))) || resp === '' };
+    }
+    return finish([...qs.values()], [...studs.values()]);
+  }
+
+  function buildWide(){
+    const { headers, rows } = raw;
+    const meta = /^(name|id|sis_id|sis id|root_account|section|section_id|section_sis_id|submitted|attempt|n correct|n incorrect|score|student name|student id|section name)$/i;
+    const qs = [];
+    for (let j = 0; j < headers.length - 1; j++){
+      const h = headers[j];
+      if (!isNumHeader(h) && isNumHeader(headers[j+1]) && !meta.test(h.trim())){
+        qs.push({ key: 'c' + j, col: j, ptsCol: j + 1, pos: null, first: j, text: clean(h.replace(/^\s*\d+\s*:\s*/, '')), possible: num(headers[j+1]), typeStr: '', correctCol: '' });
+        j++;
+      }
+    }
+    const nameI = findCol(headers, [/^name$/i, /student.?name/i]);
+    const idI = findCol(headers, [/^id$/i, /^student.?id$/i]);
+    const secI = findCol(headers, [/^section$/i, /section.?name/i]);
+    const attI = findCol(headers, [/^attempt$/i]);
+    const studs = new Map();
+    for (const r of rows){
+      const name = clean(r[nameI]) || '(no name)';
+      const sid = (idI >= 0 && String(r[idI]).trim()) || name;
+      const attempt = num(r[attI]) ?? 1;
+      const prev = studs.get(sid);
+      if (prev && prev.attempt >= attempt) continue;
+      const s = { id: sid, name, section: secI >= 0 ? clean(r[secI]) : '', attempt, ans: {} };
+      for (const q of qs){
+        const resp = clean(r[q.col]);
+        s.ans[q.key] = { resp, pts: num(r[q.ptsCol]), noresp: resp === '' };
+      }
+      studs.set(sid, s);
+    }
+    return finish(qs, [...studs.values()]);
+  }
+
+  function buildGrouped(){
+    const { headers, rows } = raw;
+    const qs = [];
+    for (let i = 0; i < headers.length; i++){
+      if (!/^item.?id$/i.test(headers[i])) continue;
+      const g = { idCol: i, typeCol: -1, textCol: -1, ptsCol: -1, statusCol: -1 };
+      for (let j = i + 1; j < headers.length && !/^item.?id$/i.test(headers[j]); j++){
+        const h = headers[j];
+        if (/^item.?type$/i.test(h)) g.typeCol = j;
+        else if (/^earned.?points$|^points$|^score$/i.test(h)) g.ptsCol = j;
+        else if (/^status$/i.test(h)) g.statusCol = j;
+        else if (g.textCol < 0 && g.ptsCol < 0) g.textCol = j;
+        if (g.statusCol >= 0) break;
+      }
+      if (g.textCol < 0) continue;
+      const first = rows[0] || [];
+      qs.push({ key: 'g' + i, ...g, pos: null, first: i,
+        text: clean(headers[g.textCol]).replace(/`?blank\d+`?/gi, '___'),
+        possible: null, typeStr: g.typeCol >= 0 ? String(first[g.typeCol] || '') : '', correctCol: '' });
+    }
+    const nameI = findCol(headers, [/^name$/i, /student.?name/i]);
+    const idI = findCol(headers, [/^id$/i, /^student.?id$/i]);
+    const secI = findCol(headers, [/^section.?names?$/i, /^section$/i]);
+    const attI = findCol(headers, [/^attempt$/i]);
+    const studs = new Map();
+    for (const r of rows){
+      const name = clean(r[nameI]) || '(no name)';
+      const sid = (idI >= 0 && String(r[idI]).trim()) || name;
+      const attempt = num(r[attI]) ?? 1;
+      const prev = studs.get(sid);
+      if (prev && prev.attempt >= attempt) continue;
+      const s = { id: sid, name, section: secI >= 0 ? clean(r[secI]) : '', attempt, ans: {} };
+      for (const q of qs){
+        if (!q.typeStr && q.typeCol >= 0) q.typeStr = String(r[q.typeCol] || '');
+        const resp = clean(r[q.textCol]);
+        const status = q.statusCol >= 0 ? String(r[q.statusCol] || '') : '';
+        s.ans[q.key] = { resp, pts: q.ptsCol >= 0 ? num(r[q.ptsCol]) : null, noresp: resp === '' || /no.?answer/i.test(status) };
+      }
+      studs.set(sid, s);
+    }
+    return finish(qs, [...studs.values()]);
+  }
+
+  // Tidy Canvas answer strings: "Woodwind,Brass" -> "Woodwind, Brass"; "A=>B,C=>D" -> "A → B; C → D"
+  function prettyResp(resp, type){
+    if (!resp) return resp;
+    if (/=>/.test(resp)) return resp.split(/,(?=[^,]*=>)/).map(p => p.trim().replace(/\s*=>\s*/, ' → ')).join('; ');
+    if (/multi|select/i.test(type)) return resp.split(/\s*,\s*/).join(', ');
+    return resp;
+  }
+
+  function finish(questions, students){
+    for (const s of students) for (const q of questions){ const a = s.ans[q.key]; if (a) a.resp = prettyResp(a.resp, q.typeStr); }
+    questions.sort((a, b) => (a.pos ?? 1e9) - (b.pos ?? 1e9) || a.first - b.first);
+    questions.forEach((q, i) => {
+      q.num = i + 1;
+      const all = students.map(s => s.ans[q.key]).filter(Boolean);
+      if (q.possible == null){
+        const mx = Math.max(0, ...all.map(a => a.pts ?? 0)); q.possible = mx || null;
+      }
+      // essay?
+      const answered = all.filter(a => !a.noresp);
+      const distinct = new Set(answered.map(a => a.resp.toLowerCase())).size;
+      const avgLen = answered.reduce((t, a) => t + a.resp.length, 0) / (answered.length || 1);
+      q.autoEssay = /essay|file.?upload|upload/i.test(q.typeStr) ||
+        (!q.typeStr && answered.length >= 3 && distinct / answered.length > 0.75 && avgLen > 25);
+      // key from full-credit answers
+      if (q.correctCol){ q.autoKey = q.correctCol; }
+      else if (/fill|blank|numeric|formula/i.test(q.typeStr)){ q.autoKey = ''; } // full-credit answers vary (spelling), so no safe guess
+      else {
+        const counts = {};
+        for (const a of all){
+          if (a.noresp || a.pts == null || q.possible == null) continue;
+          if (a.pts >= q.possible - 1e-9) counts[a.resp] = (counts[a.resp] || 0) + 1;
+        }
+        const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+        q.autoKey = best ? best[0] : '';
+      }
+    });
+    return { questions, students };
+  }
+
+  function rebuild(){
+    model = format === 'long' ? buildLong() : format === 'grouped' ? buildGrouped() : buildWide();
+    if (!model.questions.length || !model.students.length){
+      $('#status').textContent = 'Could not find questions in this file. Open "Column settings" to point the tool at the right columns.';
+      $('#mapPanel').open = true;
+    }
+    fillFilters(); renderKeyTable(); renderMap(); render();
+  }
+
+  /* ---------------- question accessors (with overrides) ---------------- */
+  const qo = q => overrides[q.key] || {};
+  const qKey = q => qo(q).key ?? q.autoKey;
+  const qPossible = q => qo(q).possible ?? q.possible;
+  const qEssay = q => qo(q).essay ?? q.autoEssay;
+
+  /* ---------------- panels ---------------- */
+  function renderKeyTable(){
+    const rows = model.questions.map(q => `
+      <tr data-k="${esc(q.key)}">
+        <td>${q.num}</td>
+        <td>${esc(q.text || '(no question text)')}</td>
+        <td><input type="text" class="k-key" value="${qEssay(q) ? '' : esc(qKey(q) || '')}" ${qEssay(q) ? 'disabled' : ''} placeholder="${qEssay(q) ? 'essay' : 'type the correct answer'}"></td>
+        <td><input type="number" class="k-pts" min="0" step="0.5" value="${qPossible(q) ?? ''}"></td>
+        <td style="text-align:center"><input type="checkbox" class="k-essay" ${qEssay(q) ? 'checked' : ''}></td>
+      </tr>`).join('');
+    $('#keyTable').innerHTML = `<table class="keytable"><thead><tr><th>#</th><th>Question</th><th>Correct answer</th><th>Pts</th><th>Essay</th></tr></thead><tbody>${rows}</tbody></table>`;
+    $('#keyTable').querySelectorAll('tr[data-k]').forEach(tr => {
+      const k = tr.dataset.k; const o = () => (overrides[k] = overrides[k] || {});
+      tr.querySelector('.k-key').addEventListener('input', e => { o().key = e.target.value; render(); });
+      tr.querySelector('.k-pts').addEventListener('input', e => { o().possible = num(e.target.value); render(); });
+      tr.querySelector('.k-essay').addEventListener('change', e => { o().essay = e.target.checked; renderKeyTable(); render(); });
+    });
+  }
+
+  function renderMap(){
+    const h = raw.headers;
+    const opts = sel => `<option value="-1">(none)</option>` + h.map((x, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${esc(x || '(blank column ' + (i+1) + ')')}</option>`).join('');
+    const fmtNames = { grouped: 'New Quizzes (one row per student, question groups)', long: 'one row per student per question', wide: 'Classic Quizzes (one row per student)' };
+    let html = `<p class="hint">Detected layout: <b>${fmtNames[format]}</b>.
+      <label style="margin-left:10px">Switch: <select id="fmtSel">${Object.entries(fmtNames).map(([k, v]) => `<option value="${k}" ${format===k?'selected':''}>${v}</option>`).join('')}</select></label></p>`;
+    if (format === 'long'){
+      html += `<div class="maptable">` + ROLES.map(([role, label]) => `<label>${label}</label><select data-role="${role}">${opts(map[role])}</select>`).join('') + `</div>`;
+    } else {
+      html += `<p class="hint">Found ${model.questions.length} question${model.questions.length === 1 ? '' : 's'} and ${model.students.length} student${model.students.length === 1 ? '' : 's'}. Points possible per question are taken from the highest score any student earned; fix them in the answer key panel if needed.</p>`;
+    }
+    $('#mapInner').innerHTML = html;
+    $('#fmtSel').addEventListener('change', e => { format = e.target.value; overrides = {}; rebuild(); });
+    $('#mapInner').querySelectorAll('select[data-role]').forEach(s => s.addEventListener('change', e => { map[e.target.dataset.role] = +e.target.value; overrides = {}; rebuild(); }));
+  }
+
+  function fillFilters(){
+    const secs = [...new Set(model.students.map(s => s.section).filter(Boolean))].sort();
+    const secSel = $('#secFilter'); const prevSec = secSel.value;
+    secSel.innerHTML = `<option value="">All classes</option>` + secs.map(s => `<option>${esc(s)}</option>`).join('');
+    if (secs.includes(prevSec)) secSel.value = prevSec;
+    secSel.parentElement.style.display = secs.length > 1 ? '' : 'none';
+    fillStudentFilter();
+  }
+  function fillStudentFilter(){
+    const sec = $('#secFilter').value;
+    const list = model.students.filter(s => !sec || s.section === sec).sort((a, b) => a.name.localeCompare(b.name));
+    const sel = $('#stuFilter'); const prev = sel.value;
+    sel.innerHTML = `<option value="">All (${list.length})</option>` + list.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    if (list.some(s => s.id === prev)) sel.value = prev;
+  }
+
+  /* ---------------- scoring ---------------- */
+  function score(s){
+    let earned = 0, possible = 0, ungraded = 0;
+    for (const q of model.questions){
+      const p = qPossible(q) || 0; possible += p;
+      const a = s.ans[q.key];
+      if (!a || a.pts == null){ if (qEssay(q) && a && !a.noresp) ungraded++; continue; }
+      earned += a.pts;
+    }
+    return { earned, possible, ungraded, pct: possible ? Math.round(earned / possible * 100) : 0 };
+  }
+
+  /* ---------------- render ---------------- */
+  function render(){
+    if (!model) return;
+    saveSettings();
+    const sec = $('#secFilter').value, only = $('#stuFilter').value, sort = $('#sortBy').value;
+    const showKey = $('#optKey').checked, showNotes = $('#optNotes').checked;
+    const title = $('#title').value.trim();
+    let list = model.students.filter(s => (!sec || s.section === sec) && (!only || s.id === only));
+    const sc = new Map(list.map(s => [s, score(s)]));
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    list.sort({
+      name: byName,
+      last: (a, b) => lastName(a.name).localeCompare(lastName(b.name)),
+      section: (a, b) => (a.section || '').localeCompare(b.section || '') || byName(a, b),
+      scoreDesc: (a, b) => sc.get(b).pct - sc.get(a).pct || byName(a, b),
+      scoreAsc: (a, b) => sc.get(a).pct - sc.get(b).pct || byName(a, b),
+    }[sort]);
+
+    const html = list.map(s => {
+      const r = sc.get(s);
+      const rows = model.questions.map(q => {
+        const a = s.ans[q.key] || { resp: '', pts: null, noresp: true };
+        const poss = qPossible(q); const essay = qEssay(q); const key = qKey(q);
+        let st = 'info', mark = '';
+        if (essay && !poss && !a.noresp){ st = 'info'; }
+        else if (a.pts == null){ st = essay && !a.noresp ? 'ungraded' : (a.noresp ? 'wrong' : 'info'); mark = st === 'wrong' ? '✗' : ''; }
+        else if (poss && a.pts >= poss - 1e-9){ st = 'right'; mark = '✓'; }
+        else if (a.pts > 0){ st = 'partial'; mark = '½'; }
+        else { st = 'wrong'; mark = '✗'; }
+        let ans;
+        if (a.noresp) ans = `<div class="resp none">(no answer)</div>`;
+        else if (essay || /essay|fill|blank|text|short/i.test(q.typeStr)) ans = `<div class="resp${essay ? ' essay' : ''}">You wrote: "${esc(a.resp)}"</div>`;
+        else ans = `<div class="resp">${esc(a.resp)}</div>`;
+        if (st === 'ungraded') ans += `<div class="ungraded">not graded yet</div>`;
+        if (showKey && !essay && key && (st === 'wrong' || st === 'partial') && key.trim().toLowerCase() !== a.resp.trim().toLowerCase())
+          ans += `<div class="key">Correct: <b>${esc(key)}</b></div>`;
+        return `<tr class="${st}"><td class="n">${q.num}</td><td class="q">${esc(q.text)}</td><td>${ans}</td><td class="mark">${mark}</td><td class="pts">${poss ? (a.pts == null ? '' : fmt(a.pts)) + ' / ' + fmt(poss) : ''}</td></tr>`;
+      }).join('');
+      const notes = showNotes ? `<div class="notes"><div class="lbl">Notes</div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div>` : '';
+      return `<div class="sheet" data-id="${esc(s.id)}"><button class="btn one" title="Print only this student">Print this one</button>
+        <div class="page">
+          <div class="phead">
+            <div>${title ? `<div class="quiz">${esc(title)}</div>` : ''}<div class="student">${esc(s.name)}</div>${s.section ? `<div class="section">${esc(s.section)}</div>` : ''}</div>
+            <div class="scorebox"><div class="big">${r.pct}%</div><div class="pct">${fmt(r.earned)} / ${fmt(r.possible)} points</div>${r.ungraded ? `<div class="note">${r.ungraded} answer${r.ungraded > 1 ? 's' : ''} not graded yet</div>` : ''}</div>
+          </div>
+          <table class="res"><thead><tr><th>#</th><th class="q">Question</th><th>Answer</th><th></th><th class="pts">Pts</th></tr></thead><tbody>${rows}</tbody></table>
+          ${notes}
+        </div></div>`;
+    }).join('');
+
+    const sheets = $('#sheets');
+    sheets.innerHTML = html;
+    sheets.classList.toggle('hidecol-q', !$('#optQ').checked);
+    sheets.classList.toggle('hidecol-pts', !$('#optPts').checked);
+    sheets.querySelectorAll('.sheet .one').forEach(b => b.addEventListener('click', () => printOnly(b.closest('.sheet'))));
+    $('#status').textContent = `${list.length} student${list.length === 1 ? '' : 's'} · ${model.questions.length} questions · ${raw.fileName}`;
+    fitPages();
+  }
+
+  function fitPages(){
+    const base = +$('#baseSize').value; const fit = $('#optFit').checked;
+    const probe = document.createElement('div'); probe.style.cssText = 'position:absolute;visibility:hidden;height:10in'; document.body.appendChild(probe);
+    const maxH = probe.offsetHeight; probe.remove();
+    document.querySelectorAll('#sheets .page').forEach(p => {
+      let size = base; p.style.fontSize = size + 'pt';
+      if (!fit) return;
+      while (p.scrollHeight > maxH && size > 7){ size -= 0.5; p.style.fontSize = size + 'pt'; }
+    });
+  }
+
+  function printOnly(sheet){
+    document.querySelectorAll('#sheets .sheet').forEach(s => s.classList.toggle('skip', s !== sheet));
+    window.print();
+    setTimeout(() => document.querySelectorAll('#sheets .sheet').forEach(s => s.classList.remove('skip')), 500);
+  }
+
+  /* ---------------- loading ---------------- */
+  function loadText(text, fileName){
+    const rows = parseCSV(text);
+    if (rows.length < 2){ alert('That file does not look like a CSV with data in it.'); return; }
+    const headers = rows[0].map(h => h.trim());
+    const width = headers.length;
+    raw = { headers, rows: rows.slice(1).map(r => { while (r.length < width) r.push(''); return r; }), fileName };
+    const d = detect(headers); format = d.format; map = d.map; overrides = {};
+    if (fileName !== 'sample-data.csv' && /^Sample - /.test($('#title').value)) $('#title').value = '';
+    if (!$('#title').value.trim()) $('#title').value = fileName.replace(/\.csv$/i, '').replace(/[_-]+/g, ' ').replace(/student analysis report/i, '').trim();
+    $('#drop').hidden = true; $('#panels').hidden = false;
+    rebuild();
+  }
+  function loadFile(f){ const r = new FileReader(); r.onload = () => loadText(r.result, f.name); r.readAsText(f); }
+
+  $('#openBtn').addEventListener('click', () => $('#file').click());
+  $('#file').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+  ['dragover','dragenter'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+  document.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+
+  settingIds.forEach(id => $('#' + id).addEventListener(id === 'title' ? 'input' : 'change', render));
+  $('#secFilter').addEventListener('change', () => { fillStudentFilter(); render(); });
+  $('#stuFilter').addEventListener('change', render);
+  $('#printBtn').addEventListener('click', () => { if (model) window.print(); });
+
+  /* ---------------- sample data ---------------- */
+  $('#sampleBtn').addEventListener('click', () => {
+    const Q = [
+      ['Fill in the blank: The composer named ___ wrote the music to The Young Person\'s Guide to the Orchestra.', 'Benjamin Britten', 1, 'fill-blank', ['Britten','Benjamin Britain']],
+      ['What is the name of the person who directs an orchestra?', 'Conductor', 1, 'choice', ['Composer','Recorder']],
+      ['How many families of instruments are in the orchestra?', '4', 1, 'choice', ['3','5']],
+      ['Two of the four families are played by blowing air into them. Which two are they?', 'Woodwind, Brass', 2, 'multi-answer', ['Percussion, Woodwind','Brass, String']],
+      ['Which family of instruments is played by hitting or striking the instrument?', 'Percussion', 1, 'choice', ['String']],
+      ['Which family of instruments is played by bowing or plucking one or more strings?', 'String', 1, 'choice', ['Brass']],
+      ['Which family of instruments is played by buzzing your lips while you play?', 'Brass', 1, 'choice', ['Woodwind']],
+      ['Which percussion instrument is featured in the video below?', 'Xylophone', 2, 'choice', ['Timpani','Triangle']],
+      ['Which string instrument is featured in the video below?', 'Violin', 2, 'choice', ['Viola','Double bass']],
+      ['Which two instruments are featured in the video below?', 'Trumpet, Snare drum', 2, 'multi-answer', ['Trumpet, Flute']],
+      ['Which percussion instrument is featured in the video below?', 'Timpani', 2, 'choice', ['Tam tam','Bass drum']],
+      ['Which woodwind instrument is featured in the video below?', 'Oboe', 2, 'choice', ['Bassoon','Clarinet']],
+      ['Which string instrument is featured in the video below?', 'Harp', 2, 'choice', ['Cello','Violin']],
+      ['Which brass instrument is featured in the video below?', 'French horn', 2, 'choice', ['Trombone','Tuba']],
+      ['Which woodwind instrument is featured in the video below?', 'Flute', 2, 'choice', ['Piccolo']],
+      ['Which string instrument is featured in the video below?', 'Viola', 2, 'choice', ['Violin','Cello']],
+      ['Which woodwind instrument is featured in the video below?', 'Bassoon', 2, 'choice', ['Clarinet']],
+      ['Select the correct family for each instrument below.', 'Bass drum: Percussion; Cornet: Brass; Trombone: Brass', 3, 'matching', ['Bass drum: Percussion; Cornet: Woodwind; Trombone: Brass']],
+      ['Which instrument in the orchestra is your favorite? What do you like about it?', null, 3, 'essay', ['The trumpet because it is loud and it sounds like a hero is coming.','I like the harp because it sounds like magic and it is really pretty to look at.','Timpani! You get to hit them really hard and it sounds like thunder.','The cello because it is low and smooth and my cousin plays it.','Violin because it can play fast and slow and it is small so you could carry it.','Flute. It sounds like birds singing in the morning.']],
+      ['What do you think our next unit in music class should be about?', null, 2, 'essay', ['Drums and beats','Can we do a unit about movie music like Star Wars?','Singing songs from other countries','Learning to play the piano','Rock and roll bands','Video game music please!!!']],
+    ];
+    const names = ['Ava Thompson','Liam Carter','Maya Patel','Noah Brooks','Sofia Ramirez','Ethan Walsh','Chloe Nguyen','Owen Fitzgerald','Harper Kim','Jack Sullivan','Lily Moreau','Mason Doyle'];
+    const secs = ['Grade 4 - Class A','Grade 4 - Class B'];
+    let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const out = [['SectionName','Student Name','Student ID','Attempt','Item Position','Item Type','Question','Answer','Points','PointsPossible','NoResponse']];
+    names.forEach((n, si) => {
+      const skill = 0.55 + rnd() * 0.42;
+      Q.forEach(([text, key, pts, type, wrongs], qi) => {
+        let ans, earned, nr = false;
+        if (type === 'essay'){
+          ans = wrongs[(si + qi) % wrongs.length];
+          earned = qi === Q.length - 1 && si % 4 === 0 ? '' : String(rnd() < skill ? pts : pts - 1);
+        } else if (rnd() < 0.03){ ans = ''; earned = '0'; nr = true; }
+        else if (rnd() < skill){ ans = key; earned = String(pts); }
+        else { ans = wrongs[Math.floor(rnd() * wrongs.length)]; earned = type === 'multi-answer' || type === 'matching' ? String(pts - 1) : '0'; }
+        out.push([secs[si % 2], n, String(1000 + si), '1', String(qi + 1), type, text, ans, earned, String(pts), nr ? 'true' : 'false']);
+      });
+    });
+    const csv = out.map(r => r.map(v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v).join(',')).join('\n');
+    $('#title').value = "Sample - The Young Person's Guide to the Orchestra Final Quiz";
+    loadText(csv, 'sample-data.csv');
+  });
+
+  loadSettings();
+})();
+</script>
+</body>
+</html>
