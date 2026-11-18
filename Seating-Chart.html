@@ -1710,9 +1710,10 @@ function parseCSV(text) {
   if (f.length || row.length) { row.push(f); rows.push(row); }
   return rows.filter(r => r.some(x => x.trim()));
 }
+const stripSuffix = l => l.replace(/[\s,]+(jr|sr|ii|iii|iv)\.?$/i, '').trim();
 function splitName(full) {
   const s = full.trim();
-  if (s.includes(',')) { const [last, rest] = s.split(/,(.*)/s); const given = rest.trim(); return {last: last.trim(), given, first: given.split(/\s+/)[0] || given}; }
+  if (s.includes(',')) { const [last, rest] = s.split(/,(.*)/s); const given = rest.trim(); return {last: stripSuffix(last.trim()), given, first: given.split(/\s+/)[0] || given}; }
   const parts = s.split(/\s+/); return {first: parts[0], given: parts.slice(0, -1).join(' ') || parts[0], last: parts.length > 1 ? parts[parts.length - 1] : ''};
 }
 const teacherKey = t => norm(String(t).split(',')[0]).replace(/^(mrs?|ms|dr)\.?\s+/, '');
@@ -1745,6 +1746,7 @@ function makeClass(o) {
     spots, students: [], rules: [], rotation: rotZone ? {zone: rotZone, served: [], lastRound: []} : null, versions: [],
     bop: o.grade === '5' ? {enabled: true, defaultView: 'bop', songs: []} : null};
 }
+function aspenGrade(v) { const t = String(v || '').trim().toUpperCase(); if (/^(K|KF|KH|KG|00|0)$/.test(t)) return 'K'; const n = parseInt(t, 10); return n >= 1 && n <= 5 ? String(n) : ''; }
 async function onCSV(file) {
   const text = await file.text();
   const rows = parseCSV(text);
@@ -1753,7 +1755,8 @@ async function onCSV(file) {
   const ti = head.findIndex(h => h.includes('teacher') || h === 'hr' || h.includes('homeroom'));
   const ii = head.findIndex((h, i) => i !== ti && (/\bid\b/.test(h) || /lasid|sasid/.test(h)));
   const si = head.findIndex((h, i) => i !== ti && i !== ii && h.includes('school'));
-  const ni = head.findIndex((h, i) => i !== ti && i !== ii && i !== si && (h.includes('name') || h.includes('student')));
+  const gi = head.findIndex((h, i) => i !== ti && i !== ii && i !== si && /^(grade|grade level|gr|yog)$/.test(h));
+  const ni = head.findIndex((h, i) => i !== ti && i !== ii && i !== si && i !== gi && (h.includes('name') || h.includes('student')));
   if (ni < 0 || ti < 0) { alert('Could not find the Name and HR Teacher columns in that file.'); return; }
   const byT = {};
   for (const r of rows.slice(1)) {
@@ -1762,7 +1765,9 @@ async function onCSV(file) {
     const tk = teacherKey(r[ti]);
     const k = (schoolRaw ? norm(schoolRaw) + '|' : '') + tk;
     const p = splitName(r[ni]); p.raw = r[ni].trim(); p.aspenId = ii >= 0 ? (r[ii] || '').trim() : '';
-    (byT[k] = byT[k] || {label: r[ti].trim(), tkey: tk, schoolRaw, list: []}).list.push(p);
+    const g = byT[k] = byT[k] || {label: r[ti].trim(), tkey: tk, schoolRaw, list: [], grades: {}};
+    g.list.push(p);
+    if (gi >= 0) { const gr = aspenGrade(r[gi]); if (gr) g.grades[gr] = (g.grades[gr] || 0) + 1; }
   }
   IMPORT = {groups: byT, map: {}, school: {}, newCls: {}, plans: {}, temp: {}, hasId: ii >= 0, hasSchool: si >= 0};
   for (const k in byT) {
@@ -1780,7 +1785,8 @@ function newSpec(k) {
   if (!IMPORT.newCls[k]) {
     const last = IMPORT.groups[k].label.split(',')[0].trim();
     const school = IMPORT.school[k] || schoolCodes()[0] || 'School';
-    IMPORT.newCls[k] = {grade: 'K', last, title: `Grade K – ${last}`, autoTitle: true, school, layout: defaultLayout(school, 'K')};
+    const gs = IMPORT.groups[k].grades || {}; const grade = Object.keys(gs).sort((a, b) => gs[b] - gs[a])[0] || 'K';
+    IMPORT.newCls[k] = {grade, last, title: `Grade ${grade} – ${last}`, autoTitle: true, school, layout: defaultLayout(school, grade)};
   }
   return IMPORT.newCls[k];
 }
@@ -1814,6 +1820,27 @@ function buildPlans() {
       const cands = plan.roster.filter(r => !used.has(r.key) && (norm(r.first) === f || norm(r.given) === norm(cn)) && (!rest || norm(r.last).startsWith(norm(rest))));
       if (cands.length === 1) link(s, cands[0]);
     }
+    // 4. nicknames: a chart name that shares its first three letters with exactly one leftover roster name (Gabi / Gabriella)
+    plan.guess = {};
+    const near = (a, b) => { a = norm(a).replace(/[^a-z]/g, ''); b = norm(b).replace(/[^a-z]/g, ''); return a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a) || (a.length >= 3 && b.length >= 3 && a.slice(0, 3) === b.slice(0, 3))); };
+    for (let round = 0; round < 3; round++) {
+      const open = c.students.filter(s => s.active && !s.linked && !plan.links[s.id]);
+      const free = plan.roster.filter(r => !used.has(r.key));
+      let changed = false;
+      for (const s of open) {
+        const cn = (s.chartName || s.first).trim().split(/\s+/)[0];
+        const cands = free.filter(r => !used.has(r.key) && near(cn, r.first));
+        if (cands.length !== 1) continue;
+        const rivals = open.filter(o => o !== s && !plan.links[o.id] && near((o.chartName || o.first).split(/\s+/)[0], cands[0].first));
+        if (rivals.length) continue;
+        link(s, cands[0]); plan.guess[s.id] = true; changed = true;
+      }
+      // 5. one chart name left and one roster name left: they belong together
+      const open2 = c.students.filter(s => s.active && !s.linked && !plan.links[s.id]);
+      const free2 = plan.roster.filter(r => !used.has(r.key));
+      if (open2.length === 1 && free2.length === 1) { link(open2[0], free2[0]); plan.guess[open2[0].id] = true; changed = true; }
+      if (!changed) break;
+    }
     for (const s of c.students) if (s.active && s.linked && !plan.links[s.id]) plan.leaving[s.id] = true;
   }
 }
@@ -1825,6 +1852,7 @@ function showImport() {
   const layoutOpts = (sel) => Object.values(DATA.layouts).map(l => `<option value="${l.id}" ${l.id === sel ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
   let html = `<p class="note">Rows are grouped by HR Teacher${IMPORT.hasSchool ? ' and school' : ''}. Students are matched to the names already on each chart${IMPORT.hasId ? ' and by Aspen student ID' : ''}. Nothing changes until you click Apply.</p>`;
   if (!IMPORT.hasId) html += `<div class="msg warn">This file has no student ID column, so students are matched by name only. Adding the ID column in Aspen makes next year's matching reliable.</div>`;
+  if (!IMPORT.hasSchool) html += `<p class="note">No School column, so homerooms are matched by teacher name across both schools. That's fine unless two of your teachers share a last name. If that ever happens, import one school's file at a time.</p>`;
   html += `<details class="cls" ${unmatchedT.length || Object.values(IMPORT.map).includes('__new') ? 'open' : ''}><summary>Homeroom teachers in the file (${tKeys.length})${unmatchedT.length ? ` - ${unmatchedT.length} not matched to a class` : ''}</summary><div class="inner"><table class="t"><tbody>
     ${tKeys.map(k => {
       const g = IMPORT.groups[k];
@@ -1833,6 +1861,7 @@ function showImport() {
       if (IMPORT.map[k] === '__new') {
         const sp = newSpec(k);
         row += `<tr><td colspan="2" style="background:#f7f5f0"><div class="row">
+          <div class="field" style="width:80px;margin:0"><label>School</label><select class="inp" data-act="impNew" data-k="${esc(k)}" data-f="school">${[...new Set([...codes, sp.school])].map(x => `<option ${x === sp.school ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
           <div class="field" style="width:70px;margin:0"><label>Grade</label><select class="inp" data-act="impNew" data-k="${esc(k)}" data-f="grade">${['K', '1', '2', '3', '4', '5'].map(x => `<option ${sp.grade === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
           <div class="field" style="flex:1;min-width:170px;margin:0"><label>Title on the chart</label><input class="inp" data-act="impNew" data-k="${esc(k)}" data-f="title" value="${esc(sp.title)}"></div>
           <div class="field" style="margin:0"><label>Room layout</label><select class="inp" data-act="impNew" data-k="${esc(k)}" data-f="layout">${layoutOpts(sp.layout)}</select></div></div>
@@ -1847,12 +1876,14 @@ function showImport() {
     const freeRoster = plan.roster.filter(r => !linkedKeys.has(r.key));
     const returning = freeRoster.filter(r => findPerson(r, c.school));
     const unresolved = c.students.filter(s => s.active && !plan.links[s.id] && !s.linked);
-    const auto = c.students.filter(s => plan.links[s.id]);
+    const auto = c.students.filter(s => plan.links[s.id] && !(plan.guess || {})[s.id]);
+    const guessed = c.students.filter(s => plan.links[s.id] && (plan.guess || {})[s.id]);
     const leaving = c.students.filter(s => s.active && s.linked && !plan.links[s.id]);
     const rosterOpt = (sid) => { const cur = plan.links[sid]; return plan.roster.filter(r => !linkedKeys.has(r.key) || r.key === cur).sort((a, b) => a.first.localeCompare(b.first)).map(r => `<option value="${esc(r.key)}" ${r.key === cur ? 'selected' : ''}>${esc(r.given)} ${esc(r.last)}</option>`).join(''); };
     const noMatch = (sid) => `<option value="">Keep on the chart, not linked yet</option><option value="__left" ${plan.leaving[sid] && !plan.links[sid] ? 'selected' : ''}>Not in this class anymore (mark as left)</option>`;
-    const warn = unresolved.length || freeRoster.length || leaving.length;
-    html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)}${c.id.startsWith('new:') ? ' <span class="pill now">new class</span>' : ''} - ${auto.length} matched${unresolved.length ? `, <span style="color:var(--warn)">${unresolved.length} need a match</span>` : ''}${freeRoster.length ? `, ${freeRoster.length} new` : ''}${leaving.length ? `, ${leaving.length} not in file` : ''}</summary><div class="inner">`;
+    const warn = unresolved.length || freeRoster.length || leaving.length || guessed.length;
+    html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)}${c.id.startsWith('new:') ? ' <span class="pill now">new class</span>' : ''} - ${auto.length} matched${guessed.length ? `, <span style="color:var(--warn)">${guessed.length} to check</span>` : ''}${unresolved.length ? `, <span style="color:var(--warn)">${unresolved.length} need a match</span>` : ''}${freeRoster.length ? `, ${freeRoster.length} new` : ''}${leaving.length ? `, ${leaving.length} not in file` : ''}</summary><div class="inner">`;
+    if (guessed.length) html += `<h4 style="margin:6px 0">Best guesses - check these</h4><p class="note">Probably nicknames. Change any that are wrong.</p><table class="t"><tbody>${guessed.map(s => `<tr><td><b>${esc(names[s.id])}</b></td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
     if (unresolved.length) html += `<h4 style="margin:6px 0">Chart names that need a match</h4><p class="note">Usually a nickname. Pick the roster name it belongs to.</p><table class="t"><tbody>${unresolved.map(s => `<tr><td><b>${esc(names[s.id])}</b></td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
     if (freeRoster.length) html += `<h4 style="margin:10px 0 6px">New to this class (added as Not seated)</h4><div class="small">${freeRoster.map(r => esc(r.given + ' ' + r.last)).join(', ')}</div>${returning.length ? `<div class="small muted" style="margin-top:4px">${returning.length} of them were here in an earlier year. Their preferred names come back, and any rules from earlier years wait in Rules for your OK.</div>` : ''}`;
     if (leaving.length) html += `<h4 style="margin:10px 0 6px">On the chart but not in the file</h4>${leaving.map(s => `<label class="row small"><input type="checkbox" data-act="impLeave" data-c="${cid}" data-s="${s.id}" ${plan.leaving[s.id] ? 'checked' : ''}> Mark ${esc(names[s.id])} as left</label>`).join('')}`;
@@ -2324,6 +2355,7 @@ document.addEventListener('change', (e) => {
       if (f === 'title') { sp.title = a.value; sp.autoTitle = false; }
       else sp[f] = a.value;
       if (f === 'grade') { if (sp.autoTitle) sp.title = `Grade ${sp.grade} – ${sp.last}`; sp.layout = defaultLayout(sp.school, sp.grade); }
+      if (f === 'school') sp.layout = defaultLayout(sp.school, sp.grade);
       buildPlans(); showImport(); break;
     }
     case 'nyYear': UI.ny.year = a.value.trim() || UI.ny.year; newYearDialog(); break;
