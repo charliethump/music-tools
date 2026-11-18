@@ -130,6 +130,7 @@
     <label><input type="checkbox" id="optFit" checked> Fit each student on one page</label>
   </div>
   <button class="btn primary" id="printBtn">Print</button>
+  <div class="tb-group"><label for="pdfName">PDF name</label><input type="text" id="pdfName" placeholder="auto"><button class="btn primary" id="pdfBtn">Save as PDF</button></div>
   <span id="status"></span>
 </div>
 
@@ -545,6 +546,7 @@
     sheets.querySelectorAll('.sheet .one').forEach(b => b.addEventListener('click', () => printOnly(b.closest('.sheet'))));
     $('#status').textContent = `${list.length} student${list.length === 1 ? '' : 's'} · ${model.questions.length} questions · ${raw.fileName}`;
     fitPages();
+    refreshPdfPlaceholder();
   }
 
   function fitPages(){
@@ -558,9 +560,25 @@
     });
   }
 
+  /* ---------------- PDF naming ---------------- */
+  const pageTitle = document.title;
+  const safe = s => s.replace(/[\\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 150);
+  function autoPdfName(studentName){
+    const title = $('#title').value.trim() || 'Quiz Results';
+    const sel = $('#stuFilter'); const sec = $('#secFilter').value;
+    const who = studentName || (sel.value ? sel.options[sel.selectedIndex].text : (sec || 'All students'));
+    return safe(`${title} - ${who}`);
+  }
+  function refreshPdfPlaceholder(){ $('#pdfName').placeholder = autoPdfName(); }
+  function printAs(name){
+    document.title = safe(name.replace(/\.pdf$/i, '')) || pageTitle;
+    window.print();
+  }
+  window.addEventListener('afterprint', () => { document.title = pageTitle; });
+
   function printOnly(sheet){
     document.querySelectorAll('#sheets .sheet').forEach(s => s.classList.toggle('skip', s !== sheet));
-    window.print();
+    printAs(autoPdfName(sheet.querySelector('.student').textContent));
     setTimeout(() => document.querySelectorAll('#sheets .sheet').forEach(s => s.classList.remove('skip')), 500);
   }
 
@@ -589,6 +607,7 @@
   $('#secFilter').addEventListener('change', () => { fillStudentFilter(); render(); });
   $('#stuFilter').addEventListener('change', render);
   $('#printBtn').addEventListener('click', () => { if (model) window.print(); });
+  $('#pdfBtn').addEventListener('click', () => { if (model) printAs($('#pdfName').value.trim() || autoPdfName()); });
 
   /* ---------------- sample data ---------------- */
   $('#sampleBtn').addEventListener('click', () => {
