@@ -13,7 +13,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 #bookShadow{position:absolute;top:0;height:100%;box-shadow:0 1.2vh 3vh rgba(0,0,0,.55)}   /* one shadow for the whole book, so no page shadow falls across the spine */
 #baseL{left:0}#baseR{left:50%}
 #patch{position:absolute;background:#fff;z-index:2;display:none;border-radius:.3vh}
-#curl{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none;z-index:2}   /* corner page turn, drawn under the spine shading */
+#curl{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none;z-index:4}   /* corner page turn, above the spine; pages on it draw their own half of the crease */
 #spine{position:absolute;left:50%;top:0;width:7%;height:100%;transform:translateX(-50%);pointer-events:none;z-index:3;
   background:linear-gradient(90deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.14) 42%,rgba(0,0,0,.30) 50%,rgba(0,0,0,.14) 58%,rgba(0,0,0,0) 100%)}
 #flipper{position:absolute;top:0;width:50%;height:100%;transform-style:preserve-3d;display:none;z-index:5}
@@ -497,6 +497,10 @@ function curlDrawPage(ctx, i, side, W, H) {
     const k = Math.min(S / iw, H / ih), w = iw * k, h = ih * k;
     ctx.drawImage(im, side === 'right' ? S : S - w, (H - h) / 2, w, h);
   } else ctx.drawImage(im, side === 'left' ? 0 : iw / 2, 0, iw / 2, ih, side === 'left' ? 0 : S, 0, S, H);
+  // this page's half of the crease (same shading as #spine), so it travels with the page
+  const cw = W * 0.035, g = ctx.createLinearGradient(S, 0, side === 'left' ? S - cw : S + cw, 0);
+  g.addColorStop(0, 'rgba(0,0,0,.30)'); g.addColorStop(0.16, 'rgba(0,0,0,.14)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(side === 'left' ? S - cw : S, 0, cw, H);
 }
 function curlClip(poly, f, keepPos) {   // keep the part of a polygon on one side of the fold
   const out = [];
