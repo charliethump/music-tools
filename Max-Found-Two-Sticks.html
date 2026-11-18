@@ -13,6 +13,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellips
 #bookShadow{position:absolute;top:0;height:100%;box-shadow:0 1.2vh 3vh rgba(0,0,0,.55)}   /* one shadow for the whole book, so no page shadow falls across the spine */
 #baseL{left:0}#baseR{left:50%}
 #patch{position:absolute;background:#fff;z-index:2;display:none;border-radius:.3vh}
+#curl{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none;z-index:2}   /* corner page turn, drawn under the spine shading */
 #spine{position:absolute;left:50%;top:0;width:7%;height:100%;transform:translateX(-50%);pointer-events:none;z-index:3;
   background:linear-gradient(90deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.14) 42%,rgba(0,0,0,.30) 50%,rgba(0,0,0,.14) 58%,rgba(0,0,0,0) 100%)}
 #flipper{position:absolute;top:0;width:50%;height:100%;transform-style:preserve-3d;display:none;z-index:5}
@@ -162,6 +163,7 @@ body.sub.reading #subNav{display:flex}
   <div id="bookShadow"></div><div class="half" id="baseL"></div><div class="half" id="baseR"></div>
   <div id="underShade"></div>
   <div id="patch"></div>
+  <canvas id="curl"></canvas>
   <div id="spine"></div>
   <div id="flipper"><div class="face front"><div class="crease"></div><div class="shade"></div></div><div class="face back"><div class="crease"></div><div class="shade"></div></div></div>
   <div id="fx">
@@ -306,7 +308,10 @@ const VOLUNTEER_AMB = 0.5;         // background level while a volunteer has the
 const VOLUNTEER_FADE_SEC = 5;      // how long that fade takes
 const END_BELLS_LEVEL = 0.5;      // The End bells (1 = original volume)
 const END_FADE_SEC = 10;           // background sounds fade out over this long when The End appears
-const FLIP_MS = 950;
+const FLIP_MS = 950;               // old whole-page flip (flipToRigid)
+const PAGE_TURN = 'curl';          // 'curl' = turn from the corner, 'rigid' = the old whole-page flip
+const CURL_MS = 1200;              // corner turn, start to finish
+const CURL_DIP = 0.22;             // how far the corner dips down mid-turn (share of the page height)
 
 /* ---------- Sub plan version (open the file with ?sub at the end of the address) ----------
    Same book, locked: no setup page, every rhythm page is Echo, no glows, no wind steps,
@@ -477,7 +482,106 @@ function bookShadow(...idx) {   // shadow covers the pages showing (both halves,
 function paintSpread(i) { paint($('baseL'), i, 'left'); paint($('baseR'), i, 'right'); bookShadow(i); }
 
 /* ---------- Page flip ---------- */
-async function flipTo(target, quick = false) {
+function flipTo(target, quick) { return PAGE_TURN === 'rigid' ? flipToRigid(target, quick) : flipToCurl(target); }
+
+/* ---------- Corner page turn ----------
+   The turning page folds along a line that sweeps from its outer top corner to the spine.
+   One canvas draws: the part of the turning page still lying flat, a shadow on the page being revealed,
+   and the folded-over flap showing the back of the page (the next page's facing side).
+   At the end the flap lies exactly where the new page sits, so handing back to the page images is seamless. */
+function curlDrawPage(ctx, i, side, W, H) {
+  const p = PAGES[i], im = st.decoded && st.decoded[i];
+  if (!p || !im || !im.naturalWidth || (p.single && p.single !== side)) return;
+  const S = W / 2, iw = im.naturalWidth, ih = im.naturalHeight;
+  if (p.single) {
+    const k = Math.min(S / iw, H / ih), w = iw * k, h = ih * k;
+    ctx.drawImage(im, side === 'right' ? S : S - w, (H - h) / 2, w, h);
+  } else ctx.drawImage(im, side === 'left' ? 0 : iw / 2, 0, iw / 2, ih, side === 'left' ? 0 : S, 0, S, H);
+}
+function curlClip(poly, f, keepPos) {   // keep the part of a polygon on one side of the fold
+  const out = [];
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k], b = poly[(k + 1) % poly.length], fa = f(a), fb = f(b);
+    const ina = keepPos ? fa > 0 : fa <= 0, inb = keepPos ? fb > 0 : fb <= 0;
+    if (ina) out.push(a);
+    if (ina !== inb) { const t = fa / (fa - fb); out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); }
+  }
+  return out;
+}
+function curlPath(ctx, poly) { ctx.beginPath(); poly.forEach((q, k) => k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath(); }
+function curlFrame(ctx, W, H, from, target, fwd, e) {
+  const S = W / 2, PW = S, dir = fwd ? 1 : -1, x0 = fwd ? S : 0;
+  const turnSide = fwd ? 'right' : 'left', backSide = fwd ? 'left' : 'right';
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+  const C = { x: S + dir * PW, y: 0 }, th = Math.PI * e;
+  const P = { x: S + dir * PW * Math.cos(th), y: H * CURL_DIP * Math.sin(th) };
+  const rect = [{ x: x0, y: 0 }, { x: x0 + PW, y: 0 }, { x: x0 + PW, y: H }, { x: x0, y: H }];
+  const dx = C.x - P.x, dy = C.y - P.y, L = Math.hypot(dx, dy);
+  if (L < 0.5) { curlDrawPage(ctx, from, turnSide, W, H); return; }
+  const n = { x: dx / L, y: dy / L }, M = { x: (C.x + P.x) / 2, y: (C.y + P.y) / 2 };
+  const f = q => (q.x - M.x) * n.x + (q.y - M.y) * n.y;
+  const flat = curlClip(rect, f, false), folded = curlClip(rect, f, true);
+  const refl = q => { const d = 2 * f(q); return { x: q.x - d * n.x, y: q.y - d * n.y }; };
+  const flap = folded.map(refl);
+  const sh = Math.sin(th);   // shadows grow mid-turn and are gone at both ends
+  // 1. the turning page, still flat
+  if (flat.length > 2) { ctx.save(); curlPath(ctx, flat); ctx.clip(); curlDrawPage(ctx, from, turnSide, W, H); ctx.restore(); }
+  // 2. shadow the flap casts on the page being revealed
+  if (folded.length > 2) {
+    ctx.save(); curlPath(ctx, folded); ctx.clip();
+    const g = ctx.createLinearGradient(M.x, M.y, M.x + n.x * PW * 0.18, M.y + n.y * PW * 0.18);
+    g.addColorStop(0, `rgba(0,0,0,${0.38 * sh})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+  }
+  if (flap.length < 3) return;
+  // 3. soft shadow under the flap's edge
+  ctx.save(); ctx.shadowColor = `rgba(0,0,0,${0.35 * sh})`; ctx.shadowBlur = 24 * sh * (W / 1600); curlPath(ctx, flap); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
+  // 4. the flap: back of the turning page = the new page's facing side, mirrored across the spine and then the fold
+  ctx.save(); curlPath(ctx, flap); ctx.clip();
+  const a = 1 - 2 * n.x * n.x, b = -2 * n.x * n.y, d = 1 - 2 * n.y * n.y, k = 2 * (M.x * n.x + M.y * n.y);
+  // fold reflection: x' = a x + b y + k n.x ; y' = b x + d y + k n.y   (spine mirror first: x -> 2S - x)
+  ctx.setTransform(-a, -b, b, d, a * 2 * S + k * n.x, b * 2 * S + k * n.y);
+  curlDrawPage(ctx, target, backSide, W, H);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // light shading on the flap near the fold, so it reads as curved paper
+  const g2 = ctx.createLinearGradient(M.x, M.y, M.x - n.x * PW * 0.25, M.y - n.y * PW * 0.25);
+  g2.addColorStop(0, `rgba(0,0,0,${0.22 * sh})`); g2.addColorStop(0.35, `rgba(255,255,255,${0.10 * sh})`); g2.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H); ctx.restore();
+}
+async function flipToCurl(target) {
+  if (target < 0 || target >= PAGES.length || target === st.idx) return;
+  st.flipping = true;
+  leavePage();
+  const from = st.idx, fwd = target > from;
+  sfx.flip();
+  bookShadow(from, target);
+  // the page underneath on each side: the new page where it's revealed, the old page where it gets covered
+  if (fwd) { paint($('baseL'), from, 'left'); paint($('baseR'), target, 'right'); }
+  else { paint($('baseL'), target, 'left'); paint($('baseR'), from, 'right'); }
+  const cv = $('curl'), r = bookEl.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  const ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+  curlFrame(ctx, W, H, from, target, fwd, 0); cv.style.display = 'block';
+  const shiftAnim = shiftEl.animate([{ transform: `translateX(${shiftFor(from) * 100}%)` }, { transform: `translateX(${shiftFor(target) * 100}%)` }], { duration: CURL_MS, easing: 'cubic-bezier(.45,.05,.35,1)', fill: 'forwards' });
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  await new Promise(res => {
+    const t0 = performance.now();
+    const step = now => {
+      const t = Math.min(1, (now - t0) / CURL_MS);
+      curlFrame(ctx, W, H, from, target, fwd, ease(t));
+      if (t < 1) requestAnimationFrame(step); else res();
+    };
+    requestAnimationFrame(step);
+  });
+  st.idx = target; st.step = 0;
+  shiftEl.style.transform = `translateX(${shiftFor(target) * 100}%)`;
+  shiftAnim.cancel();
+  paintSpread(target);
+  cv.style.display = 'none';
+  st.flipping = false;
+  enterPage();
+}
+async function flipToRigid(target, quick = false) {
   if (target < 0 || target >= PAGES.length || target === st.idx) return;
   st.flipping = true;
   leavePage();
