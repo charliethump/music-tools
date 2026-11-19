@@ -170,6 +170,9 @@ input[type=color]{width:38px;height:32px;border:1.5px solid var(--line);border-r
 .status.err{color:var(--danger)}
 .exprow{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 .exprow .field{flex:1;min-width:120px}
+.nopts{display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:12px;background:#F6F3FB;margin-top:-4px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.nopts.off{opacity:.45;pointer-events:none}
 .box{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .stage:has(.panel:not([hidden])) .hint{display:none}
 @media (max-height:760px){.top{padding:8px 22px}.top h1{font-size:19px}main{padding-top:10px}.stage{gap:8px;padding:10px}#strip{height:56px}#bWave{height:96px}.hint{display:none}.play{width:40px;height:40px}}
@@ -288,6 +291,23 @@ input[type=color]{width:38px;height:32px;border:1.5px solid var(--line);border-r
         <div class="row"><span class="help" style="font-weight:800">Background</span><button class="mini" id="bgUp">Use my own image</button><button class="mini" id="bgReset">Use the stage</button></div>
         <input type="file" id="bgFile" accept="image/*" hidden>
         <div class="row" style="justify-content:space-between"><label class="switch"><input type="checkbox" id="notation"><span class="track"></span>Show stick notation</label><input type="color" id="notationColor" value="#ffffff" aria-label="Notation color"></div>
+        <div class="nopts" id="noteOpts">
+          <div class="field"><label for="noteWeight">Line thickness <span id="noteWeightTxt"></span></label><input type="range" id="noteWeight" min="2" max="10" step="1" value="4"></div>
+          <div class="field"><span class="lab">Rests look like</span><div class="seg wide" id="restSeg" role="group" aria-label="Rest style"><button data-rest="quarter">Quarter rest</button><button data-rest="z">Z (shh)</button></div></div>
+          <label class="switch"><input type="checkbox" id="barLines"><span class="track"></span>Bar lines between measures</label>
+        </div>
+        <label class="switch"><input type="checkbox" id="syl"><span class="track"></span>Show syllables under the instruments</label>
+        <div class="nopts" id="sylOpts">
+          <label class="switch"><input type="checkbox" id="sylColor"><span class="track"></span>Colored syllables</label>
+          <div class="row" id="sylSw" style="gap:10px 14px">
+            <label class="row" style="gap:5px;font-weight:800"><input type="color" data-sc="du">du</label>
+            <label class="row" style="gap:5px;font-weight:800"><input type="color" data-sc="dude">du-de</label>
+            <label class="row" style="gap:5px;font-weight:800"><input type="color" data-sc="dutadeta">du-ta-de-ta</label>
+            <label class="row" style="gap:5px;font-weight:800"><input type="color" data-sc="shh">shh!</label>
+            <button class="mini" id="sylReset">Reset colors</button>
+          </div>
+          <span class="help">Starts with the colors from your Stick Notation tool.</span>
+        </div>
         <label class="switch"><input type="checkbox" id="hold"><span class="track"></span>Wait on held notes, then hop</label>
         <span class="help" style="margin-top:-6px">On a fermata or a long pause, he stands still on the note and hops at the usual speed, instead of floating slowly.</span>
         <label class="switch"><input type="checkbox" id="countClick"><span class="track"></span>Click on each count-in word</label>
@@ -2261,7 +2281,7 @@ function defaultState(){
   const s1=newRhythm();s1.count='2';
   return{title:'',ts:{num:4,den:4},meters:[],pickup:0,startBar:1,bpm:120,beats:[],
     sections:[s1],inst:DEFAULT_INST.map(([key,label])=>({key,label,custom:false})),
-    notation:false,notationColor:'#ffffff',hold:true,countClick:true,fps:30,trimA:null,trimB:null,fadeIn:0,fadeOut:0,songName:''};
+    notation:false,notationColor:'#ffffff',noteWeight:4,restStyle:'quarter',barLines:false,syl:false,sylColor:true,sylColors:null,hold:true,countClick:true,fps:30,trimA:null,trimB:null,fadeIn:0,fadeOut:0,songName:''};
 }
 let S=defaultState();
 const CUSTOM={inst:{},bg:null};   // dataURLs (kept out of the undo history)
@@ -2297,6 +2317,8 @@ function cleanState(p){
   if(Array.isArray(p.inst)&&p.inst.length)o.inst=p.inst.filter(i=>i&&i.key).map(i=>({key:String(i.key),label:String(i.label||i.key),custom:!!i.custom}));
   for(const k of ['notation','hold','countClick'])if(p[k]!=null)o[k]=!!p[k];
   if(/^#[0-9a-f]{6}$/i.test(p.notationColor))o.notationColor=p.notationColor;
+  o.noteWeight=clampInt(p.noteWeight,2,10,4);o.restStyle=p.restStyle==='z'?'z':'quarter';o.barLines=!!p.barLines;o.syl=!!p.syl;o.sylColor=p.sylColor!==false;
+  o.sylColors=p.sylColors&&typeof p.sylColors==='object'?Object.fromEntries(Object.keys(SYL_DEF).map(k=>[k,/^#[0-9a-f]{6}$/i.test(p.sylColors[k])?p.sylColors[k]:sylDefault()[k]])):null;
   o.fps=+p.fps===60?60:30;
   o.trimA=p.trimA!=null&&isFinite(+p.trimA)?+p.trimA:null;o.trimB=p.trimB!=null&&isFinite(+p.trimB)?+p.trimB:null;
   o.fadeIn=Math.max(0,Math.min(20,+p.fadeIn||0));o.fadeOut=Math.max(0,Math.min(20,+p.fadeOut||0));
@@ -2759,6 +2781,15 @@ function eighthRest(ctx, cx, cy, RH) {
   ctx.closePath();
   ctx.fill();
 }
+// line thickness 2-10 (same scale as the Stick Notation tool); 4 = the original look
+function noteStem(){return S.noteWeight*STICK_W/4;}
+function noteBeam(){return Math.round(BEAM_H*(11+S.noteWeight)/15);}
+// the shh Z from the Stick Notation tool: 0.44 wide for its height, square corners
+function zRest(c,cx,cy,h,w){
+  const zw=h*0.44,top=cy-h/2;
+  c.save();c.lineWidth=w;c.lineJoin='miter';c.miterLimit=10;c.lineCap='butt';
+  c.beginPath();c.moveTo(cx-zw/2,top+w/2);c.lineTo(cx+zw/2,top+w/2);c.lineTo(cx-zw/2,top+h-w/2);c.lineTo(cx+zw/2,top+h-w/2);c.stroke();c.restore();
+}
 function drawNotation(c,r,rowY,col,xOff=0){
   const sym=r.layout.symSize,cpb=Math.max(1,Math.round(r.cpb)),nb=cpb<=1?0:cpb<=3?1:2,ceilY=rowY-STICK_H;
   const excl=new Set(),sus=new Set();
@@ -2768,25 +2799,35 @@ function drawNotation(c,r,rowY,col,xOff=0){
   const fs=new Set(filled);
   const stackTop=k=>rowY-stackLift(Math.max(1,noteKeys(r.sec,k).length),sym)-sym/2;
   const beatOf=k=>Math.floor(r.cellBeat[k]-r.cellBeat[0]+1e-6);
+  const SW=noteStem(),BH=noteBeam();
   const pass=(color,ox,oy)=>{
-    c.strokeStyle=color;c.fillStyle=color;c.lineWidth=STICK_W;c.lineCap='butt';
+    c.strokeStyle=color;c.fillStyle=color;c.lineWidth=SW;c.lineCap='butt';
     for(const k of filled){const x=cellX(r,k)+xOff+ox;c.beginPath();c.moveTo(x,stackTop(k)+oy);c.lineTo(x,ceilY+oy);c.stroke();}
     if(nb>0){
       const groups=new Map();for(const k of filled){const b=beatOf(k);if(!groups.has(b))groups.set(b,[]);groups.get(b).push(k);}
       for(const [b,cs] of groups){
         const runs=[];let run=[cs[0]];for(let i=1;i<cs.length;i++){if(cs[i]===cs[i-1]+1)run.push(cs[i]);else{runs.push(run);run=[cs[i]];}}runs.push(run);
         for(const rn of runs){
-          if(rn.length>=2){const x0=cellX(r,rn[0])+xOff+ox,x1=cellX(r,rn[rn.length-1])+xOff+ox;for(let i=0;i<nb;i++)c.fillRect(x0-STICK_W/2,ceilY+oy+i*(BEAM_H+BEAM_GAP),x1-x0+STICK_W,BEAM_H);}
-          else{const k=rn[0];if(Math.abs(r.cellBeat[k]-Math.round(r.cellBeat[k]))<1e-6)continue;const x=cellX(r,k)+xOff+ox;for(let i=0;i<nb;i++)drawFlag(c,x,ceilY+oy+i*(BEAM_H+BEAM_GAP),FLAG_FH);}
+          if(rn.length>=2){const x0=cellX(r,rn[0])+xOff+ox,x1=cellX(r,rn[rn.length-1])+xOff+ox;for(let i=0;i<nb;i++)c.fillRect(x0-SW/2,ceilY+oy+i*(BH+BEAM_GAP),x1-x0+SW,BH);}
+          else{const k=rn[0];if(Math.abs(r.cellBeat[k]-Math.round(r.cellBeat[k]))<1e-6)continue;const x=cellX(r,k)+xOff+ox;for(let i=0;i<nb;i++)drawFlag(c,x+SW/2-STICK_W/2,ceilY+oy+i*(BH+BEAM_GAP),FLAG_FH);}
         }
       }
     }
     const RQ=FLAG_FH*0.72,RE=FLAG_FH*0.48,cy=ceilY+oy+STICK_H*0.5;
-    if(cpb===1){for(let k=0;k<r.cells;k++){if(fs.has(k)||sus.has(k))continue;quarterRest(c,cellX(r,k)+xOff+ox,cy,RQ);}}
-    else if(cpb===2||cpb===4){
-      for(let i=0;i+1<r.cells;i+=2){if(sus.has(i)||sus.has(i+1))continue;const d=fs.has(i),u=fs.has(i+1),x=cellX(r,i)+xOff+ox;if(!d&&!u)quarterRest(c,x,cy,RQ);else if(!d&&u)eighthRest(c,x,cy,RE);}
-    }else{
-      for(let k=0;k<r.cells;k+=cpb){let any=false,su=false;for(let j=k;j<k+cpb&&j<r.cells;j++){if(fs.has(j))any=true;if(sus.has(j))su=true;}if(su)continue;const x=cellX(r,k)+xOff+ox;if(!any)quarterRest(c,x,cy,RQ);else if(!fs.has(k))eighthRest(c,x,cy,RE);}
+    const qRest=x=>{if(S.restStyle==='z')zRest(c,x,cy,STICK_H*0.6,SW);else quarterRest(c,x,cy,RQ);};
+    const eRest=x=>{if(S.restStyle==='z')zRest(c,x,cy,STICK_H*0.3,SW);else eighthRest(c,x,cy,RE);};
+    // one rest decision per beat: empty beat = quarter rest; empty first half with notes after it = eighth rest
+    const half=Math.max(1,Math.floor(cpb/2));
+    for(let k=0;k<r.cells;k+=cpb){
+      let any=false,su=false,firstHalf=false;
+      for(let j=k;j<k+cpb&&j<r.cells;j++){if(fs.has(j)){any=true;if(j<k+half)firstHalf=true;}if(sus.has(j))su=true;}
+      if(su)continue;const x=cellX(r,k)+xOff+ox;
+      if(!any)qRest(x);else if(cpb>1&&!firstHalf)eRest(x);
+    }
+    if(S.barLines){
+      c.save();c.globalAlpha*=0.75;
+      for(let k=1;k<r.cells;k++){if(r.cellBar[k]===null)continue;const x=(cellX(r,k-1)+cellX(r,k))/2+xOff+ox;c.fillRect(x-2.5,ceilY+oy-12,5,STICK_H-sym/2+24);}
+      c.restore();
     }
   };
   c.save();pass('rgba(0,0,0,0.55)',NOTE_SHADOW,NOTE_SHADOW);pass(col,0,0);c.restore();
@@ -2794,6 +2835,44 @@ function drawNotation(c,r,rowY,col,xOff=0){
 function drawRowFull(c,r,active,rowY,xOff,arcObj,hide,pt,spA,alpha=null){
   if(S.notation)drawNotation(c,r,rowY,S.notationColor,xOff);
   drawRow(c,r,active,rowY,xOff,arcObj?arcObj.landedCell:null,arcObj?arcObj.landFrac:0,arcObj?arcObj.sinkFrac:0,hide,pt,spA,alpha);
+  if(S.syl)drawSyllables(c,r,rowY,active,xOff,alpha);
+}
+/* ---- syllables (du / du-de / du-ta-de-ta / shh, from the Stick Notation tool) ---- */
+const SYL_DEF={du:'#0000ff',dude:'#cc0000',dutadeta:'#8e44ad',shh:'#6aa84f'};
+function sylDefault(){   // the Stick Notation tool's saved colors, when it lives on the same site
+  const o={...SYL_DEF};
+  try{const v=JSON.parse(localStorage.getItem('stickNotationColors')||'{}');for(const k of Object.keys(o))if(/^#[0-9a-f]{6}$/i.test(v[k]||''))o[k]=v[k].toLowerCase();}catch(e){}
+  return o;
+}
+function sylColors(){return S.sylColors||sylDefault();}
+// what each square says, by where it sits in the beat
+function sylWord(cpb,pos){
+  if(pos===0)return'du';
+  if(cpb===2)return'de';
+  if(cpb===4)return pos===2?'de':'ta';
+  if(cpb===3)return pos===1?'da':'di';
+  if(cpb===6)return pos===2?'da':pos===4?'di':'ta';
+  return'';
+}
+function drawSyllables(c,r,rowY,active,xOff,alpha){
+  const sym=r.layout.symSize,cpb=Math.max(1,Math.round(r.cpb)),col=sylColors();
+  const sus=new Set();for(const s of r.sustains)for(let k=s.startCell+1;k<=s.endCell;k++)sus.add(k);
+  const step=r.cells>1?cellX(r,1)-cellX(r,0):sym*1.2,size=Math.max(22,Math.min(50,Math.round(sym*0.42))),y=rowY+sym/2+18+size*0.8;
+  c.save();c.globalAlpha=alpha!==null?alpha:active?1:0.55;c.textAlign='center';c.textBaseline='alphabetic';c.lineJoin='round';
+  for(let k=0;k<r.cells;k+=cpb){
+    const cells=[];for(let j=k;j<k+cpb&&j<r.cells;j++)if(noteKeys(r.sec,j).length&&!sus.has(j))cells.push(j);
+    let anySus=false;for(let j=k;j<k+cpb&&j<r.cells;j++)if(sus.has(j))anySus=true;
+    const kind=!cells.length?'shh':cells.some(j=>(j-k)%2===1&&cpb===4||cpb===6&&(j-k)%2===1)?'dutadeta':cells.some(j=>j>k)?'dude':'du';
+    const words=!cells.length?(anySus?[]:[[k,'shh!']]):cells.map(j=>[j,sylWord(cpb,j-k)]);
+    for(const [j,w] of words){
+      const italic=w==='shh!',x=cellX(r,j)+xOff;let fs=size;
+      const font=n=>`${italic?'italic ':''}bold ${n}px Arial, Helvetica, sans-serif`;
+      c.font=font(fs);const tw=c.measureText(w).width,maxW=Math.max(step*0.96,sym);if(tw>maxW){fs=fs*maxW/tw;c.font=font(fs);}
+      c.lineWidth=Math.max(4,fs*0.2);c.strokeStyle='rgba(255,255,255,0.9)';c.strokeText(w,x,y);
+      c.fillStyle=S.sylColor?col[kind]:'#000';c.fillText(w,x,y);
+    }
+  }
+  c.restore();
 }
 function rollHideAll(r){const s=new Set();for(const x of r.sustains)if(x.type==='roll')s.add(x.startCell+':'+x.startInst);return s;}
 function drawName(c,text,alpha,size=64,color='#fff'){
@@ -3473,7 +3552,26 @@ document.getElementById('bgFile').addEventListener('change',async e=>{
   CUSTOM.bg=cv.toDataURL('image/jpeg',0.88);CUSTOM.bgImg=await loadImg(CUSTOM.bg);BG_BASE=null;save();redraw();
 });
 document.getElementById('bgReset').addEventListener('click',()=>{CUSTOM.bg=null;CUSTOM.bgImg=null;BG_BASE=null;save();redraw();});
-for(const id of ['notation','hold','countClick'])document.getElementById(id).addEventListener('change',e=>{S[id]=e.target.checked;afterEdit();});
+for(const id of ['notation','hold','countClick','barLines'])document.getElementById(id).addEventListener('change',e=>{S[id]=e.target.checked;afterEdit();syncNoteOpts();});
+document.getElementById('noteWeight').addEventListener('input',e=>{S.noteWeight=clampInt(e.target.value,2,10,4);syncNoteOpts();redraw();});
+document.getElementById('noteWeight').addEventListener('change',()=>commit());
+document.querySelectorAll('[data-rest]').forEach(b=>b.addEventListener('click',()=>{S.restStyle=b.dataset.rest;syncNoteOpts();commit();redraw();}));
+for(const id of ['syl','sylColor'])document.getElementById(id).addEventListener('change',e=>{S[id]=e.target.checked;syncNoteOpts();commit();redraw();});
+document.querySelectorAll('[data-sc]').forEach(inp=>{
+  inp.addEventListener('input',()=>{S.sylColors={...sylColors(),[inp.dataset.sc]:inp.value};redraw();});
+  inp.addEventListener('change',()=>commit());
+});
+document.getElementById('sylReset').addEventListener('click',()=>{S.sylColors=null;syncNoteOpts();commit();redraw();});
+function syncNoteOpts(){
+  document.getElementById('syl').checked=S.syl;document.getElementById('sylColor').checked=S.sylColor;
+  document.getElementById('sylOpts').classList.toggle('off',!S.syl);
+  document.getElementById('sylSw').style.opacity=S.sylColor?1:.4;
+  const sc=sylColors();document.querySelectorAll('[data-sc]').forEach(i=>i.value=sc[i.dataset.sc]);
+  document.getElementById('noteOpts').classList.toggle('off',!S.notation);
+  document.getElementById('noteWeight').value=S.noteWeight;document.getElementById('noteWeightTxt').textContent=S.noteWeight;
+  document.getElementById('barLines').checked=S.barLines;
+  document.querySelectorAll('[data-rest]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rest===S.restStyle));
+}
 document.getElementById('notationColor').addEventListener('input',e=>{S.notationColor=e.target.value;redraw();});
 document.getElementById('notationColor').addEventListener('change',()=>commit());
 /* ---- export settings ---- */
@@ -3492,6 +3590,7 @@ function syncInputs(){
   document.getElementById('pickup').value=S.pickup;document.getElementById('bpm').value=S.bpm;document.getElementById('startBar').value=S.startBar;
   document.getElementById('startBar').min=S.pickup?0:1;
   for(const id of ['notation','hold','countClick'])document.getElementById(id).checked=S[id];
+  syncNoteOpts();
   document.getElementById('notationColor').value=S.notationColor;document.getElementById('fps').value=S.fps;
   renderMeters();syncTrim();
 }
