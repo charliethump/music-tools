@@ -965,7 +965,9 @@ function jumpEnd(){
 /* N: first part of the next song (from the title slide, the first song). Does nothing on the last song. */
 function nextSong(){
   if (!seq.length || phase === 'done' || phase === 'picker') return;
-  const cur = k >= 0 ? seq[k].s : -1;
+  let cur = k >= 0 ? seq[k].s : -1;
+  /* on the statue after a song's last part, the next song is coming up anyway, so N skips it */
+  if (phase === 'freeze' && k >= 0 && !isLast(k) && seq[k + 1].s !== cur) cur = seq[k + 1].s;
   const i = seq.findIndex(x => x.s > cur);
   if (i >= 0) playK(i);
 }
@@ -1098,7 +1100,7 @@ document.addEventListener('mousedown', () => toggleSafe(false), true);
 /* ================= KEYS =================
    Clicker (Page Down / Page Up), arrow keys and the foot pedal. F toggles full screen; Esc leaves it.
    H goes back to the set picker. S shows or hides Safe! V cycles the visualizer.
-   E jumps to the end (last part from a statue, final statue from the music). N skips to the next song. */
+   E jumps to the end (last part from a statue, final statue from the music). N skips to the next song (from a song's last statue, the one after it). */
 const FWD = ['PageDown','ArrowRight','ArrowDown',' ','Enter'];
 const BACK = ['PageUp','ArrowLeft','ArrowUp'];
 document.addEventListener('keydown', e => {
