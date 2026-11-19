@@ -172,6 +172,27 @@
   .entry input[type="color"]::-webkit-color-swatch { border: none; border-radius: 7px; }
   .entry input[type="color"]::-moz-color-swatch { border: none; border-radius: 7px; }
   .note { color: var(--ink-soft); font-size: 0.85rem; margin: 0; }
+  .lock {
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+  }
+  .lock select {
+    font: inherit;
+    font-weight: 400;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    min-width: 0;
+    flex: 1;
+  }
+  .lock select.on { border-color: #b3261e; background: #fff4f2; }
 
   /* Result banner + confetti */
   #confetti {
@@ -256,7 +277,11 @@
     </div>
     <div class="col-labels"><span>Key</span><span>Color</span><span>Name on wheel</span><span></span></div>
     <div class="entries" id="entries"></div>
-    <p class="note">Clicking the wheel spins at random. Pressing a choice's key (1-9, 0 for the 10th) spins and lands on that choice. Changes save on this device; use Copy link to open the same wheel elsewhere.</p>
+    <div class="lock">
+      <label for="fixed">Every spin lands on</label>
+      <select id="fixed"></select>
+    </div>
+    <p class="note">Clicking the wheel spins at random. Pressing a choice's key (1-9, 0 for the 10th) spins and lands on that choice. When "Every spin lands on" is set, every spin (click, any key, clicker or pedal) lands on that choice, and Copy link carries the setting. Changes save on this device; use Copy link to open the same wheel elsewhere.</p>
   </aside>
 </main>
 
@@ -275,6 +300,7 @@
       { name: 'Choice 2', color: PRESET_COLORS[1] },
       { name: 'Choice 3', color: PRESET_COLORS[2] },
     ],
+    fixed: null,   // index of a choice every spin must land on, or null for normal behavior
   });
 
   let state = loadState();
@@ -296,7 +322,8 @@
       name: typeof e.name === 'string' ? e.name.slice(0, 40) : '',
       color: /^#[0-9a-f]{6}$/i.test(e.color || '') ? e.color : PRESET_COLORS[i % PRESET_COLORS.length],
     }));
-    return { entries: entries.length ? entries : d.entries };
+    const fixed = Number.isInteger(obj.fixed) && obj.fixed >= 0 && obj.fixed < entries.length ? obj.fixed : null;
+    return { entries: entries.length ? entries : d.entries, fixed };
   }
 
   function encodeState() {
@@ -513,6 +540,8 @@
 
     const n = entries.length;
     const slice = TAU / n;
+    const locked = fixedEntry();
+    if (locked) forced = locked;
     let pick = forced ? entries.indexOf(forced) : -1;
     if (pick < 0) pick = Math.floor(Math.random() * n);
     const target = (pick + 0.15 + Math.random() * 0.7) * slice;
@@ -551,6 +580,13 @@
     requestAnimationFrame(frame);
   }
 
+  // The locked choice, if the lock is set and that choice has a name.
+  function fixedEntry() {
+    if (state.fixed === null || state.fixed === undefined) return null;
+    const e = state.entries[state.fixed];
+    return e && e.name.trim() !== '' ? e : null;
+  }
+
   function cancelSpin() {
     if (!spinning) return;
     spinToken++;
@@ -579,7 +615,7 @@
 
     if (!/^[0-9]$/.test(e.key) || spinning || e.repeat) return;
     const index = e.key === '0' ? 9 : +e.key - 1;
-    const entry = state.entries[index];
+    const entry = fixedEntry() || state.entries[index];
     if (!entry || entry.name.trim() === '') return;
     if (document.body.dataset.mode === 'edit' && !enterPlay()) return;
     spin(entry);
@@ -593,6 +629,29 @@
 
   // ---------- Choices panel ----------
   const entriesEl = document.getElementById('entries');
+
+  const fixedEl = document.getElementById('fixed');
+  function renderFixed() {
+    fixedEl.innerHTML = '';
+    const off = document.createElement('option');
+    off.value = '';
+    off.textContent = 'Off (normal: random clicks, number keys pick)';
+    fixedEl.appendChild(off);
+    state.entries.forEach((e, i) => {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = (i + 1) + '. ' + (e.name.trim() || '(blank)');
+      o.disabled = e.name.trim() === '';
+      fixedEl.appendChild(o);
+    });
+    fixedEl.value = state.fixed === null ? '' : String(state.fixed);
+    fixedEl.classList.toggle('on', state.fixed !== null);
+  }
+  fixedEl.addEventListener('change', () => {
+    state.fixed = fixedEl.value === '' ? null : +fixedEl.value;
+    fixedEl.classList.toggle('on', state.fixed !== null);
+    persist();
+  });
 
   function keyLabel(i) { return i < 9 ? String(i + 1) : i === 9 ? '0' : ''; }
 
@@ -619,7 +678,7 @@
       name.placeholder = 'Name on wheel';
       name.maxLength = 40;
       name.setAttribute('aria-label', 'Name on wheel');
-      name.addEventListener('input', () => { e.name = name.value; drawWheel(); persist(); });
+      name.addEventListener('input', () => { e.name = name.value; drawWheel(); renderFixed(); persist(); });
 
       const del = document.createElement('button');
       del.className = 'icon';
@@ -629,12 +688,15 @@
       del.setAttribute('aria-label', 'Remove ' + (e.name || 'choice'));
       del.addEventListener('click', () => {
         state.entries.splice(i, 1);
+        if (state.fixed === i) state.fixed = null;
+        else if (state.fixed !== null && state.fixed > i) state.fixed--;
         renderEntries(); drawWheel(); persist();
       });
 
       row.append(num, color, name, del);
       entriesEl.appendChild(row);
     });
+    renderFixed();
   }
 
   document.getElementById('add').addEventListener('click', () => {
