@@ -194,6 +194,29 @@
   .settings label { display: flex; align-items: center; gap: 8px; font-weight: 700; }
   .settings select { width: auto; }
   .settings input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
+  .palette-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+  }
+  .palette-row select {
+    font: inherit;
+    font-weight: 400;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    width: auto;
+  }
+  .swatches { display: flex; gap: 3px; }
+  .swatches span {
+    width: 16px; height: 22px;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+  }
   .note { color: var(--ink-soft); font-size: 0.85rem; margin: 0; }
 
   /* Metronome */
@@ -343,6 +366,11 @@
       <h2>Choices</h2>
       <button id="add" class="primary">Add choice</button>
     </div>
+    <div class="palette-row">
+      <label for="palette">Colors</label>
+      <select id="palette"></select>
+      <div class="swatches" id="swatches" aria-hidden="true"></div>
+    </div>
     <div class="col-labels"><span></span><span>Color</span><span>Name on wheel</span><span>BPM</span><span></span></div>
     <div class="entries" id="entries"></div>
     <div class="settings">
@@ -400,7 +428,17 @@
   'use strict';
 
   // ---------- Data ----------
-  const PRESET_COLORS = ['#3369e8', '#d50f25', '#eeb211', '#009925', '#7b3fe4', '#ff7a00', '#00a6b4', '#e0459b', '#6b8e23', '#8b5a2b'];
+  // Color palettes. New choices take the next unused color from the current palette.
+  const PALETTES = {
+    classic: { name: 'Classic', colors: ['#3369e8', '#d50f25', '#eeb211', '#009925', '#7b3fe4', '#ff7a00', '#00a6b4', '#e0459b', '#6b8e23', '#8b5a2b'] },
+    bright:  { name: 'Bright',  colors: ['#ff3b30', '#007aff', '#ffcc00', '#34c759', '#af52de', '#ff9500', '#00c7be', '#ff2d55', '#5856d6', '#a2845e'] },
+    pastel:  { name: 'Pastel',  colors: ['#f4a6a6', '#a8d8ea', '#fbe7a1', '#b8e0b8', '#cdb4f4', '#f7c59f', '#b5c7f2', '#f2b5d4', '#c9e4ca', '#f9d29d'] },
+    rainbow: { name: 'Rainbow', colors: ['#e6261f', '#eb7532', '#f7d038', '#a3e048', '#49da9a', '#34bbe6', '#4355db', '#d23be7', '#e0459b', '#8b5a2b'] },
+    ocean:   { name: 'Ocean',   colors: ['#0077b6', '#90e0ef', '#023e8a', '#00b4d8', '#2a9d8f', '#caf0f8', '#264653', '#48cae4', '#03045e', '#a8dadc'] },
+    autumn:  { name: 'Autumn',  colors: ['#9b2226', '#ee9b00', '#005f73', '#ca6702', '#94d2bd', '#bb3e03', '#e9d8a6', '#ae2012', '#0a9396', '#6b4226'] },
+    holiday: { name: 'Holiday', colors: ['#c1121f', '#2d6a4f', '#d4a017', '#f8f9fa', '#40916c', '#780000', '#95d5b2', '#e63946', '#1b4332', '#ffd166'] },
+  };
+  let PRESET_COLORS = PALETTES.classic.colors;
   const STORAGE_KEY = 'metronome-choice-wheel-v1';
   const BPM_MIN = 30, BPM_MAX = 300;
   // Used when the metronome is started before any tempo has been picked.
@@ -418,6 +456,8 @@
   });
 
   let state = loadState();
+  if (!PALETTES[state.palette]) state.palette = 'classic';
+  PRESET_COLORS = PALETTES[state.palette].colors;
 
   function loadState() {
     const fromHash = decodeHash();
@@ -430,6 +470,11 @@
   }
 
   function sanitize(obj) {
+    const out = sanitizeBase(obj);
+    out.palette = obj && PALETTES[obj.palette] ? obj.palette : 'classic';
+    return out;
+  }
+  function sanitizeBase(obj) {
     const d = defaults();
     if (!obj || typeof obj !== 'object') return d;
     const entries = Array.isArray(obj.entries) ? obj.entries.map((e, i) => ({
@@ -799,9 +844,33 @@
   });
 
   // ---------- Entries UI ----------
+  // ---------- Palette picker ----------
+  const paletteEl = document.getElementById('palette');
+  const swatchesEl = document.getElementById('swatches');
+  Object.entries(PALETTES).forEach(([key, p]) => {
+    const o = document.createElement('option');
+    o.value = key;
+    o.textContent = p.name;
+    paletteEl.appendChild(o);
+  });
+  function renderPalette() {
+    if (!PALETTES[state.palette]) state.palette = 'classic';
+    PRESET_COLORS = PALETTES[state.palette].colors;
+    paletteEl.value = state.palette;
+    swatchesEl.innerHTML = PRESET_COLORS.map(c => `<span style="background:${c}"></span>`).join('');
+  }
+  // Picking a palette recolors every choice; single colors can still be changed afterward.
+  paletteEl.addEventListener('change', () => {
+    state.palette = paletteEl.value;
+    renderPalette();
+    state.entries.forEach((e, i) => { e.color = PRESET_COLORS[i % PRESET_COLORS.length]; });
+    renderEntries(); drawWheel(); persist();
+  });
+
   const entriesEl = document.getElementById('entries');
 
   function renderEntries() {
+    renderPalette();
     entriesEl.innerHTML = '';
     state.entries.forEach((e, i) => {
       const row = document.createElement('div');
@@ -813,6 +882,7 @@
 
       const color = document.createElement('input');
       color.type = 'color';
+      color.tabIndex = -1;   // Tab goes name to name, not through colors
       color.value = e.color;
       color.title = 'Slice color';
       color.addEventListener('input', () => { e.color = color.value; drawWheel(); persist(); });
@@ -843,6 +913,7 @@
 
       const del = document.createElement('button');
       del.className = 'icon';
+      del.tabIndex = -1;     // Tab skips the remove buttons
       del.type = 'button';
       del.textContent = '\u00D7';
       del.title = 'Remove choice';
