@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Point Filler</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cpath d=%22M18 4h28c-1 3-5 4-7 6-1 2 0 5 4 9 7 7 10 13 10 21 0 9-4 16-8 20H19c-4-4-8-11-8-20 0-8 3-14 10-21 4-4 5-7 4-9-2-2-6-3-7-6z%22 fill=%22%23cfe2f3%22 stroke=%22%234f7aa3%22 stroke-width=%223%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M14 40c0-1 36-1 36 0 0 8-3 14-7 18H21c-4-4-7-10-7-18z%22 fill=%22%234d96ff%22 opacity=%22.35%22/%3E%3Cellipse cx=%2228%22 cy=%2245%22 rx=%226.5%22 ry=%225%22 transform=%22rotate%28-22 28 45%29%22 fill=%22%231b1b1f%22/%3E%3Crect x=%2232.5%22 y=%2222%22 width=%223.2%22 height=%2223%22 fill=%22%231b1b1f%22/%3E%3Cpath d=%22M35.5 22c1 6 9 7 6 16 1-6-3-9-6-10z%22 fill=%22%231b1b1f%22/%3E%3C/svg%3E">
 <style>
 :root{
   --ink:#1d2433;
@@ -48,11 +49,16 @@ html,body{margin:0;height:100%;font-family:"Trebuchet MS","Segoe UI",system-ui,s
 .stat.total .v{color:#2453c9}
 .stat.bonus .v{color:#d35400}
 #stage{flex:1;position:relative;min-height:0;overflow:hidden}
-#scene{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+.layer{position:absolute;inset:0;width:100%;height:100%;display:block}
+svg.layer{overflow:visible}
+.field select{width:100%;font-size:18px;padding:10px 12px;border:2px solid var(--line);border-radius:10px;font-family:inherit;background:#fff;color:var(--ink)}
+.field select:focus{outline:none;border-color:var(--accent)}
+.hint{font-size:14px;color:var(--muted);margin-top:6px}
 #banner{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:4;pointer-events:none;
   background:linear-gradient(#ffe27a,#f5b700);color:#5a3a00;font-weight:bold;
   font-size:clamp(24px,3.6vw,52px);padding:8px 32px;border-radius:999px;white-space:nowrap;
   box-shadow:0 6px 24px rgba(180,120,0,.35);border:4px solid #fff3c4}
+@media (max-width:1450px){#banner{top:104px;font-size:clamp(22px,3.2vw,44px)}}
 #banner.show{animation:pop .6s cubic-bezier(.2,1.6,.4,1)}
 @keyframes pop{0%{transform:translateX(-50%) scale(.2);opacity:0}100%{transform:translateX(-50%) scale(1);opacity:1}}
 .floater{position:absolute;left:50%;top:14%;transform:translateX(-50%);font-weight:bold;font-size:clamp(28px,4vw,56px);
@@ -115,6 +121,23 @@ html,body{margin:0;height:100%;font-family:"Trebuchet MS","Segoe UI",system-ui,s
       <label for="sGoal">Points needed to fill the urn</label>
       <input type="text" id="sGoal" inputmode="decimal">
       <div class="err" id="sErr"></div>
+    </div>
+    <div class="field">
+      <label for="sPpn">Points per note</label>
+      <select id="sPpn">
+        <option value="auto">Auto (about 300 notes fill the urn)</option>
+        <option value="1">1 point = 1 note</option>
+        <option value="2">2 points per note</option>
+        <option value="3">3 points per note</option>
+        <option value="4">4 points per note</option>
+        <option value="5">5 points per note</option>
+        <option value="10">10 points per note</option>
+        <option value="20">20 points per note</option>
+        <option value="25">25 points per note</option>
+        <option value="50">50 points per note</option>
+        <option value="100">100 points per note</option>
+      </select>
+      <div class="hint" id="sInfo"></div>
     </div>
     <div class="field">
       <label for="sMsg">Goal message</label>
@@ -185,7 +208,12 @@ html,body{margin:0;height:100%;font-family:"Trebuchet MS","Segoe UI",system-ui,s
     </div>
   </div>
   <div id="stage">
-    <svg id="scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="sceneBack" class="layer" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet"></svg>
+    <canvas id="cInS" class="layer"></canvas>
+    <canvas id="cInD" class="layer"></canvas>
+    <svg id="sceneFront" class="layer" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet"></svg>
+    <canvas id="cOutS" class="layer"></canvas>
+    <canvas id="cOutD" class="layer"></canvas>
   </div>
   <div id="banner" class="hidden"></div>
   <div id="controls">
@@ -248,6 +276,108 @@ function makeChannel(onMsg){
   };
 }
 
+
+/* =====================================================
+   URN GEOMETRY + NOTE PLANNING (shared by setup and the urn page)
+   ===================================================== */
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const CX = 800, FLOOR = 820, RIM_Y = 120, LIP_R = 196, RIM_RY = 34, WALL = 12, IN_BOTTOM = 788;
+// [y, radius] down the right side of the urn
+const PROFILE = [[120,196],[128,191],[148,172],[180,156],[215,150],[250,158],[290,198],[340,238],[400,255],
+                 [460,253],[540,238],[620,212],[700,180],[760,155],[800,141],[815,137],[820,134]];
+function catmull(pts, seg){
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++){
+    const p0 = pts[Math.max(0, i-1)], p1 = pts[i], p2 = pts[i+1], p3 = pts[Math.min(pts.length-1, i+2)];
+    for (let k = 0; k < seg; k++){
+      const t = k/seg, t2 = t*t, t3 = t2*t;
+      const f = (a,b,c,d) => 0.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);
+      out.push([f(p0[0],p1[0],p2[0],p3[0]), f(p0[1],p1[1],p2[1],p3[1])]);
+    }
+  }
+  out.push(pts[pts.length-1]);
+  return out;
+}
+const SAMPLES = catmull(PROFILE, 16);
+function R(y){
+  const n = SAMPLES.length;
+  if (y < SAMPLES[0][0] || y > SAMPLES[n-1][0]) return 0;
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1){ const m = (lo + hi) >> 1; if (SAMPLES[m][0] < y) lo = m; else hi = m; }
+  const a = SAMPLES[lo], b = SAMPLES[hi];
+  const t = (y - a[0]) / ((b[0] - a[0]) || 1);
+  return a[1] + (b[1] - a[1]) * clamp(t, 0, 1);
+}
+const P = (x, y) => x.toFixed(1) + "," + y.toFixed(1);
+const OUTLINE = (() => {
+  const right = SAMPLES.map(([y,r]) => P(CX + r, y));
+  const left = SAMPLES.slice().reverse().map(([y,r]) => P(CX - r, y));
+  return `M${right.join(" L")} A134 14 0 0 1 ${CX-134},820 L${left.join(" L")} A${LIP_R} ${RIM_RY} 0 0 1 ${CX+LIP_R},${RIM_Y} Z`;
+})();
+const INTERIOR = (() => {
+  const inPts = SAMPLES.filter(([y]) => y <= IN_BOTTOM);
+  const lastIn = inPts[inPts.length-1];
+  return `M${inPts.map(([y,r]) => P(CX + r - WALL, y)).join(" L")} Q${CX},${IN_BOTTOM + 12} ${P(CX - (lastIn[1] - WALL), lastIn[0])} L${inPts.slice().reverse().map(([y,r]) => P(CX - r + WALL, y)).join(" L")} Z`;
+})();
+
+// Note positions inside the urn for a given note size s (1 = default size), in fill order bottom to top
+function inSlots(s){
+  const rr = mulberry32(12345), ROW = 26*s, COL = 30*s, out = [];
+  let j = 0;
+  for (let y = IN_BOTTOM - 15*s; y >= RIM_Y + 18*s; y -= ROW, j++){
+    const half = Math.min(R(y - 12*s), R(y + 12*s)) - WALL - 12*s;
+    if (half <= 0) continue;
+    const count = Math.floor(2*half / COL) + 1;
+    const start = -((count-1) * COL) / 2;
+    for (let k = 0; k < count; k++){
+      const x = CX + clamp(start + k*COL + (rr()*2-1)*4*s, -half, half);
+      out.push({ x, y: y + (rr()*2-1)*3*s, s: j + rr()*0.9 });
+    }
+  }
+  out.sort((a, b) => a.s - b.s);
+  return out;
+}
+// Note positions on the floor (two mounds beside the urn)
+function heapSlots(s){
+  const rr = mulberry32(777), out = [], base = FLOOR - 17*s;
+  for (let h = 0; ; h++){
+    const y = base - h*24*s;
+    if (y < 70) break;
+    for (let x = 30 + (h%2)*15*s; x <= 1570; x += 30*s){
+      const dx = Math.abs(x - CX);
+      const maxR = Math.max(R(y - 22*s), R(y), R(y + 18*s));
+      if (maxR > 0 && dx < maxR + 6 + 14*s) continue;
+      if (y < RIM_Y + 10 && dx < LIP_R + 30) continue;
+      const d = Math.min(Math.abs(x - (CX-330)), Math.abs(x - (CX+330)));
+      out.push({ x: x + (rr()*2-1)*5*s, y: y + (rr()*2-1)*3*s, s: (base - y) + 0.6*d + rr()*10*s });
+    }
+  }
+  out.sort((a, b) => a.s - b.s);
+  return out;
+}
+// Decide note size and how many notes fill the urn
+function planNotes(goal, ppn){
+  const S_MIN = 0.28, S_MAX = 3;
+  if (ppn === "auto" || !(ppn > 0)){
+    const slots = inSlots(1);
+    return { s: 1, N: slots.length, slots, ppnEff: goal / slots.length };
+  }
+  const want = Math.max(1, Math.round(goal / ppn));
+  const minSlots = inSlots(S_MIN);
+  if (minSlots.length < want) return { s: S_MIN, N: minSlots.length, slots: minSlots, ppnEff: goal / minSlots.length, capped: "small" };
+  const maxSlots = inSlots(S_MAX);
+  if (maxSlots.length > want) return { s: S_MAX, N: maxSlots.length, slots: maxSlots, ppnEff: goal / maxSlots.length, capped: "big" };
+  let lo = S_MIN, hi = S_MAX;           // count(lo) >= want, count(hi) <= want
+  for (let it = 0; it < 22; it++){
+    const mid = (lo + hi) / 2;
+    if (inSlots(mid).length >= want) lo = mid; else hi = mid;
+  }
+  const slots = inSlots(lo).slice(0, want);
+  return { s: lo, N: want, slots, ppnEff: goal / want };
+}
+
 const goalParam = parseFloat(params.get("goal"));
 if (params.has("goal") && goalParam > 0 && !params.has("edit")){
   if (MODE === "control") startControl(goalParam);
@@ -265,6 +395,9 @@ function startSetup(){
   sTitle.value = params.get("title") ?? DEF.title;
   sGoal.value = params.get("goal") ?? String(DEF.goal);
   sMsg.value = params.get("msg") ?? DEF.msg;
+  const sPpn = $("sPpn");
+  sPpn.value = params.get("ppn") || "auto";
+  if (sPpn.selectedIndex < 0) sPpn.value = "auto";
   sPct.checked = flag("pct"); sTogo.checked = flag("togo"); sBonus.checked = flag("bonus"); sAdded.checked = flag("added");
 
   function buildLink(){
@@ -279,16 +412,28 @@ function startSetup(){
     p.set("togo", sTogo.checked ? "1" : "0");
     p.set("bonus", sBonus.checked ? "1" : "0");
     p.set("added", sAdded.checked ? "1" : "0");
+    p.set("ppn", sPpn.value);
     return linkFor(p, "single");
   }
   const modeLink = mode => { const l = buildLink(); return l ? linkFor(new URL(l).searchParams, mode) : null; };
+  function showInfo(){
+    const g = parseFloat(sGoal.value.replace(/,/g, ""));
+    if (!(g > 0)){ $("sInfo").textContent = ""; return; }
+    const plan = planNotes(g, sPpn.value === "auto" ? "auto" : parseFloat(sPpn.value));
+    const per = Math.round(plan.ppnEff * 100) / 100;
+    let txt = fmt(plan.N) + " notes fill the urn. Each note = " + fmt(per) + (per === 1 ? " point." : " points.");
+    if (plan.capped === "small") txt += " That many notes won't fit, so each note counts for more than you picked.";
+    if (plan.capped === "big") txt += " The goal is small, so notes count for less than you picked to keep them from getting huge.";
+    $("sInfo").textContent = txt;
+  }
   function update(){
+    showInfo();
     const link = buildLink();
     sLink.value = link || "";
     ["copyBtn","openBtn","openBothBtn","copyDispBtn","copyCtlBtn"].forEach(id => $(id).disabled = !link);
   }
   [sTitle, sGoal, sMsg].forEach(el => el.addEventListener("input", update));
-  [sPct, sTogo, sBonus, sAdded].forEach(el => el.addEventListener("change", update));
+  [sPct, sTogo, sBonus, sAdded, sPpn].forEach(el => el.addEventListener("change", update));
   function copyText(text, btn){
     const label = btn.textContent;
     const done = () => { btn.textContent = "Copied!"; setTimeout(() => btn.textContent = label, 1500); };
@@ -329,60 +474,19 @@ function startApp(GOAL){
   const DISPLAY = MODE === "display";
   if (DISPLAY) $("controls").classList.add("hidden");
 
-  /* ---------- Seeded random ---------- */
-  function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  /* ---------- Note plan ---------- */
+  const ppnRaw = params.get("ppn");
+  const PLAN = planNotes(GOAL, (!ppnRaw || ppnRaw === "auto") ? "auto" : parseFloat(ppnRaw));
+  const NOTE_S = PLAN.s, N = PLAN.N, IN_SLOTS = PLAN.slots, HEAP = heapSlots(NOTE_S);
 
-  /* ---------- Urn geometry ---------- */
-  const NS = "http://www.w3.org/2000/svg";
-  const CX = 800, FLOOR = 820, RIM_Y = 120, LIP_R = 196, RIM_RY = 34, WALL = 12, IN_BOTTOM = 788;
-  // [y, radius] down the right side of the urn
-  const PROFILE = [[120,196],[128,191],[148,172],[180,156],[215,150],[250,158],[290,198],[340,238],[400,255],
-                   [460,253],[540,238],[620,212],[700,180],[760,155],[800,141],[815,137],[820,134]];
-  function catmull(pts, seg){
-    const out = [];
-    for (let i = 0; i < pts.length - 1; i++){
-      const p0 = pts[Math.max(0, i-1)], p1 = pts[i], p2 = pts[i+1], p3 = pts[Math.min(pts.length-1, i+2)];
-      for (let s = 0; s < seg; s++){
-        const t = s/seg, t2 = t*t, t3 = t2*t;
-        const f = (a,b,c,d) => 0.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);
-        out.push([f(p0[0],p1[0],p2[0],p3[0]), f(p0[1],p1[1],p2[1],p3[1])]);
-      }
-    }
-    out.push(pts[pts.length-1]);
-    return out;
-  }
-  const SAMPLES = catmull(PROFILE, 16);
-  function R(y){
-    if (y < SAMPLES[0][0] || y > SAMPLES[SAMPLES.length-1][0]) return 0;
-    for (let i = 1; i < SAMPLES.length; i++){
-      if (SAMPLES[i][0] >= y){
-        const a = SAMPLES[i-1], b = SAMPLES[i];
-        const t = (y - a[0]) / ((b[0] - a[0]) || 1);
-        return a[1] + (b[1] - a[1]) * t;
-      }
-    }
-    return 0;
-  }
-  const P = (x, y) => x.toFixed(1) + "," + y.toFixed(1);
-  const right = SAMPLES.map(([y,r]) => P(CX + r, y));
-  const left = SAMPLES.slice().reverse().map(([y,r]) => P(CX - r, y));
-  const outline = `M${right.join(" L")} A134 14 0 0 1 ${CX-134},820 L${left.join(" L")} A${LIP_R} ${RIM_RY} 0 0 1 ${CX+LIP_R},${RIM_Y} Z`;
-
-  const inPts = SAMPLES.filter(([y]) => y <= IN_BOTTOM);
-  const lastIn = inPts[inPts.length-1];
-  const interior = `M${inPts.map(([y,r]) => P(CX + r - WALL, y)).join(" L")} Q${CX},${IN_BOTTOM + 12} ${P(CX - (lastIn[1] - WALL), lastIn[0])} L${inPts.slice().reverse().map(([y,r]) => P(CX - r + WALL, y)).join(" L")} Z`;
-
+  /* ---------- Urn drawing (SVG behind and in front of the note canvases) ---------- */
   function sideStroke(frac, y1, y2, side){
     const pts = [];
     for (let y = y1; y <= y2; y += 6) pts.push(P(CX + side * R(y) * frac, y));
     return "M" + pts.join(" L");
   }
   const ellArc = (y, rx, ry, front) => `M${CX-rx},${y} A${rx} ${ry} 0 0 ${front ? 0 : 1} ${CX+rx},${y}`;
-
-  const scene = $("scene");
-  scene.innerHTML = `
+  $("sceneBack").innerHTML = `
   <defs>
     <linearGradient id="floorGrad" gradientUnits="userSpaceOnUse" x1="0" y1="820" x2="0" y2="1000">
       <stop offset="0" stop-color="#e0e0e0"/><stop offset="1" stop-color="#d2d2d2"/>
@@ -390,6 +494,17 @@ function startApp(GOAL){
     <linearGradient id="horizon" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".045"/>
     </linearGradient>
+  </defs>
+  <rect x="-4000" y="${FLOOR}" width="9600" height="3000" fill="url(#floorGrad)"/>
+  <rect x="-4000" y="${FLOOR-140}" width="9600" height="140" fill="url(#horizon)"/>
+  <rect x="-4000" y="${FLOOR}" width="9600" height="1.5" fill="#000" opacity=".05"/>
+  <ellipse cx="${CX}" cy="${FLOOR+2}" rx="190" ry="16" fill="#000" opacity=".12"/>
+  <path d="${INTERIOR}" fill="#8db8dc" fill-opacity=".22"/>
+  <ellipse cx="${CX}" cy="${RIM_Y}" rx="${LIP_R-WALL}" ry="${RIM_RY-3}" fill="#4f7aa3" fill-opacity=".16"/>
+  <path d="${ellArc(RIM_Y, LIP_R, RIM_RY, false)}" fill="none" stroke="#5a7fa6" stroke-width="3" stroke-opacity=".55"/>
+  <path d="${ellArc(RIM_Y, LIP_R-WALL, RIM_RY-3, false)}" fill="none" stroke="#5a7fa6" stroke-width="2" stroke-opacity=".35"/>`;
+  $("sceneFront").innerHTML = `
+  <defs>
     <linearGradient id="glassGrad" gradientUnits="userSpaceOnUse" x1="${CX-285}" y1="0" x2="${CX+285}" y2="0">
       <stop offset="0" stop-color="#5a8cbf" stop-opacity=".45"/>
       <stop offset=".18" stop-color="#9cc3e6" stop-opacity=".18"/>
@@ -397,114 +512,125 @@ function startApp(GOAL){
       <stop offset=".82" stop-color="#9cc3e6" stop-opacity=".18"/>
       <stop offset="1" stop-color="#5a8cbf" stop-opacity=".45"/>
     </linearGradient>
-    <clipPath id="urnClip"><path d="${outline}"/></clipPath>
-    <clipPath id="innerClip"><path d="${interior}"/><rect x="-4000" y="-4000" width="9600" height="${4000 + RIM_Y}"/></clipPath>
-    <g id="nQ" fill="currentColor"><ellipse cx="-5" cy="11" rx="9" ry="6.5" transform="rotate(-22 -5 11)"/><rect x="2.2" y="-22" width="3" height="32"/></g>
-    <g id="nE" fill="currentColor"><ellipse cx="-5" cy="11" rx="9" ry="6.5" transform="rotate(-22 -5 11)"/><rect x="2.2" y="-22" width="3" height="32"/><path d="M5.2 -22 C6 -14 17 -12 13 1 C15 -9 9 -12 5.2 -15 Z"/></g>
-    <g id="nH"><ellipse cx="-5" cy="11" rx="8" ry="5.6" transform="rotate(-22 -5 11)" fill="none" stroke="currentColor" stroke-width="3.2"/><rect x="2.4" y="-22" width="3" height="31" fill="currentColor"/></g>
-    <g id="nB" fill="currentColor"><ellipse cx="-13" cy="12" rx="8.5" ry="6.2" transform="rotate(-22 -13 12)"/><ellipse cx="11" cy="8" rx="8.5" ry="6.2" transform="rotate(-22 11 8)"/><rect x="-6" y="-18" width="3" height="29"/><rect x="18" y="-22" width="3" height="29"/><polygon points="-6,-19 21,-23 21,-16 -6,-12"/></g>
+    <clipPath id="urnClip"><path d="${OUTLINE}"/></clipPath>
   </defs>
-  <rect x="-4000" y="${FLOOR}" width="9600" height="3000" fill="url(#floorGrad)"/>
-  <rect x="-4000" y="${FLOOR-140}" width="9600" height="140" fill="url(#horizon)"/>
-  <rect x="-4000" y="${FLOOR}" width="9600" height="1.5" fill="#000" opacity=".05"/>
-  <ellipse cx="${CX}" cy="${FLOOR+2}" rx="190" ry="16" fill="#000" opacity=".12"/>
-  <g id="urnBack">
-    <path d="${interior}" fill="#8db8dc" fill-opacity=".22"/>
-    <ellipse cx="${CX}" cy="${RIM_Y}" rx="${LIP_R-WALL}" ry="${RIM_RY-3}" fill="#4f7aa3" fill-opacity=".16"/>
-    <path d="${ellArc(RIM_Y, LIP_R, RIM_RY, false)}" fill="none" stroke="#5a7fa6" stroke-width="3" stroke-opacity=".55"/>
-    <path d="${ellArc(RIM_Y, LIP_R-WALL, RIM_RY-3, false)}" fill="none" stroke="#5a7fa6" stroke-width="2" stroke-opacity=".35"/>
+  <path d="${OUTLINE}" fill="url(#glassGrad)"/>
+  <g clip-path="url(#urnClip)" fill="none" stroke-linecap="round">
+    <rect x="${CX-300}" y="792" width="600" height="40" fill="#8db8dc" fill-opacity=".22"/>
+    <path d="${sideStroke(.76, 300, 740, -1)}" stroke="#fff" stroke-width="16" stroke-opacity=".38"/>
+    <path d="${sideStroke(.56, 340, 640, -1)}" stroke="#fff" stroke-width="6" stroke-opacity=".3"/>
+    <path d="${sideStroke(.86, 360, 720, 1)}" stroke="#fff" stroke-width="5" stroke-opacity=".22"/>
+    <path d="${sideStroke(.8, 150, 205, -1)}" stroke="#fff" stroke-width="6" stroke-opacity=".3"/>
+    <path d="${ellArc(262, R(262), 30, true)}" stroke="#fff" stroke-width="3" stroke-opacity=".3"/>
+    <path d="${ellArc(792, R(792), 16, true)}" stroke="#5a7fa6" stroke-width="2" stroke-opacity=".35"/>
   </g>
-  <g id="inNotes" clip-path="url(#innerClip)"></g>
-  <g id="urnFront">
-    <path d="${outline}" fill="url(#glassGrad)"/>
-    <g clip-path="url(#urnClip)" fill="none" stroke-linecap="round">
-      <rect x="${CX-300}" y="792" width="600" height="40" fill="#8db8dc" fill-opacity=".22"/>
-      <path d="${sideStroke(.76, 300, 740, -1)}" stroke="#fff" stroke-width="16" stroke-opacity=".38"/>
-      <path d="${sideStroke(.56, 340, 640, -1)}" stroke="#fff" stroke-width="6" stroke-opacity=".3"/>
-      <path d="${sideStroke(.86, 360, 720, 1)}" stroke="#fff" stroke-width="5" stroke-opacity=".22"/>
-      <path d="${sideStroke(.8, 150, 205, -1)}" stroke="#fff" stroke-width="6" stroke-opacity=".3"/>
-      <path d="${ellArc(262, R(262), 30, true)}" stroke="#fff" stroke-width="3" stroke-opacity=".3"/>
-      <path d="${ellArc(792, R(792), 16, true)}" stroke="#5a7fa6" stroke-width="2" stroke-opacity=".35"/>
-    </g>
-    <path d="${outline}" fill="none" stroke="#5a7fa6" stroke-width="3" stroke-opacity=".7" stroke-linejoin="round"/>
-    <path d="${ellArc(RIM_Y, LIP_R, RIM_RY, true)}" fill="none" stroke="#5a7fa6" stroke-width="4" stroke-opacity=".8"/>
-    <path d="${ellArc(RIM_Y+3, LIP_R-6, RIM_RY-2, true)}" fill="none" stroke="#fff" stroke-width="3" stroke-opacity=".6"/>
-  </g>
-  <g id="outNotes"></g>`;
-  const inG = $("inNotes"), outG = $("outNotes");
+  <path d="${OUTLINE}" fill="none" stroke="#5a7fa6" stroke-width="3" stroke-opacity=".7" stroke-linejoin="round"/>
+  <path d="${ellArc(RIM_Y, LIP_R, RIM_RY, true)}" fill="none" stroke="#5a7fa6" stroke-width="4" stroke-opacity=".8"/>
+  <path d="${ellArc(RIM_Y+3, LIP_R-6, RIM_RY-2, true)}" fill="none" stroke="#fff" stroke-width="3" stroke-opacity=".6"/>`;
 
-  /* ---------- Slots inside the urn (fill order bottom to top) ---------- */
-  const IN_SLOTS = [];
-  {
-    const rr = mulberry32(12345);
-    const ROW = 26, COL = 30;
-    let j = 0;
-    for (let y = IN_BOTTOM - 15; y >= RIM_Y + 18; y -= ROW, j++){
-      const half = Math.min(R(y-12), R(y+12)) - WALL - 12;
-      if (half <= 0) continue;
-      const count = Math.floor(2*half / COL) + 1;
-      const start = -((count-1) * COL) / 2;
-      for (let k = 0; k < count; k++){
-        const x = CX + clamp(start + k*COL + (rr()*2-1)*4, -half, half);
-        IN_SLOTS.push({ x, y: y + (rr()*2-1)*3, s: j + rr()*0.9 });
-      }
+  /* ---------- Note canvases ----------
+     Notes are drawn on canvases (fast on older machines, even with thousands of notes).
+     Landed notes are painted once onto a "static" canvas; only moving notes are redrawn each frame. */
+  const ctxInS = $("cInS").getContext("2d"), ctxInD = $("cInD").getContext("2d");
+  const ctxOutS = $("cOutS").getContext("2d"), ctxOutD = $("cOutD").getContext("2d");
+  const ALL_CTX = [ctxInS, ctxInD, ctxOutS, ctxOutD];
+  const innerClipPath = new Path2D(INTERIOR + ` M-4000,-4000 L5600,-4000 L5600,${RIM_Y} L-4000,${RIM_Y} Z`);
+  let VS = 1, OX = 0, OY = 0, RD = 1, CW = 1, CH = 1;
+
+  const PALETTE = ["#e63946","#f4a261","#f9c74f","#43aa8b","#4d96ff","#9b5de5","#f15bb5"];
+  const COLORS = ["#1b1b1f"].concat(PALETTE);
+  const TYPES = ["q","e","h","b"];
+  const FLAG = new Path2D("M5.2 -22 C6 -14 17 -12 13 1 C15 -9 9 -12 5.2 -15 Z");
+  let sprites = {};
+  function drawShape(g, type){
+    const head = (cx, cy, rx, ry, hollow) => {
+      g.beginPath(); g.ellipse(cx, cy, rx, ry, -22*Math.PI/180, 0, Math.PI*2);
+      if (hollow){ g.lineWidth = 3.2; g.stroke(); } else g.fill();
+    };
+    if (type === "b"){
+      head(-13, 12, 8.5, 6.2); head(11, 8, 8.5, 6.2);
+      g.fillRect(-6, -18, 3, 29); g.fillRect(18, -22, 3, 29);
+      g.beginPath(); g.moveTo(-6,-19); g.lineTo(21,-23); g.lineTo(21,-16); g.lineTo(-6,-12); g.closePath(); g.fill();
+      return;
     }
-    IN_SLOTS.sort((a, b) => a.s - b.s);
+    if (type === "h"){ head(-5, 11, 8, 5.6, true); g.fillRect(2.4, -22, 3, 31); return; }
+    head(-5, 11, 9, 6.5); g.fillRect(2.2, -22, 3, 32);
+    if (type === "e") g.fill(FLAG);
   }
-  const N = IN_SLOTS.length;
-
-  /* ---------- Slots on the floor (two mounds) ---------- */
-  const HEAP = [];
-  {
-    const rr = mulberry32(777);
-    for (let h = 0; ; h++){
-      const y = 803 - h*24;
-      if (y < 70) break;
-      for (let x = 30 + (h%2)*15; x <= 1570; x += 30){
-        const dx = Math.abs(x - CX);
-        const maxR = Math.max(R(y-22), R(y), R(y+18));
-        if (maxR > 0 && dx < maxR + 20) continue;
-        if (y < RIM_Y + 10 && dx < LIP_R + 30) continue;
-        const d = Math.min(Math.abs(x - (CX-330)), Math.abs(x - (CX+330)));
-        HEAP.push({ x: x + (rr()*2-1)*5, y: y + (rr()*2-1)*3, s: (803 - y) + 0.6*d + rr()*10 });
-      }
+  function buildSprites(){
+    sprites = {};
+    const base = NOTE_S * VS * RD;
+    TYPES.forEach(type => COLORS.forEach((col, ci) => {
+      const k = base * (type === "b" ? 0.85 : 1);
+      const c = document.createElement("canvas");
+      c.width = Math.ceil(52*k) + 4; c.height = Math.ceil(50*k) + 4;
+      const g = c.getContext("2d");
+      const ax = 2 + 25*k, ay = 2 + 28*k;
+      g.translate(ax, ay); g.scale(k, k);
+      g.fillStyle = col; g.strokeStyle = col;
+      drawShape(g, type);
+      sprites[type + ci] = { c, ax, ay };
+    }));
+  }
+  function paint(g, n, x, y, rotDeg, qx, qy, alpha){
+    const sp = sprites[n.key];
+    const a = rotDeg * Math.PI / 180, co = Math.cos(a), si = Math.sin(a);
+    g.setTransform(co*qx, si*qx, -si*qy, co*qy, (OX + x*VS)*RD, (OY + y*VS)*RD);
+    if (alpha < 1) g.globalAlpha = alpha;
+    g.drawImage(sp.c, -sp.ax, -sp.ay);
+    if (alpha < 1) g.globalAlpha = 1;
+  }
+  function clearCtx(g){ g.setTransform(1,0,0,1,0,0); g.clearRect(0, 0, CW, CH); }
+  function redrawStatic(){
+    clearCtx(ctxInS); clearCtx(ctxOutS);
+    for (let i = 0; i < spawned; i++){
+      const n = notes[i];
+      if (n && n.final) paint(n.layer === "in" ? ctxInS : ctxOutS, n, n.tx, n.ty, n.trot, 1, 1, 1);
     }
-    HEAP.sort((a, b) => a.s - b.s);
+  }
+  function layout(){
+    const st = $("stage");
+    const w = Math.max(1, st.clientWidth), h = Math.max(1, st.clientHeight);
+    RD = Math.min(2, window.devicePixelRatio || 1);
+    VS = Math.min(w / 1600, h / 900);
+    OX = (w - 1600*VS) / 2; OY = (h - 900*VS) / 2;
+    CW = Math.round(w * RD); CH = Math.round(h * RD);
+    ALL_CTX.forEach(g => { g.canvas.width = CW; g.canvas.height = CH; });
+    [ctxInS, ctxInD].forEach(g => {           // clip inner layers to the inside of the urn (plus the open air above it)
+      g.setTransform(VS*RD, 0, 0, VS*RD, OX*RD, OY*RD);
+      g.clip(innerClipPath);
+    });
+    buildSprites();
+    redrawStatic();
+    dynDirty = true;
   }
 
   /* ---------- Notes ---------- */
-  const PALETTE = ["#e63946","#f4a261","#f9c74f","#43aa8b","#4d96ff","#9b5de5","#f15bb5"];
   const G = 2600;               // gravity in scene units/sec^2
   const NECK_Y = 230;
   const notes = [];             // index -> note
-  let active = [];
-  let spawned = 0, targetCount = 0, nextSpawn = 0, interval = 60;
+  let active = [], fading = [];
+  let spawned = 0, targetCount = 0, spawnRate = 12, credit = 1, dynDirty = false;
   let goalReached = false;
 
-  function setT(n, x, y, rot, sx, sy){
-    n.el.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)}) scale(${(n.scale*(sx||1)).toFixed(3)} ${(n.scale*(sy||1)).toFixed(3)})`);
-  }
+  function setT(n, x, y, rot, qx, qy){ n.x = x; n.y = y; n.rot = rot; n.qx = qx || 1; n.qy = qy || 1; }
 
   function spawnNote(i, now){
     const r = mulberry32(i * 9973 + 17);
     const t = r();
-    const type = t < .35 ? "nQ" : t < .65 ? "nE" : t < .85 ? "nB" : "nH";
-    const color = r() < .55 ? "#1b1b1f" : PALETTE[Math.floor(r() * PALETTE.length)];
-    const el = document.createElementNS(NS, "use");
-    el.setAttribute("href", "#" + type);
-    el.setAttribute("color", color);
+    const type = t < .35 ? "q" : t < .65 ? "e" : t < .85 ? "b" : "h";
+    const ci = r() < .55 ? 0 : 1 + Math.floor(r() * PALETTE.length);
     const inside = i < N;
-    const n = { i, el, inside, t0: now, scale: type === "nB" ? 0.85 : 1, spin: (r()*2-1)*220, landed: false, phase: 0 };
+    const n = { i, key: type + ci, inside, layer: "in", t0: now, spin: (r()*2-1)*220, landed: false, final: false };
     n.y0 = -40 - r()*60;
     if (inside){
-      const s = IN_SLOTS[i];
-      n.tx = s.x; n.ty = s.y; n.trot = (r()*2-1)*24;
+      const sl = IN_SLOTS[i];
+      n.tx = sl.x; n.ty = sl.y; n.trot = (r()*2-1)*24;
       n.sx = CX + clamp(n.tx - CX, -110, 110) + (r()*2-1)*8;
       n.T = Math.sqrt(2*(n.ty - n.y0)/G);
-      inG.appendChild(el);
     } else {
-      const h = i - N, s = HEAP[h % HEAP.length], lap = Math.floor(h / HEAP.length);
-      n.tx = s.x + (lap ? (r()*2-1)*10 : 0); n.ty = s.y - lap*10; n.trot = (r()*2-1)*55;
+      const h = i - N, sl = HEAP[h % HEAP.length], lap = Math.floor(h / HEAP.length);
+      n.tx = sl.x + (lap ? (r()*2-1)*10*NOTE_S : 0); n.ty = sl.y - lap*10*NOTE_S; n.trot = (r()*2-1)*55;
       n.side = n.tx >= CX ? 1 : -1;
       n.sx = CX + (r()*2-1)*50;
       n.yA = RIM_Y - 22;
@@ -515,7 +641,6 @@ function startApp(GOAL){
       n.ballistic = n.ty < n.yB + 40;
       if (n.ballistic) n.TC = 0.55 + Math.abs(n.tx - n.bx)/1400;
       else { const v = 120; n.vC = v; n.TC = (-v + Math.sqrt(v*v + 2*G*(n.ty - n.yB)))/G; }
-      inG.appendChild(el);
     }
     notes[i] = n;
     active.push(n);
@@ -540,21 +665,20 @@ function startApp(GOAL){
       }
       return landing(n, e - n.T);
     }
-    // overflow note
+    // overflow note: into the mouth, hop over the lip, down the outside to the floor
     if (e < n.TA){
       setT(n, n.sx, n.y0 + .5*G*e*e, n.trot + n.spin);
       return false;
     }
+    n.layer = "out";
     const eB = e - n.TA;
     if (eB < n.TB){
-      if (n.phase === 0){ n.phase = 1; outG.appendChild(n.el); }
       const k = eB / n.TB;
       const x = n.sx + (n.bx - n.sx)*easeInOut(k);
       const y = n.yA + (n.yB - n.yA)*k - 45*Math.sin(Math.PI*k);
       setT(n, x, y, n.trot + n.spin*(1 - .3*k));
       return false;
     }
-    if (n.phase === 0){ n.phase = 1; outG.appendChild(n.el); }
     const eC = eB - n.TB;
     if (eC < n.TC){
       let x, y, k;
@@ -567,8 +691,8 @@ function startApp(GOAL){
         k = clamp((y - n.yB)/(n.ty - n.yB), 0, 1);
         x = n.bx + (n.tx - n.bx)*(k*k*(3-2*k));
       }
-      const off = Math.abs(x - CX), minOff = R(y) + 20;
-      if (R(y) > 0 && off < minOff) x = CX + n.side*minOff;
+      const minOff = R(y) + 6 + 14*NOTE_S;
+      if (R(y) > 0 && Math.abs(x - CX) < minOff) x = CX + n.side*minOff;
       setT(n, x, y, n.trot + n.spin*.7*(1-k));
       return false;
     }
@@ -579,8 +703,8 @@ function startApp(GOAL){
     if (!n.landed){
       n.landed = true;
       if (n.inside){
-        const s = Math.floor(n.i / N * 10);
-        plink(penta(s));
+        const st = Math.floor(n.i / N * 10);
+        plink(penta(st));
       } else {
         plink(penta(7 + Math.floor(Math.random()*4)));
       }
@@ -591,33 +715,49 @@ function startApp(GOAL){
       setT(n, n.tx, n.ty, n.trot, 1 + .1*w, 1 - .18*w);
       return false;
     }
-    setT(n, n.tx, n.ty, n.trot);
+    n.final = true;
+    paint(n.layer === "in" ? ctxInS : ctxOutS, n, n.tx, n.ty, n.trot, 1, 1, 1);
     if (n.i === N - 1 && targetCount >= N) reachGoal();
     return true;
   }
 
-  function removeDown(count){
+  function removeDown(count, now){
+    let landedRemoved = false;
     for (let i = spawned - 1; i >= count; i--){
       const n = notes[i];
       if (!n) continue;
       notes[i] = undefined;
-      const el = n.el;
-      el.style.transition = "opacity .35s";
-      requestAnimationFrame(() => { el.style.opacity = "0"; });
-      setTimeout(() => el.remove(), 420);
+      if (n.final){ landedRemoved = true; setT(n, n.tx, n.ty, n.trot); }
+      if (fading.length < 600) fading.push({ n, t0: now });
     }
     active = active.filter(n => n.i < count);
     spawned = count;
+    if (landedRemoved) redrawStatic();
   }
 
-  const notesFor = total => Math.floor(total / GOAL * N + 1e-9);
+  function drawDynamic(now){
+    if (!active.length && !fading.length && !dynDirty) return;
+    clearCtx(ctxInD); clearCtx(ctxOutD);
+    dynDirty = active.length > 0 || fading.length > 0;
+    for (const n of active) paint(n.layer === "in" ? ctxInD : ctxOutD, n, n.x, n.y, n.rot, n.qx, n.qy, 1);
+    fading = fading.filter(f => {
+      const k = (now - f.t0) / 350;
+      if (k >= 1) return false;
+      const n = f.n;
+      paint(n.layer === "in" ? ctxInD : ctxOutD, n, n.x, n.y - 25*k, n.rot, 1, 1, 1 - k);
+      return true;
+    });
+  }
+
+  const notesFor = total => Math.floor(total / PLAN.ppnEff + 1e-9);
 
   function setTargetCount(c){
     targetCount = c;
-    if (targetCount < spawned) removeDown(targetCount);
+    if (targetCount < spawned) removeDown(targetCount, performance.now());
     if (targetCount < N && goalReached) loseGoal();
     const outstanding = targetCount - spawned;
-    if (outstanding > 0) interval = clamp(1500 / outstanding, 6, 85);
+    // small entries trickle in; big batches (or undoing a reset) finish in about 2 seconds
+    if (outstanding > 0) spawnRate = clamp(outstanding / 1.8, 12, 4000);
   }
 
   /* ---------- Sound ---------- */
@@ -768,6 +908,10 @@ function startApp(GOAL){
       }
     });
     chan.send({ type: "hello" });
+    const goFull = () => {
+      const el = document.documentElement;
+      try { const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+    };
     const hint = $("soundHint");
     hint.classList.remove("hidden");
     const enable = () => {
@@ -778,12 +922,12 @@ function startApp(GOAL){
     addEventListener("keydown", e => {
       enable();
       if (e.key === "f" || e.key === "F"){
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-        else document.exitFullscreen();
+        if (!(document.fullscreenElement || document.webkitFullscreenElement)) goFull();
+        else (document.exitFullscreen || document.webkitExitFullscreen).call(document);
       }
     });
     addEventListener("dblclick", () => {
-      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+      if (!(document.fullscreenElement || document.webkitFullscreenElement)) goFull();
     });
   }
 
@@ -838,15 +982,16 @@ function startApp(GOAL){
   let last = performance.now();
   function tick(now){
     const dt = Math.min(.05, (now - last)/1000); last = now;
-    let burst = 0;
-    while (spawned < targetCount && now >= nextSpawn && burst < 6){
-      spawnNote(spawned, now);
-      spawned++; burst++;
-      nextSpawn = Math.max(nextSpawn + interval, now - 100);
-    }
+    if (spawned < targetCount){
+      credit += spawnRate * dt;
+      let k = Math.min(Math.floor(credit), targetCount - spawned);
+      credit -= k;
+      while (k-- > 0){ spawnNote(spawned, now); spawned++; }
+    } else credit = 1;
     if (active.length){
       active = active.filter(n => !updateNote(n, now));
     }
+    drawDynamic(now);
     if (shown !== animTo){
       const k = clamp((now - animStart)/600, 0, 1);
       shown = k >= 1 ? animTo : animFrom + (animTo - animFrom)*easeOut(k);
@@ -855,6 +1000,9 @@ function startApp(GOAL){
     confettiStep(dt);
     requestAnimationFrame(tick);
   }
+  layout();
+  addEventListener("resize", layout);
+  if (window.ResizeObserver) new ResizeObserver(() => layout()).observe($("stage"));
   renderStats();
   requestAnimationFrame(tick);
 }
