@@ -144,6 +144,7 @@ svg.layer{overflow:visible}
       <input type="text" id="sMsg">
     </div>
     <div class="checks">
+      <label><input type="checkbox" id="sTotal"> Show points earned (e.g. "1,350 of 2,000")</label>
       <label><input type="checkbox" id="sPct"> Show progress percentage</label>
       <label><input type="checkbox" id="sTogo"> Show points to go</label>
       <label><input type="checkbox" id="sBonus"> Show bonus points</label>
@@ -201,7 +202,7 @@ svg.layer{overflow:visible}
   <div id="topbar">
     <h1 id="titleEl"></h1>
     <div id="stats">
-      <div class="stat total"><div class="v" id="vTotal">0</div><div class="l" id="lTotal">of 1,000</div></div>
+      <div class="stat total" id="stTotal"><div class="v" id="vTotal">0</div><div class="l" id="lTotal">of 1,000</div></div>
       <div class="stat" id="stPct"><div class="v" id="vPct">0%</div><div class="l">full</div></div>
       <div class="stat" id="stTogo"><div class="v" id="vTogo">0</div><div class="l">to go</div></div>
       <div class="stat bonus hidden" id="stBonus"><div class="v" id="vBonus">+0</div><div class="l">bonus</div></div>
@@ -398,14 +399,14 @@ else startSetup();
 function startSetup(){
   $("setup").classList.remove("hidden");
   const sTitle = $("sTitle"), sGoal = $("sGoal"), sMsg = $("sMsg");
-  const sPct = $("sPct"), sTogo = $("sTogo"), sBonus = $("sBonus"), sAdded = $("sAdded"), sLink = $("sLink");
+  const sTotal = $("sTotal"), sPct = $("sPct"), sTogo = $("sTogo"), sBonus = $("sBonus"), sAdded = $("sAdded"), sLink = $("sLink");
   sTitle.value = params.get("title") ?? DEF.title;
   sGoal.value = params.get("goal") ?? String(DEF.goal);
   sMsg.value = params.get("msg") ?? DEF.msg;
   const sPpn = $("sPpn");
   sPpn.value = params.get("ppn") || "auto";
   if (sPpn.selectedIndex < 0) sPpn.value = "auto";
-  sPct.checked = flag("pct"); sTogo.checked = flag("togo"); sBonus.checked = flag("bonus"); sAdded.checked = flag("added");
+  sTotal.checked = flag("total"); sPct.checked = flag("pct"); sTogo.checked = flag("togo"); sBonus.checked = flag("bonus"); sAdded.checked = flag("added");
 
   function buildLink(){
     const g = parseFloat(sGoal.value.replace(/,/g, ""));
@@ -415,6 +416,7 @@ function startSetup(){
     p.set("goal", String(g));
     p.set("title", sTitle.value.trim() || DEF.title);
     p.set("msg", sMsg.value.trim() || DEF.msg);
+    p.set("total", sTotal.checked ? "1" : "0");
     p.set("pct", sPct.checked ? "1" : "0");
     p.set("togo", sTogo.checked ? "1" : "0");
     p.set("bonus", sBonus.checked ? "1" : "0");
@@ -440,7 +442,7 @@ function startSetup(){
     ["copyBtn","openBtn","openBothBtn","copyDispBtn","copyCtlBtn"].forEach(id => $(id).disabled = !link);
   }
   [sTitle, sGoal, sMsg].forEach(el => el.addEventListener("input", update));
-  [sPct, sTogo, sBonus, sAdded, sPpn].forEach(el => el.addEventListener("change", update));
+  [sTotal, sPct, sTogo, sBonus, sAdded, sPpn].forEach(el => el.addEventListener("change", update));
   function copyText(text, btn){
     const label = btn.textContent;
     const done = () => { btn.textContent = "Copied!"; setTimeout(() => btn.textContent = label, 1500); };
@@ -469,13 +471,14 @@ function startSetup(){
 function startApp(GOAL){
   const TITLE = params.get("title") || DEF.title;
   const MSG = params.get("msg") || DEF.msg;
-  const SHOW_PCT = flag("pct"), SHOW_TOGO = flag("togo"), SHOW_BONUS = flag("bonus"), SHOW_ADDED = flag("added");
+  const SHOW_TOTAL = flag("total"), SHOW_PCT = flag("pct"), SHOW_TOGO = flag("togo"), SHOW_BONUS = flag("bonus"), SHOW_ADDED = flag("added");
 
   $("app").classList.remove("hidden");
   $("titleEl").textContent = TITLE;
   document.title = TITLE;
   $("lTotal").textContent = "of " + fmt(GOAL);
   $("banner").textContent = MSG;
+  if (!SHOW_TOTAL) $("stTotal").classList.add("hidden");
   if (!SHOW_PCT) $("stPct").classList.add("hidden");
   if (!SHOW_TOGO) $("stTogo").classList.add("hidden");
   const DISPLAY = MODE === "display";
