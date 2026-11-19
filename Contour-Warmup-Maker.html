@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Contour Warmup Maker</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%231c2530%22/%3E%3Cpath%20d%3D%22M10%2040%20C20%2014%2030%2014%2036%2034%20S50%2052%2056%2026%22%20fill%3D%22none%22%20stroke%3D%22%23f3f3f3%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22/%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2234%22%20r%3D%229%22%20fill%3D%22%23e8781f%22/%3E%3C/svg%3E">
 <style>
   :root {
     --page: #eceff3;
@@ -916,10 +917,22 @@ var gifenc=(()=>{var st=Object.create;var O=Object.defineProperty;var at=Object.
       const gif = GIFEncoder();
       const format = transparent ? 'rgba4444' : 'rgb565';
 
-      // Build one palette from a frame that contains every element
-      drawFrame(oc, GW, GH, state.holdStart + state.travel / 2, transparent);
-      let pix = oc.getImageData(0, 0, GW, GH).data;
-      const palette = quantize(pix, 256, transparent ? { format, oneBitAlpha: true } : { format });
+      // Build one palette that is guaranteed to see the character's colors:
+      // the start frame (character always visible there) plus the character drawn large on its own.
+      drawFrame(oc, GW, GH, 0, transparent);
+      const framePix = oc.getImageData(0, 0, GW, GH).data;
+      const sc = document.createElement('canvas');
+      const sh = 400, sw = Math.max(1, Math.round(state.img.width * sh / state.img.height));
+      sc.width = sw; sc.height = sh;
+      const scx = sc.getContext('2d', { willReadFrequently: true });
+      scx.drawImage(state.img, 0, 0, sw, sh);
+      const charPix = scx.getImageData(0, 0, sw, sh).data;
+      const sample = new Uint8ClampedArray(framePix.length + charPix.length * 4);
+      sample.set(framePix, 0);
+      // weight the character 4x so its colors win palette slots over the flat background
+      for (let r = 0; r < 4; r++) sample.set(charPix, framePix.length + r * charPix.length);
+      const palette = quantize(sample, 256, transparent ? { format, oneBitAlpha: true } : { format });
+      let pix;
       let transparentIndex = 0;
       if (transparent) {
         transparentIndex = palette.findIndex(c => c.length > 3 && c[3] === 0);
