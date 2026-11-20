@@ -463,7 +463,7 @@ function actionLabel(act, a, c) {
     zoneAdd: 'Add a zone', zoneRemove: 'Remove a zone', lockSel: 'Lock spots', unlockSel: 'Unlock spots', rotReset: 'New rotation round', rotZone: 'Rotation zone', rotServed: 'Rotation turn',
     songSave: 'Save a song', songCurrent: 'Change the current song', songDel: 'Delete a song', schedAdd: 'Schedule change', schedDel: 'Schedule change', schedF: 'Schedule change',
     wkF: 'Schedule change', wkClass: 'Schedule change', wkAdd: 'Schedule change', wkDel: 'Schedule change', impApply: 'Roster import', nyGo: 'Start a new school year',
-    addClassGo: 'Add a class', restoreVersion: 'Restore an old version', clsField: 'Class settings', clsHr: 'Class settings', clsFactor: 'Neighbor factor', clsLayout: 'Room layout',
+    addClassGo: 'Add a class', restoreVersion: 'Restore an old version', clsField: 'Class settings', clsHr: 'Class settings', clsNeighbor: 'Neighbor setting', clsLayout: 'Room layout',
     bopEnabled: 'Bop or Flop setting', bopDefault: 'Bop or Flop setting', setAuto: 'Schedule setting', setFlip: 'Schedule setting', toggleAuto: 'Schedule setting'
   };
   if (act === 'stuActive') { const st = c && studentById(c, a.dataset.id); return st ? `${nm(st.id)} ${st.active ? 'marked as left' : 'brought back'}` : 'Roster change'; }
@@ -1021,16 +1021,64 @@ async function fillSongFromLink(auto) {
 function bopActive(c) { if (!c || !c.bop || !c.bop.enabled) return false; const v = UI.bopView[c.id]; return v ? v === 'bop' : c.bop.defaultView === 'bop'; }
 
 /* ---------------- adjacency (for keep-apart rules) ---------------- */
+/* "Next to" is counted in rug squares, not screen distance (the rug is drawn in
+   perspective, so screen distance is misleading). Every rug square knows its
+   color band and row. Each chair is placed on that grid just off the edge of the
+   rug square it sits beside, and chairs next to each other in the row also count
+   as neighbors. */
+const GRIDCACHE = {};
+function layoutGrid(L) {
+  if (GRIDCACHE[L.id]) return GRIDCACHE[L.id];
+  const rug = L.spots.filter(s => !s.chair && s.band != null && s.row != null);
+  if (!rug.length) return (GRIDCACHE[L.id] = null);
+  const [AW, AH] = L.aspect;
+  const px = s => [s.x / 100 * AW, s.y / 100 * AH];
+  const at = {}; for (const s of rug) at[s.band + ',' + s.row] = s;
+  const pos = {};
+  for (const s of rug) pos[s.id] = {b: s.band, r: s.row};
+  // every grid position just off the rug's edge, with where it would appear in the picture
+  const cand = {};
+  for (const s of rug) for (const [db, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const k = (s.band + db) + ',' + (s.row + dr);
+    if (at[k]) continue;
+    const back = at[(s.band - db) + ',' + (s.row - dr)]; if (!back) continue;
+    const [x, y] = px(s), [bx, by] = px(back);
+    const e = cand[k] = cand[k] || {b: s.band + db, r: s.row + dr, x: 0, y: 0, n: 0};
+    e.x += 2 * x - bx; e.y += 2 * y - by; e.n++;
+  }
+  const cands = Object.values(cand).map(e => ({b: e.b, r: e.r, x: e.x / e.n, y: e.y / e.n}));
+  const chairs = L.spots.filter(s => s.chair).sort((a, b) => (parseInt(a.id.replace(/\D/g, '')) || 0) - (parseInt(b.id.replace(/\D/g, '')) || 0));
+  if (chairs.length && cands.length >= chairs.length) {
+    // give each chair its own edge position, closest overall
+    const cost = chairs.map(ch => { const [cx, cy] = px(ch); return cands.map(e => Math.hypot(e.x - cx, e.y - cy)); });
+    const m = hungarian(cost) || [];
+    chairs.forEach((ch, k) => { const e = cands[m[k]] || cands[0]; pos[ch.id] = {b: e.b, r: e.r, chair: k}; });
+  }
+  return (GRIDCACHE[L.id] = pos);
+}
+const NEIGHBOR_MODES = {touch: 'Touching squares, including diagonals', sides: 'Side by side and front/back only (no diagonals)', two: 'Within two squares'};
 function adjacency(c, spots) {
   const L = layoutOf(c);
-  const P = spots.map(s => [s.x / 100 * L.aspect[0], s.y / 100 * L.aspect[1]]);
-  const n = P.length;
-  if (n < 2) return {adj: P.map(() => P.map(() => false)), cutoff: 0};
-  const D = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1])));
-  const nearest = D.map((row, i) => Math.min(...row.filter((_, j) => j !== i)));
-  const sorted = nearest.slice().sort((a, b) => a - b);
-  const cutoff = sorted[Math.floor(sorted.length / 2)] * (c.neighborFactor || DEFAULT_FACTOR);
-  return {adj: D.map((row, i) => row.map((d, j) => i !== j && d <= cutoff)), cutoff};
+  const G = layoutGrid(L);
+  const n = spots.length;
+  if (!G) {   // a layout without a rug grid: fall back to screen distance
+    const P = spots.map(s => [s.x / 100 * L.aspect[0], s.y / 100 * L.aspect[1]]);
+    if (n < 2) return {adj: P.map(() => P.map(() => false))};
+    const D = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1])));
+    const nearest = D.map((row, i) => Math.min(...row.filter((_, j) => j !== i)));
+    const cut = nearest.slice().sort((a, b) => a - b)[Math.floor(n / 2)] * DEFAULT_FACTOR;
+    return {adj: D.map((row, i) => row.map((d, j) => i !== j && d <= cut))};
+  }
+  const mode = NEIGHBOR_MODES[c.neighborMode] ? c.neighborMode : 'touch';
+  const reach = mode === 'two' ? 2 : 1;
+  const g = spots.map(s => G[s.id] || null);
+  const adj = g.map((a, i) => g.map((b, j) => {
+    if (i === j || !a || !b) return false;
+    if (a.chair != null && b.chair != null && Math.abs(a.chair - b.chair) === 1) return true;
+    const db = Math.abs(a.b - b.b), dr = Math.abs(a.r - b.r);
+    return mode === 'sides' ? db + dr <= reach : Math.max(db, dr) <= reach;
+  }));
+  return {adj};
 }
 function nbSet(c) {
   if (UI.tool !== 'neighbors' || !UI.nbSpot) return null;
@@ -1303,7 +1351,7 @@ function renderHome() {
     }
     html += `</div></div>`;
   }
-  html += `<div class="row editor-only" style="margin-top:8px"><button class="tb" data-act="addClass">Add a class</button><button class="tb" data-act="importRoster">Import Aspen roster</button><button class="tb" data-act="weekly">Weekly schedule</button></div>`;
+  html += `<div class="row editor-only" style="margin-top:8px"><button class="tb" data-act="addClass">Add a class</button><button class="tb" data-act="importRoster">Import Aspen roster</button><button class="tb" data-act="slidesImport">Import from Google Slides</button><button class="tb" data-act="weekly">Weekly schedule</button></div>`;
   h.innerHTML = html;
   for (const t of $$('[data-thumb]', h)) {
     const c = getClass(t.dataset.thumb);
@@ -1545,7 +1593,7 @@ function drSpots(c) {
       <div class="field"><label>Zone name</label><input class="inp" id="zoneName" list="zoneList" placeholder="e.g. chairs, front, back"><datalist id="zoneList">${Object.keys(zones).map(z => `<option value="${esc(z)}">`).join('')}<option value="front"><option value="back"><option value="chairs"></datalist></div>
       <div class="row"><button class="btn" data-act="zoneAdd" ${selN ? '' : 'disabled'}>Add zone</button><button class="btn" data-act="zoneRemove" ${selN ? '' : 'disabled'}>Remove zone</button><button class="btn" data-act="lockSel" ${selN ? '' : 'disabled'}>Lock</button><button class="btn" data-act="unlockSel" ${selN ? '' : 'disabled'}>Unlock</button><button class="btn sm" data-act="clearSel" ${selN ? '' : 'disabled'}>Clear selection</button></div>
       <p class="note">A locked spot keeps whoever is in it through every shuffle. Unlocking leaves zones alone.</p></div>` : ''}
-    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot at factor ${c.neighborFactor}. Change the factor in Settings.</p></div>` : ''}
+    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot. Next to means: ${esc(NEIGHBOR_MODES[c.neighborMode] || NEIGHBOR_MODES.touch).toLowerCase()} (change in Settings).</p></div>` : ''}
     <div class="dsec"><h3>Zones</h3>${Object.keys(zones).length ? `<div class="chips">${Object.entries(zones).map(([z, n]) => `<span class="zchip">${esc(z)}: ${n}</span>`).join('')}</div>` : '<p class="note">No zones yet.</p>'}
     <p class="note">${locked} locked spot${locked === 1 ? '' : 's'}.</p></div>`;
 }
@@ -1686,7 +1734,7 @@ function drSettings(c) {
       <div class="field" style="width:90px"><label>Grade</label><select class="inp" data-act="clsField" data-f="grade">${['K', '1', '2', '3', '4', '5'].map(g => `<option ${c.grade === g ? 'selected' : ''}>${g}</option>`).join('')}</select></div></div>
     <div class="field"><label>Aspen homeroom teacher(s), comma separated</label><input class="inp" data-act="clsHr" value="${esc((c.hrKeys || []).join(', '))}"><span class="small muted">Matches the "HR Teacher" column, last names only.</span></div>
     <div class="field"><label>Caption under the rug (optional)</label><input class="inp" data-act="clsField" data-f="caption" value="${esc(c.caption)}"></div>
-    <div class="field"><label>Neighbor factor (keep-apart reach): ${c.neighborFactor}</label><input type="range" min="1.1" max="3.5" step="0.1" value="${c.neighborFactor}" data-act="clsFactor"><span class="small muted">Higher means "next to" reaches farther. Use Spots, Show neighbors to check.</span></div></div>
+    <div class="field"><label>For "not next to" rules, next to means</label><select class="inp" data-act="clsNeighbor">${Object.entries(NEIGHBOR_MODES).map(([k, v]) => `<option value="${k}" ${(c.neighborMode || 'touch') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="small muted">Counted in rug squares. A chair counts as next to the chairs beside it and the rug squares in front of it. Check with Spots, Show neighbors.</span></div></div>
     <div class="dsec"><h3>Schedule</h3>
       ${c.schedule.map((s, i) => `<div class="row" style="margin-bottom:6px"><select class="inp" data-act="schedF" data-i="${i}" data-f="day">${[1, 2, 3, 4, 5].map(d => `<option value="${d}" ${s.day === d ? 'selected' : ''}>${DAYS_LONG[d]}</option>`).join('')}</select>
         <input class="inp" type="time" data-act="schedF" data-i="${i}" data-f="start" value="${s.start}"> to <input class="inp" type="time" data-act="schedF" data-i="${i}" data-f="end" value="${s.end}"><button class="btn sm danger" data-act="schedDel" data-i="${i}">&times;</button></div>`).join('') || '<p class="note">Not scheduled.</p>'}
@@ -1720,7 +1768,20 @@ function splitName(full) {
 const teacherKey = t => norm(String(t).split(',')[0]).replace(/^(mrs?|ms|dr)\.?\s+/, '');
 
 let IMPORT = null;
-function startImport() { $('#csvInput').value = ''; $('#csvInput').click(); }
+function startImport() {
+  openModal('Import Aspen roster', `
+    <p>Export your students from Aspen as a <b>CSV file</b> with these columns. The order doesn't matter, and a header row is needed (Aspen adds one).</p>
+    <table class="t" style="margin:8px 0 12px"><thead><tr><th>Column</th><th></th><th>What it's for</th></tr></thead><tbody>
+      <tr><td><b>Name</b></td><td><span class="pill warn" style="background:#fde8e7;color:#7a1b13">required</span></td><td>As "Last, First". Middle names and Jr. are handled.</td></tr>
+      <tr><td><b>HR Teacher</b></td><td><span class="pill warn" style="background:#fde8e7;color:#7a1b13">required</span></td><td>Puts each student in the right class. "Brady, D" works.</td></tr>
+      <tr><td><b>LASID</b> (or Student ID)</td><td><span class="pill" style="background:#fef3c7;color:#6b4407">strongly recommended</span></td><td>Recognizes the same student next year, even if a name changes. Rules and preferred names follow it.</td></tr>
+      <tr><td><b>Grade</b></td><td><span class="pill" style="background:#e8e6e1;color:#4b5260">optional</span></td><td>Fills in the grade when you create a new class during the import.</td></tr>
+      <tr><td><b>School</b></td><td><span class="pill" style="background:#e8e6e1;color:#4b5260">not needed</span></td><td>Only helps if two of your teachers ever share a last name.</td></tr>
+    </tbody></table>
+    <div class="msg info" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px">"Name","LASID","Grade","HR Teacher"<br>"Sample, Student","30000000","02","Teacher, A"</div>
+    <p class="note">One file can cover both schools. Homerooms you don't teach are skipped automatically. Nothing changes until you review the matches and click Apply, and the file is read only on this computer.</p>`,
+    `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="impChoose">Choose CSV file</button>`);
+}
 function schoolCodes() { return [...new Set([...(DATA.settings.schools || []), ...DATA.classes.map(c => c.school)])].filter(Boolean); }
 function schoolInitials(raw) { const w = String(raw).split(/\s+/).filter(x => x && !/^(elementary|the|of|and)$/i.test(x)); return w.map(x => x[0]).join('').toUpperCase(); }
 function guessSchool(raw) {
@@ -2349,7 +2410,7 @@ function schoolMenu() {
       <p class="note">This PC checks for changes every 90 seconds and whenever the app comes back on screen. Its own changes are sent within a few seconds.</p></div>
     ${DATA ? `<div class="dsec"><h3>Schedule</h3><label class="row"><input type="checkbox" data-act="setAuto" ${s.autoSchedule ? 'checked' : ''}> Show the scheduled class automatically</label>
       <div class="row" style="margin-top:6px">Switch to the next class <input class="inp" type="number" min="0" max="30" style="width:60px" data-act="setFlip" value="${s.flipMinutes}"> minutes before it starts</div>
-      <div class="row editor-only" style="margin-top:8px"><button class="btn" data-act="weekly">Weekly schedule</button><button class="btn" data-act="importRoster">Import Aspen roster</button></div></div>` : ''}
+      <div class="row editor-only" style="margin-top:8px"><button class="btn" data-act="weekly">Weekly schedule</button><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="slidesImport">Import from Google Slides</button></div></div>` : ''}
     <div class="dsec"><h3>Keys</h3><p class="note">Page Down, Right or Down: next class (or next Bop or Flop step). Page Up, Left or Up: back. F: full screen. B: switch chart and Bop or Flop views. Esc: leave full screen.</p></div>
     <div class="dsec"><h3>Stop</h3><button class="btn danger" data-act="vsRemove">Remove the setup from this PC</button><p class="note">Deletes the seating data from this browser. The shared copy and your Mac are not affected.</p></div>`,
     `<button class="btn" data-act="closeModal">Done</button>`);
@@ -2513,6 +2574,7 @@ document.addEventListener('click', async (e) => {
     }
     case 'printRoster': printRoster(c); break;
     case 'impUndo': impUndo(); break;
+    case 'impChoose': $('#csvInput').value = ''; $('#csvInput').click(); break;
     case 'slidesImport': closeModal(); slidesImportDialog(); break;
     case 'slRead': await slidesRead(); break;
     case 'slApply': slidesApply(); break;
@@ -2613,7 +2675,7 @@ document.addEventListener('change', (e) => {
     case 'bopDefault': c.bop.defaultView = a.checked ? 'bop' : 'chart'; delete UI.bopView[c.id]; save(); renderClass(); break;
     case 'clsField': c[a.dataset.f] = a.value; save(); renderClass(); break;
     case 'clsHr': c.hrKeys = a.value.split(',').map(x => x.trim()).filter(Boolean); save(); break;
-    case 'clsFactor': c.neighborFactor = Number(a.value); save(); renderDrawer(); renderStageArea(); break;
+    case 'clsNeighbor': c.neighborMode = a.value; save(); renderDrawer(); renderStageArea(); break;
     case 'schedF': { const s = c.schedule[Number(a.dataset.i)]; s[a.dataset.f] = a.dataset.f === 'day' ? Number(a.value) : a.value; c.schedule.sort((x, y) => x.day - y.day || x.start.localeCompare(y.start)); save(); renderDrawer(); break; }
     case 'clsLayout': {
       if (!confirm('Change the room layout? This class\'s spots, zones and current seating will be cleared. History stays.')) { a.value = c.layout; return; }
