@@ -2498,7 +2498,7 @@ function conductorArc(r,t){
     const x=EDGE_L+(cellX(r,r.first)-EDGE_L)*tIn;
     const qFrac=(r.cellBeat[1]-r.cellBeat[0]);
     const arcH=Math.max(cellLift(r,r.first)+20*K,Math.max(9*K,Math.min(80*K,Math.round(60*K*qFrac))));
-    return{x,arcY:-Math.round(arcH*Math.cos(tIn*Math.PI/2)),tInSpan:tIn,tX:tIn,landedCell:null,nextCell:r.first,landFrac:0,sinkFrac:0,spanBeats:0,holding:false};
+    return{x,arcH,arcY:-Math.round(arcH*Math.cos(tIn*Math.PI/2)),tInSpan:tIn,tX:tIn,landedCell:null,nextCell:r.first,landFrac:0,sinkFrac:0,spanBeats:0,holding:false};
   }
   const g=beatAt(t),frac=cellFrac(r,g);
   let prev=null,next=null;
@@ -2532,7 +2532,7 @@ function conductorArc(r,t){
   const arcY=-Math.round(arcH*Math.sin(tIn*Math.PI));
   const since=t-tPrev;
   const landFrac=Math.max(0,1-since/0.14),sinkFrac=Math.max(0,1-since/0.18);
-  return{x,arcY,tInSpan:tIn,tX,landedCell:prev,nextCell:next,landFrac,sinkFrac,spanBeats,holding,since,toLaunch:tLaunch===null?1:tLaunch-t};
+  return{x,arcH,arcY,tInSpan:tIn,tX,landedCell:prev,nextCell:next,landFrac,sinkFrac,spanBeats,holding,since,toLaunch:tLaunch===null?1:tLaunch-t};
 }
 function pickFrame(arc,entryFirst){
   if(entryFirst)return 7;
@@ -2957,6 +2957,7 @@ function getLayoutW(n,avail,spread=0){
   return{symSize:sym,gap};
 }
 let SP=null,SP_KEY='';
+const STRIP_HOP=24;   // room kept above the standing conductor for hops (base px); higher hops get flattened to fit
 function stripPlan(){
   const h=stripH(),key=[h,TL.R.length,TL.end,S.notation,S.syl,TL.R.map(r=>r.cells+':'+r.t0).join(',')].join('|');
   if(SP&&SP_KEY===key&&SP.TL===TL)return SP;
@@ -2971,7 +2972,7 @@ function stripPlan(){
     for(const r of rows){
       const sym=r.layout.symSize;let st=1;for(let c=0;c<r.cells;c++)st=Math.max(st,noteKeys(r.sec,c).length);
       const lift=stackLift(st,sym);
-      tp=Math.min(tp,-sym/2-lift-COND_H+FOOT-80*K, S.notation?-STICK_H-6:0, -sym/2-SUST_H-8*K-80);
+      tp=Math.min(tp,-sym/2-lift-COND_H+FOOT-STRIP_HOP, S.notation?-STICK_H-6:0, -sym/2-SUST_H-8*K-80);
       const sy=Math.max(22,Math.min(50,Math.round(sym*0.42)));
       bt=Math.max(bt,S.syl?sym/2+18+sy*1.1:sym/2+SH_DY+SH_INSTR);
     }
@@ -2980,7 +2981,7 @@ function stripPlan(){
   let s=0.6,rows=sizeFor(s);
   for(let i=0;i<4;i++){[top,bot]=extent(rows);const ns=Math.min(1,(h-14)/(bot-top));if(Math.abs(ns-s)<0.002){s=ns;break;}s=ns;rows=sizeFor(s);}
   rows=sizeFor(s);[top,bot]=extent(rows);
-  const rowYpx=h-7-bot*s;
+  const rowYpx=h-7-bot*s,topLimit=-(rowYpx-4)/s;
   // fades between sequences on the single row
   const fin=rows.map(()=>null),fout=rows.map(()=>null),hideAt=rows.map(()=>Infinity),showAt=rows.map(()=>-Infinity);
   for(let k=0;k+1<rows.length;k++){
@@ -2998,7 +2999,7 @@ function stripPlan(){
       fin[k+1]=[is,ie];
     }
   }
-  SP={TL,s,rows,rowYpx,fin,fout,hideAt,showAt,h,edgeL:W/2-(W/2)/s-COND_W/2,edgeR:W/2+(W/2)/s+COND_W/2};SP_KEY=key;
+  SP={TL,s,rows,rowYpx,topLimit,fin,fout,hideAt,showAt,h,edgeL:W/2-(W/2)/s-COND_W/2,edgeR:W/2+(W/2)/s+COND_W/2};SP_KEY=key;
   return SP;
 }
 function ramp(t,w,up){if(!w)return 1;const p=Math.max(0,Math.min(1,(t-w[0])/Math.max(w[1]-w[0],1e-6)));return up?p:1-p;}
@@ -3009,9 +3010,16 @@ function stripAlpha(P,k,t){
   if(P.fout[k])a=Math.min(a,ramp(t,P.fout[k],false));
   return a;
 }
-function drawStripRow(c,r,t,a){
+function drawStripRow(c,r,t,a,topLimit){
   const live=t>=r.tEntry&&t<=r.t1+0.05;
-  const arc=live?conductorArc(r,t):null,sst=live?sustainState(r,t):null;
+  let arc=live?conductorArc(r,t):null;
+  if(arc&&arc.arcH>0){
+    // never let him leave the top of the strip: flatten the hop just enough
+    const lift=Math.max(cellLift(r,arc.landedCell),cellLift(r,arc.nextCell));
+    const standTop=-r.layout.symSize/2-lift-COND_H+FOOT,room=standTop-topLimit;
+    const k=Math.max(0,Math.min(1,room/arc.arcH));if(k<1)arc={...arc,arcY:arc.arcY*k};
+  }
+  const sst=live?sustainState(r,t):null;
   const frac=r.first!==null&&t>=r.tFirst?cellFrac(r,beatAt(t)):null;
   const rollHide=new Set(),spA=new Map();
   if(frac!==null){
@@ -3036,7 +3044,7 @@ function drawFCStrip(c,vt,still){
   let owner=-1;
   P.rows.forEach((r,k)=>{
     const a=stripAlpha(P,k,t),live=t>=r.tEntry&&t<=r.t1+0.05;
-    if(a>0.001||live)drawStripRow(c,r,t,a);
+    if(a>0.001||live)drawStripRow(c,r,t,a,P.topLimit);
     if(a>0.5&&(owner<0||t>=r.t0-0.3))owner=k;
   });
   c.restore();EDGE_L=oL;EDGE_R=oR;
