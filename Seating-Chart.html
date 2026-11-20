@@ -35,7 +35,7 @@ input,select,textarea{font:inherit}
 #status.warn{border-color:#8a6116;color:#f6d38b}
 #status.bad{border-color:#8f2a22;color:#f4b0aa}
 body.viewer .editor-only{display:none!important}
-body.viewer [data-act="importRoster"],body.viewer [data-act="addClass"],body.viewer [data-act="newYear"],body.viewer [data-act="weekly"],body.viewer [data-act="deleteClass"],body.viewer [data-act="addStudent"]{display:none!important}
+body.viewer [data-act="importRoster"],body.viewer [data-act="slidesImport"],body.viewer [data-act="addClass"],body.viewer [data-act="newYear"],body.viewer [data-act="weekly"],body.viewer [data-act="deleteClass"],body.viewer [data-act="addStudent"]{display:none!important}
 #viewBanner{background:#0f766e;color:#fff;text-align:center;font-size:13px;padding:5px;font-weight:600}
 body.viewer.vtemp #viewBanner{background:#b45309}
 body.viewer #main{top:73px}
@@ -423,6 +423,7 @@ let saveTimer = null;
    Every saved change keeps a snapshot of the data from just before it.
    Undo puts that snapshot back (and it syncs like any other change). */
 const NOUNDO = {};
+const UNDO_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:-3px"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
 const UNDO = {stack: [], redo: [], last: null, ref: null, label: null};
 function undoPrime(label) {
   if (!DATA || DEMO) return;
@@ -458,7 +459,7 @@ function redo() {
 function actionLabel(act, a, c) {
   const nm = id => (c && displayNames(c)[id]) || 'a student';
   const L = {
-    shuffle: 'Shuffle', addStudent: 'Add a student', ruleAdd: 'Add a rule', ruleDel: 'Remove a rule', bankOk: 'Approve a rule', bankOkAll: 'Approve rules', bankNo: 'Dismiss a rule',
+    shuffle: 'Shuffle', slApply: 'Import from Google Slides', addStudent: 'Add a student', ruleAdd: 'Add a rule', ruleDel: 'Remove a rule', bankOk: 'Approve a rule', bankOkAll: 'Approve rules', bankNo: 'Dismiss a rule',
     zoneAdd: 'Add a zone', zoneRemove: 'Remove a zone', lockSel: 'Lock spots', unlockSel: 'Unlock spots', rotReset: 'New rotation round', rotZone: 'Rotation zone', rotServed: 'Rotation turn',
     songSave: 'Save a song', songCurrent: 'Change the current song', songDel: 'Delete a song', schedAdd: 'Schedule change', schedDel: 'Schedule change', schedF: 'Schedule change',
     wkF: 'Schedule change', wkClass: 'Schedule change', wkAdd: 'Schedule change', wkDel: 'Schedule change', impApply: 'Roster import', nyGo: 'Start a new school year',
@@ -1769,7 +1770,7 @@ async function onCSV(file) {
     g.list.push(p);
     if (gi >= 0) { const gr = aspenGrade(r[gi]); if (gr) g.grades[gr] = (g.grades[gr] || 0) + 1; }
   }
-  IMPORT = {groups: byT, map: {}, school: {}, newCls: {}, plans: {}, temp: {}, hasId: ii >= 0, hasSchool: si >= 0};
+  IMPORT = {groups: byT, map: {}, school: {}, newCls: {}, plans: {}, temp: {}, hasId: ii >= 0, hasSchool: si >= 0, manual: {}, leave: {}, hist: []};
   for (const k in byT) {
     const g = byT[k];
     const code = guessSchool(g.schoolRaw);
@@ -1820,11 +1821,21 @@ function buildPlans() {
       const cands = plan.roster.filter(r => !used.has(r.key) && (norm(r.first) === f || norm(r.given) === norm(cn)) && (!rest || norm(r.last).startsWith(norm(rest))));
       if (cands.length === 1) link(s, cands[0]);
     }
+    // your own picks win over anything automatic
+    plan.picked = {};
+    const man = IMPORT.manual[cid] || {};
+    for (const sid in man) {
+      const v = man[sid];
+      if (v && v !== '__left') { for (const o in plan.links) if (plan.links[o] === v) delete plan.links[o]; plan.links[sid] = v; }
+      else delete plan.links[sid];
+      plan.picked[sid] = true;
+    }
+    used.clear(); for (const v of Object.values(plan.links)) used.add(v);
     // 4. nicknames: a chart name that shares its first three letters with exactly one leftover roster name (Gabi / Gabriella)
     plan.guess = {};
     const near = (a, b) => { a = norm(a).replace(/[^a-z]/g, ''); b = norm(b).replace(/[^a-z]/g, ''); return a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a) || (a.length >= 3 && b.length >= 3 && a.slice(0, 3) === b.slice(0, 3))); };
     for (let round = 0; round < 3; round++) {
-      const open = c.students.filter(s => s.active && !s.linked && !plan.links[s.id]);
+      const open = c.students.filter(s => s.active && !s.linked && !plan.links[s.id] && !plan.picked[s.id]);
       const free = plan.roster.filter(r => !used.has(r.key));
       let changed = false;
       for (const s of open) {
@@ -1836,13 +1847,25 @@ function buildPlans() {
         link(s, cands[0]); plan.guess[s.id] = true; changed = true;
       }
       // 5. one chart name left and one roster name left: they belong together
-      const open2 = c.students.filter(s => s.active && !s.linked && !plan.links[s.id]);
+      const open2 = c.students.filter(s => s.active && !s.linked && !plan.links[s.id] && !plan.picked[s.id]);
       const free2 = plan.roster.filter(r => !used.has(r.key));
       if (open2.length === 1 && free2.length === 1) { link(open2[0], free2[0]); plan.guess[open2[0].id] = true; changed = true; }
       if (!changed) break;
     }
     for (const s of c.students) if (s.active && s.linked && !plan.links[s.id]) plan.leaving[s.id] = true;
+    for (const sid in man) if (man[sid] === '__left') plan.leaving[sid] = true;
+    const lv = IMPORT.leave[cid] || {};
+    for (const sid in lv) plan.leaving[sid] = lv[sid];
   }
+}
+function impSnap() {
+  IMPORT.hist.push(JSON.stringify({manual: IMPORT.manual, leave: IMPORT.leave, map: IMPORT.map, newCls: IMPORT.newCls, school: IMPORT.school}));
+  if (IMPORT.hist.length > 60) IMPORT.hist.shift();
+}
+function impUndo() {
+  const h = IMPORT && IMPORT.hist.pop(); if (!h) return;
+  Object.assign(IMPORT, JSON.parse(h));
+  buildPlans(); showImport();
 }
 function showImport() {
   const tKeys = Object.keys(IMPORT.groups).sort((a, b) => (IMPORT.school[a] || '').localeCompare(IMPORT.school[b] || '') || IMPORT.groups[a].label.localeCompare(IMPORT.groups[b].label));
@@ -1875,23 +1898,25 @@ function showImport() {
     const linkedKeys = new Set(Object.values(plan.links));
     const freeRoster = plan.roster.filter(r => !linkedKeys.has(r.key));
     const returning = freeRoster.filter(r => findPerson(r, c.school));
-    const unresolved = c.students.filter(s => s.active && !plan.links[s.id] && !s.linked);
-    const auto = c.students.filter(s => plan.links[s.id] && !(plan.guess || {})[s.id]);
-    const guessed = c.students.filter(s => plan.links[s.id] && (plan.guess || {})[s.id]);
+    const pk = plan.picked || {};
+    const unresolved = c.students.filter(s => s.active && !plan.links[s.id] && !s.linked && !pk[s.id]);
+    const toMatch = c.students.filter(s => s.active && !s.linked && (pk[s.id] || (!plan.links[s.id] && !(plan.guess || {})[s.id])));
+    const auto = c.students.filter(s => plan.links[s.id] && !(plan.guess || {})[s.id] && !(pk[s.id] && !s.linked));
+    const guessed = c.students.filter(s => plan.links[s.id] && (plan.guess || {})[s.id] && !pk[s.id]);
     const leaving = c.students.filter(s => s.active && s.linked && !plan.links[s.id]);
     const rosterOpt = (sid) => { const cur = plan.links[sid]; return plan.roster.filter(r => !linkedKeys.has(r.key) || r.key === cur).sort((a, b) => a.first.localeCompare(b.first)).map(r => `<option value="${esc(r.key)}" ${r.key === cur ? 'selected' : ''}>${esc(r.given)} ${esc(r.last)}</option>`).join(''); };
     const noMatch = (sid) => `<option value="">Keep on the chart, not linked yet</option><option value="__left" ${plan.leaving[sid] && !plan.links[sid] ? 'selected' : ''}>Not in this class anymore (mark as left)</option>`;
     const warn = unresolved.length || freeRoster.length || leaving.length || guessed.length;
     html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)}${c.id.startsWith('new:') ? ' <span class="pill now">new class</span>' : ''} - ${auto.length} matched${guessed.length ? `, <span style="color:var(--warn)">${guessed.length} to check</span>` : ''}${unresolved.length ? `, <span style="color:var(--warn)">${unresolved.length} need a match</span>` : ''}${freeRoster.length ? `, ${freeRoster.length} new` : ''}${leaving.length ? `, ${leaving.length} not in file` : ''}</summary><div class="inner">`;
     if (guessed.length) html += `<h4 style="margin:6px 0">Best guesses - check these</h4><p class="note">Probably nicknames. Change any that are wrong.</p><table class="t"><tbody>${guessed.map(s => `<tr><td><b>${esc(names[s.id])}</b></td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
-    if (unresolved.length) html += `<h4 style="margin:6px 0">Chart names that need a match</h4><p class="note">Usually a nickname. Pick the roster name it belongs to.</p><table class="t"><tbody>${unresolved.map(s => `<tr><td><b>${esc(names[s.id])}</b></td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
+    if (toMatch.length) html += `<h4 style="margin:6px 0">Chart names that need a match</h4><p class="note">Usually a nickname. Pick the roster name it belongs to. Picks stay here so you can change them; Undo steps back.</p><table class="t"><tbody>${toMatch.map(s => `<tr${pk[s.id] ? ' style="background:#eef6ee"' : ''}><td><b>${esc(names[s.id])}</b>${pk[s.id] ? ' <span class="small muted">picked</span>' : ''}</td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table>`;
     if (freeRoster.length) html += `<h4 style="margin:10px 0 6px">New to this class (added as Not seated)</h4><div class="small">${freeRoster.map(r => esc(r.given + ' ' + r.last)).join(', ')}</div>${returning.length ? `<div class="small muted" style="margin-top:4px">${returning.length} of them were here in an earlier year. Their preferred names come back, and any rules from earlier years wait in Rules for your OK.</div>` : ''}`;
     if (leaving.length) html += `<h4 style="margin:10px 0 6px">On the chart but not in the file</h4>${leaving.map(s => `<label class="row small"><input type="checkbox" data-act="impLeave" data-c="${cid}" data-s="${s.id}" ${plan.leaving[s.id] ? 'checked' : ''}> Mark ${esc(names[s.id])} as left</label>`).join('')}`;
     if (auto.length) html += `<details style="margin-top:8px"><summary class="small">Matched (${auto.length})</summary><table class="t"><tbody>${auto.map(s => `<tr><td>${esc(names[s.id])}</td><td><select class="inp" data-act="impLink" data-c="${cid}" data-s="${s.id}">${noMatch(s.id)}${rosterOpt(s.id)}</select></td></tr>`).join('')}</tbody></table></details>`;
     html += `</div></details>`;
   }
   const keep = $('#mBody') && !$('#modalBack').classList.contains('hidden') ? $('#mBody').scrollTop : 0;
-  openModal('Import Aspen roster', html, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="impApply">Apply</button>`);
+  openModal('Import Aspen roster', html, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn" data-act="impUndo" ${IMPORT.hist.length ? '' : 'disabled'} title="Undo your last change here (Ctrl+Z / Cmd+Z)">${UNDO_SVG} Undo</button><button class="btn primary" data-act="impApply">Apply</button>`);
   $('#mBody').scrollTop = keep;
 }
 
@@ -1960,6 +1985,208 @@ function applyImport() {
   }
   closeModal(); save(); renderAll();
   toast(`Roster applied: ${linked} matched, ${added} added${back ? ` (${back} returning)` : ''}, ${left} marked as left.`);
+}
+
+/* ---------------- import from the Google Slides shuffler ----------------
+   Reads the file(s) made by Seating > Export for web app. Seats are matched to
+   the nearest rug square or chair, names to this class's students, and the
+   Slides chart becomes the current version. Rules, rotation turns, zones and
+   locks come along. Nothing changes until Apply. */
+let SLX = null;
+const titleKey = t => norm(t).replace(/[–—-]+/g, '-').replace(/\s*-\s*/g, ' - ').replace(/[’']/g, '');
+function slidesImportDialog() {
+  openModal('Import from Google Slides', `
+    <p class="note">In each Slides deck (SRS, EWS and the Bop or Flop deck), choose <b>Seating > Export for web app</b> and download the file. Then pick all of them here at once.</p>
+    <div class="field"><label>Exported files</label><input type="file" id="slFiles" accept=".json,application/json" multiple></div>
+    <div class="field"><label>Or paste exported text (from the "Download not working?" box)</label><textarea class="code" id="slPaste" rows="3" placeholder='{"app":"seating-slides-export",...}'></textarea></div>
+    <p class="note">The Slides chart becomes the current version of each class. Rules, rotation turns, zones and locks come along. You get a review screen before anything changes.</p>`,
+    `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="slRead">Continue</button>`);
+}
+async function slidesRead() {
+  const texts = [];
+  for (const f of ($('#slFiles').files || [])) texts.push({name: f.name, text: await f.text()});
+  if ($('#slPaste').value.trim()) texts.push({name: 'pasted text', text: $('#slPaste').value.trim()});
+  if (!texts.length) { alert('Choose the exported file(s) or paste the text first.'); return; }
+  const byKey = {}; const decks = [];
+  for (const x of texts) {
+    let d; try { d = JSON.parse(x.text); } catch (e) { alert(`${x.name} is not an export file.`); return; }
+    if (!d || d.app !== 'seating-slides-export' || !Array.isArray(d.charts)) { alert(`${x.name} is not a Seating > Export for web app file.`); return; }
+    decks.push(d.deck || x.name);
+    for (const ch of d.charts) {
+      ch.deck = d.deck || x.name; ch.key = titleKey(ch.title);
+      const prev = byKey[ch.key];
+      if (!prev) { byKey[ch.key] = ch; continue; }
+      // the same class in two decks (grade 5): newest chart wins, rules from both
+      const newer = (ch.v || 0) > (prev.v || 0) || ((ch.v || 0) === (prev.v || 0) && (ch.date || '') > (prev.date || ''));
+      const keep = newer ? ch : prev, other = newer ? prev : ch;
+      keep.extraRules = [...(keep.extraRules || []), other.rules, ...(other.extraRules || [])];
+      keep.alsoIn = [...(keep.alsoIn || []), other.deck];
+      if (!keep.rotation && other.rotation) keep.rotation = other.rotation;
+      byKey[ch.key] = keep;
+    }
+  }
+  SLX = {charts: Object.values(byKey), decks, map: {}, pick: {}, shown: {}};
+  for (const ch of SLX.charts) {
+    let c = DATA.classes.find(c => titleKey(c.title) === ch.key);
+    if (!c) {   // fall back to the teacher's last name plus grade
+      const last = ch.key.split(' ').pop(), g = (ch.title.match(/grade\s+(\w)/i) || [])[1];
+      const hits = DATA.classes.filter(c => titleKey(c.title).split(' ').pop() === last && (!g || c.grade === g.toUpperCase()));
+      if (hits.length === 1) c = hits[0];
+    }
+    SLX.map[ch.key] = c ? c.id : '';
+  }
+  slidesPlan(); slidesShow();
+}
+/* Hungarian algorithm: rows (seats) to columns (spots), lowest total distance */
+function hungarian(cost) {
+  const n = cost.length, m = cost[0] ? cost[0].length : 0;
+  if (!n || !m || n > m) return null;
+  const INF = 1e18, u = new Array(n + 1).fill(0), v = new Array(m + 1).fill(0), p = new Array(m + 1).fill(0), way = new Array(m + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i; let j0 = 0; const minv = new Array(m + 1).fill(INF), used = new Array(m + 1).fill(false);
+    do {
+      used[j0] = true; const i0 = p[j0]; let delta = INF, j1 = 0;
+      for (let j = 1; j <= m; j++) if (!used[j]) {
+        const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+        if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+        if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+      }
+      for (let j = 0; j <= m; j++) { if (used[j]) { u[p[j]] += delta; v[j] -= delta; } else minv[j] -= delta; }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+  }
+  const out = new Array(n).fill(-1);
+  for (let j = 1; j <= m; j++) if (p[j]) out[p[j] - 1] = j - 1;
+  return out;
+}
+function slidesMatchName(c, t, used) {
+  const n = norm(t), names = displayNames(c);
+  const pool = c.students.filter(s => !used.has(s.id));
+  const ini = t.trim().match(/^(\S+)\s+([A-Za-z])\.?$/);
+  const tests = [
+    s => norm(names[s.id]) === n, s => norm(s.chartName || '') === n, s => norm(s.preferred || '') === n,
+    s => norm(`${s.first} ${s.last || ''}`) === n,
+    s => !!ini && norm(s.first) === norm(ini[1]) && norm(s.last || '').startsWith(norm(ini[2])),
+    s => norm(s.first) === n || norm(s.given || '') === n
+  ];
+  for (const f of tests) {
+    const hits = pool.filter(f);
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) { const act = hits.filter(s => s.active); if (act.length === 1) return act[0]; }
+  }
+  return null;
+}
+function slidesPlan() {
+  SLX.plans = {};
+  for (const ch of SLX.charts) {
+    const cid = SLX.map[ch.key]; if (!cid) continue;
+    const c = getClass(cid), L = layoutOf(c);
+    const [AW, AH] = L.aspect;
+    const seats = ch.seats || [];
+    const cost = seats.map(p => L.spots.map(g => Math.hypot((p.x * 100 - g.x) * AW / 100, (p.y * 100 - g.y) * AH / 100)));
+    const spotOf = hungarian(cost) || [];
+    let worst = 0; seats.forEach((p, i) => { if (spotOf[i] >= 0) worst = Math.max(worst, cost[i][spotOf[i]] / AW * 100); });
+    // names
+    const used = new Set(), seatStu = {}, unresolved = [];
+    const picks = SLX.pick[cid] || {};
+    seats.forEach((p, i) => { if (p.t && picks[norm(p.t)] !== undefined) { const v = picks[norm(p.t)]; if (v && v !== '__new' && v !== '__skip') { seatStu[i] = v; used.add(v); } } });
+    seats.forEach((p, i) => {
+      if (!p.t || picks[norm(p.t)] !== undefined) return;
+      const st = slidesMatchName(c, p.t, used);
+      if (st) { seatStu[i] = st.id; used.add(st.id); } else unresolved.push(p.t);
+    });
+    for (const p of seats) if (p.t && (unresolved.includes(p.t) || picks[norm(p.t)] !== undefined)) SLX.shown[cid + '|' + norm(p.t)] = true;
+    const nameToId = {}; seats.forEach((p, i) => { if (p.t && seatStu[i]) nameToId[norm(p.t)] = seatStu[i]; });
+    const allRules = [ch.rules || {}, ...(ch.extraRules || [])];
+    const okRules = new Set(), badRules = new Set();
+    for (const r of allRules) {
+      for (const [kind, list] of [['must', r.must || []], ['never', r.never || []]]) for (const x of list) (nameToId[norm(x.s)] ? okRules : badRules).add(kind + '|' + norm(x.s) + '|' + x.zone);
+      for (const [a, b] of (r.apart || [])) (nameToId[norm(a)] && nameToId[norm(b)] ? okRules : badRules).add('apart|' + [norm(a), norm(b)].sort().join('|'));
+    }
+    const ruleN = okRules.size, ruleMissing = badRules.size;
+    const onChart = new Set(Object.values(seatStu));
+    const notOnSlides = activeStudents(c).filter(s => !onChart.has(s.id));
+    SLX.plans[cid] = {c, ch, spotOf, seatStu, unresolved, worst, nameToId, allRules, ruleN, ruleMissing, notOnSlides, dropped: seats.length - spotOf.filter(x => x >= 0).length};
+  }
+}
+function slidesShow() {
+  const keep = !$('#modalBack').classList.contains('hidden') && $('#mTitle').textContent === 'Import from Google Slides' ? $('#mBody').scrollTop : 0;
+  const unmatched = SLX.charts.filter(ch => !SLX.map[ch.key]);
+  let html = `<p class="note">${SLX.decks.length} file${SLX.decks.length === 1 ? '' : 's'} (${SLX.decks.map(esc).join(', ')}), ${SLX.charts.length} classes. The Slides chart becomes each class's current version, and its zones and locks replace the app's. Nothing changes until you click Apply.</p>`;
+  html += `<details class="cls" ${unmatched.length ? 'open' : ''}><summary>Classes (${SLX.charts.length})${unmatched.length ? ` - <span style="color:var(--warn)">${unmatched.length} not matched</span>` : ''}</summary><div class="inner"><table class="t"><tbody>
+    ${SLX.charts.slice().sort((a, b) => a.title.localeCompare(b.title)).map(ch => `<tr><td>${esc(ch.title)} <span class="small muted">v${ch.v || '?'}${ch.date ? ' · ' + fmtDate(ch.date) : ''} · ${esc(ch.deck)}</span></td><td><select class="inp" data-act="slMap" data-k="${esc(ch.key)}"><option value="">Skip</option>${DATA.classes.map(c => `<option value="${c.id}" ${SLX.map[ch.key] === c.id ? 'selected' : ''}>${esc(c.title)} (${esc(c.school)})</option>`).join('')}</select></td></tr>`).join('')}
+    </tbody></table></div></details>`;
+  for (const cid in SLX.plans) {
+    const P = SLX.plans[cid], c = P.c, names = displayNames(c);
+    const picks = SLX.pick[cid] || {};
+    const rows = (P.ch.seats || []).filter(p => p.t && SLX.shown[cid + '|' + norm(p.t)]);
+    const usedIds = new Set(Object.values(P.seatStu));
+    const opt = (t) => {
+      const cur = picks[norm(t)]; const idx = (P.ch.seats || []).findIndex(p => p.t === t); const curId = P.seatStu[idx];
+      const list = c.students.filter(s => !usedIds.has(s.id) || s.id === curId).sort((a, b) => names[a.id].localeCompare(names[b.id]));
+      return `<option value="" ${cur === undefined && !curId ? 'selected' : ''} disabled>Pick a student...</option>${list.map(s => `<option value="${s.id}" ${curId === s.id ? 'selected' : ''}>${esc(names[s.id])}${s.active ? '' : ' (left)'}${s.last ? ' - ' + esc(s.last) : ''}</option>`).join('')}<option value="__new" ${cur === '__new' ? 'selected' : ''}>Add as a new student</option><option value="__skip" ${cur === '__skip' ? 'selected' : ''}>Leave this spot empty</option>`;
+    };
+    const warn = P.unresolved.length || P.worst > 7 || P.dropped || P.ruleMissing;
+    const rules = P.ruleN;
+    const rot = P.ch.rotation;
+    html += `<details class="cls" ${warn ? 'open' : ''}><summary>${esc(c.title)} - v${P.ch.v || '?'}${P.ch.date ? ' ' + fmtDate(P.ch.date) : ''}, ${(P.ch.seats || []).filter(p => p.t).length} students, ${rules} rule${rules === 1 ? '' : 's'}${rot ? `, rotating ${esc(rot.zone)}` : ''}${P.unresolved.length ? `, <span style="color:var(--warn)">${P.unresolved.length} need a match</span>` : ''}</summary><div class="inner">`;
+    if (P.worst > 7 || P.dropped) html += `<div class="msg warn">Some Slides seats didn't line up well with this class's room picture${P.dropped ? ` (${P.dropped} had no spot)` : ''}. Check the chart after importing.</div>`;
+    if (rows.length) html += `<h4 style="margin:6px 0">Names that need a match</h4><table class="t"><tbody>${rows.map(p => `<tr${picks[norm(p.t)] !== undefined ? ' style="background:#eef6ee"' : ''}><td><b>${esc(p.t)}</b></td><td><select class="inp" data-act="slPick" data-c="${cid}" data-t="${esc(p.t)}">${opt(p.t)}</select></td></tr>`).join('')}</tbody></table>`;
+    if (P.ruleMissing) html += `<div class="msg warn">${P.ruleMissing} rule${P.ruleMissing === 1 ? '' : 's'} name a student who isn't on this Slides chart, so they're skipped.</div>`;
+    if (P.notOnSlides.length) html += `<p class="note">On the app's roster but not on the Slides chart (they'll be Not seated): ${P.notOnSlides.map(s => esc(names[s.id])).join(', ')}</p>`;
+    if (P.ch.alsoIn) html += `<p class="note">Also in ${P.ch.alsoIn.map(esc).join(', ')}. Using the newest chart, with rules from both.</p>`;
+    html += `</div></details>`;
+  }
+  openModal('Import from Google Slides', html, `<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" data-act="slApply">Apply</button>`);
+  $('#mBody').scrollTop = keep;
+}
+function slidesApply() {
+  const pending = Object.values(SLX.plans).reduce((n, P) => n + P.unresolved.filter(t => (SLX.pick[P.c.id] || {})[norm(t)] === undefined).length, 0);
+  if (pending && !confirm(`${pending} name${pending === 1 ? '' : 's'} still need a match. Those spots will be left empty.\n\nApply anyway?`)) return;
+  let classes = 0, rulesAdded = 0;
+  for (const cid in SLX.plans) {
+    const P = SLX.plans[cid], c = P.c, L = layoutOf(c), seats = P.ch.seats || [];
+    const picks = SLX.pick[cid] || {};
+    // new students picked as "Add as a new student"
+    seats.forEach((p, i) => {
+      if (p.t && picks[norm(p.t)] === '__new') {
+        const st = {id: uid('s'), first: p.t.split(/\s+/)[0], given: p.t.split(/\s+/)[0], last: '', chartName: p.t, preferred: '', active: true, linked: false};
+        c.students.push(st); P.seatStu[i] = st.id; P.nameToId[norm(p.t)] = st.id;
+      }
+    });
+    // spots, zones and locks from Slides
+    const order = L.spots.map(g => g.id);
+    const spots = [], assign = {};
+    seats.forEach((p, i) => {
+      const j = P.spotOf[i]; if (j == null || j < 0) return;
+      const id = L.spots[j].id;
+      spots.push({id, zones: (p.z || []).slice(), lock: !!p.l});
+      const sid = P.seatStu[i];
+      if (sid) { assign[id] = sid; const st = studentById(c, sid); if (st) st.active = true; }
+    });
+    c.spots = spots.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    if (P.ch.factor) c.neighborFactor = P.ch.factor;
+    // new current version, unless the app already shows exactly this chart
+    const cur = latest(c);
+    const same = cur && JSON.stringify(Object.entries(cur.assign).sort()) === JSON.stringify(Object.entries(assign).sort());
+    if (!same) c.versions.push({n: Math.max(P.ch.v || 0, (cur ? cur.n : 0) + 1), date: P.ch.date || todayISO(), assign, by: 'slides', note: 'Imported from Google Slides'});
+    // rules
+    for (const r of P.allRules) {
+      const add = (rule) => { if (!c.rules.some(x => sameRule(x, rule))) { if (rule.type === 'must') c.rules = c.rules.filter(x => !(x.type === 'must' && x.s === rule.s)); c.rules.push(Object.assign({id: uid('r')}, rule)); rulesAdded++; } };
+      for (const x of (r.must || [])) { const s = P.nameToId[norm(x.s)]; if (s) add({type: 'must', s, zone: x.zone}); }
+      for (const x of (r.never || [])) { const s = P.nameToId[norm(x.s)]; if (s) add({type: 'never', s, zone: x.zone}); }
+      for (const [a, b] of (r.apart || [])) { const s = P.nameToId[norm(a)], t = P.nameToId[norm(b)]; if (s && t && s !== t) add({type: 'apart', s, t}); }
+    }
+    // rotation
+    if (P.ch.rotation && P.ch.rotation.zone) {
+      const served = (P.ch.rotation.served || []).map(n => P.nameToId[norm(n)]).filter(Boolean);
+      c.rotation = {zone: P.ch.rotation.zone, served: [...new Set(served)], lastRound: []};
+    }
+    classes++;
+  }
+  closeModal(); save(); renderAll();
+  toast(`Imported ${classes} class${classes === 1 ? '' : 'es'} from Google Slides with ${rulesAdded} rule${rulesAdded === 1 ? '' : 's'}. Undo with Ctrl+Z / Cmd+Z if anything looks wrong.`);
 }
 
 /* ---------------- rules from earlier years ---------------- */
@@ -2157,7 +2384,7 @@ function dataMenu() {
       <div class="row" style="margin-top:6px">Switch to the next class <input class="inp" type="number" min="0" max="30" style="width:60px" data-act="setFlip" value="${s.flipMinutes}"> minutes before it starts</div>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="weekly">Weekly schedule</button></div>
       <p class="note">Using the clicker or picking a class yourself pauses the automatic switch until the next scheduled change.</p></div>
-    <div class="dsec"><h3>Roster and classes</h3><div class="row"><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="addClass">Add a class</button></div>
+    <div class="dsec"><h3>Roster and classes</h3><div class="row"><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="slidesImport">Import from Google Slides</button><button class="btn" data-act="addClass">Add a class</button></div>
       <p class="note">Aspen export columns: Name and HR Teacher are required. Student ID and School are used when present.</p></div>
     <div class="dsec"><h3>School year: ${esc(DATA.year)}</h3><button class="btn" data-act="newYear">Start a new school year</button>
       <p class="note">Backs up this year, clears the rosters and charts and keeps the class setups you choose. Rules for students linked to Aspen are held for your OK next year.${DATA.ruleBank.filter(b => b.appliedIn !== DATA.year).length ? ` ${DATA.ruleBank.filter(b => b.appliedIn !== DATA.year).length} rules from earlier years are waiting right now.` : ''}</p></div>
@@ -2285,6 +2512,10 @@ document.addEventListener('click', async (e) => {
       save(); closeModal(); openClass(nc.id, {manual: true}); openDrawer('settings'); break;
     }
     case 'printRoster': printRoster(c); break;
+    case 'impUndo': impUndo(); break;
+    case 'slidesImport': closeModal(); slidesImportDialog(); break;
+    case 'slRead': await slidesRead(); break;
+    case 'slApply': slidesApply(); break;
     case 'sgFill': fillSongFromLink(false); break;
     case 'viewerSetup': viewerSetupDialog(); break;
     case 'vsGo': {
@@ -2347,10 +2578,13 @@ document.addEventListener('change', (e) => {
   switch (act) {
     case 'stuField': { const s = studentById(c, a.dataset.id); s[a.dataset.f] = a.value.trim(); if (a.dataset.f === 'first') s.given = s.first; if (a.dataset.f === 'preferred' && s.pid && DATA.people[s.pid]) DATA.people[s.pid].preferred = s.preferred; save(); renderDrawer(); renderStageArea(); renderTray(); break; }
     case 'printRules': UI.printRules = a.checked; break;
+    case 'slMap': SLX.map[a.dataset.k] = a.value; slidesPlan(); slidesShow(); break;
+    case 'slPick': { const P = SLX.plans[a.dataset.c]; (SLX.pick[a.dataset.c] = SLX.pick[a.dataset.c] || {})[norm(a.dataset.t)] = a.value; slidesPlan(); slidesShow(); break; }
     case 'sgYtChange': if (!$('#sgSong').value.trim() && !$('#sgArtist').value.trim() && a.value.trim()) fillSongFromLink(true); break;
     case 'rosterLeft': UI.rosterLeft = a.checked; renderDrawer(); break;
-    case 'impSchool': { const raw = IMPORT.groups[a.dataset.k].schoolRaw; for (const k in IMPORT.groups) if (IMPORT.groups[k].schoolRaw === raw) { IMPORT.school[k] = a.value; if (IMPORT.newCls[k]) IMPORT.newCls[k].school = a.value; } buildPlans(); showImport(); break; }
+    case 'impSchool': { impSnap(); const raw = IMPORT.groups[a.dataset.k].schoolRaw; for (const k in IMPORT.groups) if (IMPORT.groups[k].schoolRaw === raw) { IMPORT.school[k] = a.value; if (IMPORT.newCls[k]) IMPORT.newCls[k].school = a.value; } buildPlans(); showImport(); break; }
     case 'impNew': {
+      impSnap();
       const sp = newSpec(a.dataset.k); const f = a.dataset.f;
       if (f === 'title') { sp.title = a.value; sp.autoTitle = false; }
       else sp[f] = a.value;
@@ -2390,15 +2624,13 @@ document.addEventListener('change', (e) => {
     }
     case 'setAuto': DATA.settings.autoSchedule = a.checked; UI.override = null; save(); renderAutoBtn(); break;
     case 'setFlip': DATA.settings.flipMinutes = Math.max(0, Number(a.value) || 0); save(); break;
-    case 'impMap': IMPORT.map[a.dataset.k] = a.value; if (a.value === '__new') newSpec(a.dataset.k); buildPlans(); showImport(); break;
+    case 'impMap': impSnap(); IMPORT.map[a.dataset.k] = a.value; if (a.value === '__new') newSpec(a.dataset.k); buildPlans(); showImport(); break;
     case 'impLink': {
-      const plan = IMPORT.plans[a.dataset.c];
-      for (const sid in plan.links) if (plan.links[sid] === a.value && a.value) delete plan.links[sid];
-      if (a.value && a.value !== '__left') { plan.links[a.dataset.s] = a.value; delete plan.leaving[a.dataset.s]; }
-      else { delete plan.links[a.dataset.s]; if (a.value === '__left') plan.leaving[a.dataset.s] = true; else delete plan.leaving[a.dataset.s]; }
-      showImport(); break;
+      impSnap();
+      (IMPORT.manual[a.dataset.c] = IMPORT.manual[a.dataset.c] || {})[a.dataset.s] = a.value;
+      buildPlans(); showImport(); break;
     }
-    case 'impLeave': IMPORT.plans[a.dataset.c].leaving[a.dataset.s] = a.checked; break;
+    case 'impLeave': impSnap(); (IMPORT.leave[a.dataset.c] = IMPORT.leave[a.dataset.c] || {})[a.dataset.s] = a.checked; buildPlans(); showImport(); break;
   }
 });
 function currentlyIn(c, z) {
@@ -2416,7 +2648,11 @@ $('#csvInput').addEventListener('change', (e) => { const f = e.target.files[0]; 
 /* keyboard: clicker sends Page Up / Page Down; the foot pedal may send arrows */
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, textarea, select, [contenteditable]')) return;
-  if (!$('#modalBack').classList.contains('hidden')) { if (e.key === 'Escape') closeModal(); return; }
+  if (!$('#modalBack').classList.contains('hidden')) {
+    if (e.key === 'Escape') closeModal();
+    else if ((e.metaKey || e.ctrlKey) && (e.key || '').toLowerCase() === 'z' && IMPORT && $('#mTitle').textContent === 'Import Aspen roster') { e.preventDefault(); impUndo(); }
+    return;
+  }
   const k = (e.key || '').toLowerCase();
   if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (e.ctrlKey && k === 'y') { e.preventDefault(); redo(); return; }
