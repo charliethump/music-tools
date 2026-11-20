@@ -177,6 +177,7 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .pngbox .row{gap:8px}
 .pngbox input[type=number]{width:58px;padding:4px 6px}
 .pngbox .seg button{padding:5px 10px;font-size:13px}
+.pngbox .warn{color:var(--danger);font-weight:700}
 .pngbox .lab{font-size:12.5px;font-weight:800;color:var(--muted)}
 .pngprev{width:100%;aspect-ratio:16/9;display:block;border-radius:8px;border:1px solid var(--line);background:repeating-conic-gradient(#E3E6EF 0 25%,#fff 0 50%) 0 0/16px 16px}
 .icb.on{background:var(--acc-soft);color:var(--acc)}
@@ -3399,7 +3400,7 @@ function renderSide(){
       <div class="sec-fields" style="grid-template-columns:90px 1fr"><div class="field"><label>Bars</label><input type="number" min="1" max="64" value="${s.bars}" data-f="bars"></div><div class="field"><label>Words on screen (optional)</label><input type="text" value="${esc(s.text)}" placeholder="Listen..." data-f="text"></div></div></div>`;
     }else{
       const names=subNames(o.m);
-      h+=`<div class="sec${G.id===s.id?' editing':''}" data-id="${s.id}"><div class="sec-head"><span class="num${o.rowY===TOP_ROW_Y?'':' bot'}">${o.k+1}</span><b>Sequence ${o.k+1}</b><span class="bars">${barsTxt(o)}</span>${acts(i,n,`<button class="icb${pngUI(s.id).open?' on':''}" data-a="png" title="Save as a PNG" aria-label="Save as a PNG">${ICON.img}</button>`)}</div>
+      h+=`<div class="sec${G.id===s.id?' editing':''}" data-id="${s.id}"><div class="sec-head"><span class="num${o.rowY===TOP_ROW_Y?'':' bot'}">${o.k+1}</span><b>Sequence ${o.k+1}</b><span class="bars">${barsTxt(o)}</span>${acts(i,n,`<button class="icb${pngUI(s.id).open?' on':''}" data-a="png" title="Save as a picture or video" aria-label="Save as a picture or video">${ICON.img}</button>`)}</div>
       <canvas class="thumb" data-thumb="${s.id}" title="Edit the notes"></canvas>
       <div class="sec-fields"><div class="field"><label>Bars</label><input type="number" min="1" max="16" value="${s.bars}" data-f="bars"></div>
       <div class="field"><label>Squares are</label><select data-f="sub">${names.map((x,j)=>`<option value="${j}" ${s.sub===j?'selected':''}>${x}</option>`).join('')}</select></div>
@@ -3428,21 +3429,37 @@ function drawThumb(cv,r){
   for(const s of r.sustains){const x0=6+s.startCell*step+step/2,x1=6+s.endCell*step+step/2;c.beginPath();c.moveTo(x0,h-6-sz);c.quadraticCurveTo((x0+x1)/2,h-sz+4,x1,h-6-sz);c.stroke();}
 }
 /* ================= Sequence PNG export (960 x 540, transparent) ================= */
-const PNG_UI={};let PNG_SIZE='match';
-function pngUI(id){return PNG_UI[id]||(PNG_UI[id]={open:false,mode:'all',a:1,b:4});}
+const PNG_UI={};let PNG_SIZE='match',VID_BG='asis',SEQEXP=null;
+function pngUI(id){return PNG_UI[id]||(PNG_UI[id]={open:false,kind:'png',mode:'all',a:1,b:4});}
 function seqBeats(r){return Math.max(1,Math.round(r.g1-r.g0));}
 function pngRange(r,u){const N=seqBeats(r);if(u.mode==='all')return[1,N];let a=Math.max(1,Math.min(N,u.a|0||1)),b=Math.max(a,Math.min(N,u.b|0||a));return[a,b];}
 function pngBox(o){
   const u=pngUI(o.sec.id);if(!u.open)return'';
-  const N=seqBeats(o),[a,b]=pngRange(o,u);
-  return `<div class="pngbox">
+  const N=seqBeats(o),[a,b]=pngRange(o,u),id=o.sec.id;
+  const kind=`<div class="row"><div class="seg wide" style="flex:1"><button data-a="pk" data-v="png" aria-pressed="${u.kind!=='video'}">Picture (PNG)</button><button data-a="pk" data-v="video" aria-pressed="${u.kind==='video'}">Video (MP4)</button></div></div>`;
+  if(u.kind==='video'){
+    const busy=SEQEXP&&SEQEXP.id===id,other=SEQEXP&&SEQEXP.id!==id;
+    const lt=[];if(VID_BG==='gray'){if(S.notation&&lum(S.notationColor)>0.75)lt.push('notation color (under Look)');if(o.sec.name&&lum(o.sec.nameColor)>0.75)lt.push('title color (on this card)');}
+    const light=lt.length?`Your ${lt.join(' and ')} is light, so it will barely show on gray.`:'';
+    return `<div class="pngbox">${kind}
+      <div class="row"><span class="lab">Background</span><div class="seg"><button data-a="vb" data-v="asis" aria-pressed="${VID_BG==='asis'}">As is</button><button data-a="vb" data-v="gray" aria-pressed="${VID_BG==='gray'}">Light gray #F3F3F3</button></div></div>
+      ${light?`<span class="help warn">${light}</span>`:''}
+      <canvas class="pngprev" data-pngprev="${id}" width="480" height="270" aria-label="Video preview" style="background:#000"></canvas>
+      <span class="help">Just this sequence, centered: 8 beats of the music before it fading in, "1, 2, ready, go" with clicks on the last 4, the conductor hopping in and out, then 4 beats of what follows fading out. 1080p at ${S.fps} fps.</span>
+      <div class="row"><button class="mini go" data-a="vsave" ${SEQEXP?'disabled':''}>Export video</button>${busy?'<button class="mini" data-a="vcancel">Cancel</button>':''}<span class="help" data-vmsg>${busy?esc(SEQEXP.msg):other?'Another sequence is exporting.':''}</span></div>
+      <div class="prog" data-vprog style="display:${busy?'block':'none'};margin-top:0"><div style="width:${busy?(SEQEXP.p*100).toFixed(1):0}%"></div></div>
+    </div>`;
+  }
+  return `<div class="pngbox">${kind}
     <div class="row"><span class="lab">Beats</span><div class="seg"><button data-a="pm" data-v="all" aria-pressed="${u.mode==='all'}">All ${N}</button><button data-a="pm" data-v="range" aria-pressed="${u.mode==='range'}">Some</button></div>
     ${u.mode==='range'?`<input type="number" min="1" max="${N}" value="${a}" data-pa aria-label="First beat"><span class="help">to</span><input type="number" min="1" max="${N}" value="${b}" data-pb aria-label="Last beat"><button class="mini" data-a="pngnext" title="Move to the next beats">Next &rsaquo;</button>`:''}</div>
     <div class="row"><span class="lab">Size</span><div class="seg"><button data-a="ps" data-v="match" aria-pressed="${PNG_SIZE==='match'}">Same as the video</button><button data-a="ps" data-v="fill" aria-pressed="${PNG_SIZE==='fill'}">Fill the image</button></div></div>
-    <canvas class="pngprev" data-pngprev="${o.sec.id}" width="480" height="270" aria-label="PNG preview"></canvas>
+    <canvas class="pngprev" data-pngprev="${id}" width="480" height="270" aria-label="PNG preview"></canvas>
     <div class="row"><button class="mini go" data-a="pngsave">Save PNG</button><span class="help">960 x 540, transparent. Uses your Look settings.</span></div>
   </div>`;
 }
+function lum(hex){const[r,g,b]=hexRgb(hex).map(v=>v/255);return 0.2126*r+0.7152*g+0.0722*b;}
+function hexRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
 // beats a..b (1-based, inside the sequence) as their own little row
 function subRow(r,a,b){
   const bt=c=>r.cellBeat[c]-r.g0;
@@ -3471,8 +3488,104 @@ function seqPng(r,a,b){
 }
 function drawPngPrev(id){
   const cv=secList.querySelector(`[data-pngprev="${id}"]`),r=TL.R.find(x=>x.sec.id===id);if(!cv||!r)return;
-  const [a,b]=pngRange(r,pngUI(id)),img=seqPng(r,a,b),c=cv.getContext('2d');
+  const c=cv.getContext('2d');
+  if(pngUI(id).kind==='video'){const L=soloPlan(r),f=document.createElement('canvas');f.width=W;f.height=H;drawSolo(f.getContext('2d'),r,r.tFirst+Math.min(0.12,beatDurAt(r.g0)*0.3),L);c.drawImage(f,0,0,cv.width,cv.height);return;}
+  const [a,b]=pngRange(r,pngUI(id)),img=seqPng(r,a,b);
   c.clearRect(0,0,cv.width,cv.height);c.drawImage(img,0,0,cv.width,cv.height);
+}
+/* ---- single-sequence video ---- */
+const SOLO_PRE=8,SOLO_POST=4;
+function soloPlan(r){
+  const sym=r.layout.symSize;let st=1;for(let c=0;c<r.cells;c++)st=Math.max(st,noteKeys(r.sec,c).length);
+  const sylSize=Math.max(22,Math.min(50,Math.round(sym*0.42)));
+  const top=Math.min(S.notation?-STICK_H-6:0,-sym/2-stackLift(st,sym));
+  const bot=S.syl?sym/2+18+sylSize*1.1:sym/2+SH_DY+SH_INSTR;
+  const rowY=Math.round(H/2-(top+bot)/2);
+  // count words sit in the free space above the rhythm
+  // count words fit in the band between the title (if any) and the top of the rhythm
+  let bandTop=12;
+  if(r.sec.name){const cv=document.createElement('canvas').getContext('2d');cv.font=`bold ${r.sec.nameSize}px "MusicPlayFont", sans-serif`;let lines=1,line='';for(const w of String(r.sec.name).split(' ')){const tt=line?line+' '+w:w;if(cv.measureText(tt).width>W*0.9&&line){lines++;line=w;}else line=tt;}bandTop=18+lines*r.sec.nameSize*1.2+6;}
+  const bandBot=rowY+top-14,countY=Math.round((bandTop+bandBot)/2),countH=Math.max(80,bandBot-bandTop);
+  const cnt=[];const words=['1','2','ready','go'];
+  for(let i=0;i<4;i++){const g=r.g0-4+i;cnt.push({w:words[i],t:timeAt(g),end:timeAt(g+1)});}
+  return{rowY,countY,countH,cnt,tA:timeAt(r.g0-SOLO_PRE),tIn:timeAt(r.g0-4),tOut:r.t1,tB:timeAt(r.g1+SOLO_POST)};
+}
+function drawSolo(c,r,t,L,bg=VID_BG){
+  if(bg==='gray'){c.fillStyle='#F3F3F3';c.fillRect(0,0,W,H);}else c.drawImage(bgCanvas(),0,0);
+  const ay=L.rowY,pt=t;
+  const arc=conductorArc(r,t),sst=sustainState(r,t);
+  const frac=r.first!==null&&t>=r.tFirst?cellFrac(r,beatAt(t)):null;
+  const rollHide=new Set(),spA=new Map();
+  if(frac!==null){
+    for(const s of r.sustains)if(s.type==='roll'&&frac>=s.startCell)rollHide.add(s.startCell+':'+s.startInst);
+    if(!sst)for(const s of r.sustains)if(frac>s.endCell){const a=Math.max(0,1-(t-r.cellT[s.endCell])/0.5);spA.set(s.startCell+':'+s.startInst,a);spA.set(s.endCell+':'+s.endInst,a);}
+  }
+  if(r.sec.name)drawName(c,r.sec.name,1,r.sec.nameSize,r.sec.nameColor);
+  drawRowFull(c,r,true,ay,0,(!sst&&arc)?arc:null,rollHide,pt,spA.size?spA:null);
+  ropes(c,r,ay);
+  if(frac!==null)for(const s of r.sustains)if(s.type==='roll'&&frac>s.endCell){const a=Math.max(0,1-(t-r.cellT[s.endCell])/0.5);drawRollDone(c,r,s,ay,pt,0,a);}
+  if(sst){if(sst.s.type==='roll')drawRoll(c,r,sst,ay,pt);else drawTightrope(c,r,sst,ay);}
+  else if(arc)drawConductor(c,arc.x,condY(r,ay,arc),pickFrame(arc,false));
+  for(const e of L.cnt){
+    if(t<e.t||t>=e.end)continue;const img=IMG['c_'+e.w];if(!img)continue;
+    const k=Math.min(1,L.countH/img.height),w=img.width*k,h=img.height*k;c.drawImage(img,Math.round((W-w)/2),Math.round(L.countY-h/2),w,h);
+  }
+}
+async function mixSolo(rate,ch,L,dur){
+  const oc=new OfflineAudioContext(ch,Math.ceil(dur*rate),rate),g=oc.createGain();g.connect(oc.destination);
+  const fi=Math.max(0.01,L.tIn-L.tA),fo=Math.max(0,L.tOut-L.tA);
+  g.gain.setValueAtTime(0,0);g.gain.linearRampToValueAtTime(1,fi);g.gain.setValueAtTime(1,fo);g.gain.linearRampToValueAtTime(0,dur);
+  if(song.buf){const s=oc.createBufferSource();s.buffer=song.buf;s.connect(g);if(L.tA<0)s.start(-L.tA,0);else if(L.tA<song.buf.duration)s.start(0,L.tA);}
+  let mb=metBuf;if(!mb){try{mb=await oc.decodeAudioData(await (await fetch(A.met)).arrayBuffer());}catch(e){}}
+  for(const e of L.cnt){const at=e.t-L.tA;if(at>=0&&at<dur)metClick(oc,oc.destination,at,mb);}
+  return oc.startRendering();
+}
+function seqExpMsg(msg,p){
+  if(!SEQEXP)return;SEQEXP.msg=msg;if(p!=null)SEQEXP.p=p;
+  const box=secList.querySelector(`.sec[data-id="${SEQEXP.id}"]`);if(!box)return;
+  const m=box.querySelector('[data-vmsg]');if(m)m.textContent=msg;
+  const pr=box.querySelector('[data-vprog]');if(pr){pr.style.display='block';pr.firstElementChild.style.width=(SEQEXP.p*100).toFixed(1)+'%';}
+}
+async function exportSeqVideo(id){
+  const r=TL.R.find(x=>x.sec.id===id);if(!r||SEQEXP||ui.exporting)return;
+  pause();
+  const L=soloPlan(r),fps=S.fps,dur=L.tB-L.tA,nFrames=Math.round(dur*fps);
+  const ch=song.buf?Math.min(2,song.buf.numberOfChannels):2;
+  const codecs=await pickCodecs(fps,true,song.buf?song.buf.sampleRate:48000,ch);
+  if(!codecs||!codecs.a){alert('This browser cannot export video. Open this page in Chrome or Edge.');return;}
+  SEQEXP={id,p:0,msg:'Starting...',cancel:false};ui.exporting=true;renderSide();
+  document.getElementById('playBtn').disabled=true;expBtn.disabled=true;
+  let failure=null;const started=performance.now();
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const cx=cv.getContext('2d');
+  const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:codecs.v.mux,width:W,height:H,frameRate:fps},audio:{codec:codecs.a.mux,sampleRate:codecs.a.cfg.sampleRate,numberOfChannels:ch},fastStart:'in-memory',firstTimestampBehavior:'offset'});
+  try{
+    seqExpMsg('Mixing the audio...');
+    const buf=await mixSolo(codecs.a.cfg.sampleRate,ch,L,nFrames/fps);
+    const aenc=new AudioEncoder({output:(c,m)=>muxer.addAudioChunk(c,m),error:e=>{failure=e;}});aenc.configure(codecs.a.cfg);
+    const sr=buf.sampleRate,total=Math.min(buf.length,Math.round(nFrames/fps*sr)),block=4096,planes=[...Array(ch)].map((_,i)=>buf.getChannelData(Math.min(i,buf.numberOfChannels-1)));
+    for(let off=0;off<total;off+=block){const n=Math.min(block,total-off),data=new Float32Array(n*ch);for(let c=0;c<ch;c++)data.set(planes[c].subarray(off,off+n),c*n);const ad=new AudioData({format:'f32-planar',sampleRate:sr,numberOfFrames:n,numberOfChannels:ch,timestamp:Math.round(off/sr*1e6),data});aenc.encode(ad);ad.close();if(failure)throw failure;}
+    await aenc.flush();aenc.close();
+    const venc=new VideoEncoder({output:(c,m)=>muxer.addVideoChunk(c,m),error:e=>{failure=e;}});venc.configure(codecs.v.cfg);
+    const fdur=Math.round(1e6/fps),gop=fps*2;
+    for(let i=0;i<nFrames;i++){
+      if(SEQEXP.cancel)throw new Error('cancel');if(failure)throw failure;
+      drawSolo(cx,r,L.tA+i/fps,L);
+      const vf=new VideoFrame(cv,{timestamp:Math.round(i*1e6/fps),duration:fdur});venc.encode(vf,{keyFrame:i%gop===0});vf.close();
+      while(venc.encodeQueueSize>6)await new Promise(res=>{venc.addEventListener('dequeue',res,{once:true});setTimeout(res,20);});
+      if(i%15===0){const p=(i+1)/nFrames,el=(performance.now()-started)/1000,left=p>0.03?el/p-el:0;vctx.drawImage(cv,0,0);seqExpMsg(`Frame ${i+1} of ${nFrames}${left?`, about ${Math.ceil(left)} s left`:''}`,p);await new Promise(res=>setTimeout(res,0));}
+    }
+    await venc.flush();venc.close();if(failure)throw failure;
+    muxer.finalize();
+    const blob=new Blob([muxer.target.buffer],{type:'video/mp4'});
+    download(blob,`${fileBase()} - Sequence ${r.k+1}.mp4`);
+    const note=codecs.v.mux!=='avc'||codecs.a.mux!=='aac'?' (not H.264/AAC: use Chrome or Edge for Final Cut)':'';
+    seqExpMsg(`Done: ${(blob.size/1048576).toFixed(1)} MB. Check Downloads.${note}`,1);
+  }catch(e){
+    seqExpMsg(e&&e.message==='cancel'?'Export cancelled.':'Export failed: '+(e&&e.message||e));if(!(e&&e.message==='cancel'))console.error(e);
+  }finally{
+    const last=SEQEXP.msg;SEQEXP=null;ui.exporting=false;document.getElementById('playBtn').disabled=false;expBtn.disabled=false;
+    renderSide();const box=secList.querySelector(`.sec[data-id="${id}"] [data-vmsg]`);if(box)box.textContent=last;redraw();
+  }
 }
 function savePng(id){
   const r=TL.R.find(x=>x.sec.id===id);if(!r)return;const u=pngUI(id),[a,b]=pngRange(r,u),N=seqBeats(r);
@@ -3498,9 +3611,13 @@ secList.addEventListener('click',e=>{
   const a=e.target.closest('[data-a]');if(!a)return;
   const k=a.dataset.a;
   if(k==='edit'){openGrid(id);return;}
-  if(k==='png'){const u=pngUI(id);u.open=!u.open;renderSide();return;}
+  if(k==='png'){const u=pngUI(id),was=u.open;for(const x of Object.values(PNG_UI))x.open=false;u.open=!was;renderSide();return;}
   if(k==='pngsave'){savePng(id);return;}
   if(k==='pngnext'){const u=pngUI(id),r=TL.R.find(x=>x.sec.id===id),N=seqBeats(r),len=u.b-u.a+1;if(u.b>=N){u.a=1;u.b=Math.min(N,len);}else{u.a=u.b+1;u.b=Math.min(N,u.b+len);}renderSide();return;}
+  if(k==='pk'){pngUI(id).kind=a.dataset.v;renderSide();return;}
+  if(k==='vb'){VID_BG=a.dataset.v;renderSide();return;}
+  if(k==='vsave'){exportSeqVideo(id);return;}
+  if(k==='vcancel'){if(SEQEXP)SEQEXP.cancel=true;return;}
   if(k==='pm'||k==='ps'){const u=pngUI(id);if(k==='pm')u.mode=a.dataset.v;else PNG_SIZE=a.dataset.v;renderSide();return;}
   if(k==='up'&&i>0)[S.sections[i-1],S.sections[i]]=[S.sections[i],S.sections[i-1]];
   else if(k==='down'&&i<S.sections.length-1)[S.sections[i+1],S.sections[i]]=[S.sections[i],S.sections[i+1]];
