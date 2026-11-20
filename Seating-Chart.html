@@ -463,7 +463,7 @@ function actionLabel(act, a, c) {
     zoneAdd: 'Add a zone', zoneRemove: 'Remove a zone', lockSel: 'Lock spots', unlockSel: 'Unlock spots', rotReset: 'New rotation round', rotZone: 'Rotation zone', rotServed: 'Rotation turn',
     songSave: 'Save a song', songCurrent: 'Change the current song', songDel: 'Delete a song', schedAdd: 'Schedule change', schedDel: 'Schedule change', schedF: 'Schedule change',
     wkF: 'Schedule change', wkClass: 'Schedule change', wkAdd: 'Schedule change', wkDel: 'Schedule change', impApply: 'Roster import', nyGo: 'Start a new school year',
-    addClassGo: 'Add a class', restoreVersion: 'Restore an old version', clsField: 'Class settings', clsHr: 'Class settings', clsNeighbor: 'Neighbor setting', clsLayout: 'Room layout',
+    addClassGo: 'Add a class', restoreVersion: 'Restore an old version', clsField: 'Class settings', clsHr: 'Class settings', clsNeighbor: 'Neighbor setting', setNeighbor: 'Neighbor setting', clsLayout: 'Room layout',
     bopEnabled: 'Bop or Flop setting', bopDefault: 'Bop or Flop setting', setAuto: 'Schedule setting', setFlip: 'Schedule setting', toggleAuto: 'Schedule setting'
   };
   if (act === 'stuActive') { const st = c && studentById(c, a.dataset.id); return st ? `${nm(st.id)} ${st.active ? 'marked as left' : 'brought back'}` : 'Roster change'; }
@@ -1056,7 +1056,8 @@ function layoutGrid(L) {
   }
   return (GRIDCACHE[L.id] = pos);
 }
-const NEIGHBOR_MODES = {touch: 'Touching squares, including diagonals', sides: 'Side by side and front/back only (no diagonals)', two: 'Within two squares'};
+const NEIGHBOR_MODES = {gap: 'Touching, or with one empty square between', touch: 'Touching squares only (including diagonals)', sides: 'Side by side and front/back only (no diagonals)', two: 'Within two squares, even with someone between'};
+const neighborModeOf = c => NEIGHBOR_MODES[c.neighborMode] ? c.neighborMode : (NEIGHBOR_MODES[DATA.settings.neighborMode] ? DATA.settings.neighborMode : 'gap');
 function adjacency(c, spots) {
   const L = layoutOf(c);
   const G = layoutGrid(L);
@@ -1069,14 +1070,19 @@ function adjacency(c, spots) {
     const cut = nearest.slice().sort((a, b) => a - b)[Math.floor(n / 2)] * DEFAULT_FACTOR;
     return {adj: D.map((row, i) => row.map((d, j) => i !== j && d <= cut))};
   }
-  const mode = NEIGHBOR_MODES[c.neighborMode] ? c.neighborMode : 'touch';
+  const mode = neighborModeOf(c);
   const reach = mode === 'two' ? 2 : 1;
   const g = spots.map(s => G[s.id] || null);
+  const used = new Set(g.filter(Boolean).map(p => p.b + ',' + p.r));
   const adj = g.map((a, i) => g.map((b, j) => {
     if (i === j || !a || !b) return false;
     if (a.chair != null && b.chair != null && Math.abs(a.chair - b.chair) === 1) return true;
     const db = Math.abs(a.b - b.b), dr = Math.abs(a.r - b.r);
-    return mode === 'sides' ? db + dr <= reach : Math.max(db, dr) <= reach;
+    if (mode === 'sides') return db + dr <= reach;
+    if (Math.max(db, dr) <= reach) return true;
+    // one empty square between them in a straight line (across, front/back or diagonal)
+    if (mode === 'gap' && (db === 0 || db === 2) && (dr === 0 || dr === 2)) return !used.has(((a.b + b.b) / 2) + ',' + ((a.r + b.r) / 2));
+    return false;
   }));
   return {adj};
 }
@@ -1593,7 +1599,7 @@ function drSpots(c) {
       <div class="field"><label>Zone name</label><input class="inp" id="zoneName" list="zoneList" placeholder="e.g. chairs, front, back"><datalist id="zoneList">${Object.keys(zones).map(z => `<option value="${esc(z)}">`).join('')}<option value="front"><option value="back"><option value="chairs"></datalist></div>
       <div class="row"><button class="btn" data-act="zoneAdd" ${selN ? '' : 'disabled'}>Add zone</button><button class="btn" data-act="zoneRemove" ${selN ? '' : 'disabled'}>Remove zone</button><button class="btn" data-act="lockSel" ${selN ? '' : 'disabled'}>Lock</button><button class="btn" data-act="unlockSel" ${selN ? '' : 'disabled'}>Unlock</button><button class="btn sm" data-act="clearSel" ${selN ? '' : 'disabled'}>Clear selection</button></div>
       <p class="note">A locked spot keeps whoever is in it through every shuffle. Unlocking leaves zones alone.</p></div>` : ''}
-    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot. Next to means: ${esc(NEIGHBOR_MODES[c.neighborMode] || NEIGHBOR_MODES.touch).toLowerCase()} (change in Settings).</p></div>` : ''}
+    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot. Next to means: ${esc(NEIGHBOR_MODES[neighborModeOf(c)]).toLowerCase()} (change in Settings).</p></div>` : ''}
     <div class="dsec"><h3>Zones</h3>${Object.keys(zones).length ? `<div class="chips">${Object.entries(zones).map(([z, n]) => `<span class="zchip">${esc(z)}: ${n}</span>`).join('')}</div>` : '<p class="note">No zones yet.</p>'}
     <p class="note">${locked} locked spot${locked === 1 ? '' : 's'}.</p></div>`;
 }
@@ -1734,7 +1740,7 @@ function drSettings(c) {
       <div class="field" style="width:90px"><label>Grade</label><select class="inp" data-act="clsField" data-f="grade">${['K', '1', '2', '3', '4', '5'].map(g => `<option ${c.grade === g ? 'selected' : ''}>${g}</option>`).join('')}</select></div></div>
     <div class="field"><label>Aspen homeroom teacher(s), comma separated</label><input class="inp" data-act="clsHr" value="${esc((c.hrKeys || []).join(', '))}"><span class="small muted">Matches the "HR Teacher" column, last names only.</span></div>
     <div class="field"><label>Caption under the rug (optional)</label><input class="inp" data-act="clsField" data-f="caption" value="${esc(c.caption)}"></div>
-    <div class="field"><label>For "not next to" rules, next to means</label><select class="inp" data-act="clsNeighbor">${Object.entries(NEIGHBOR_MODES).map(([k, v]) => `<option value="${k}" ${(c.neighborMode || 'touch') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="small muted">Counted in rug squares. A chair counts as next to the chairs beside it and the rug squares in front of it. Check with Spots, Show neighbors.</span></div></div>
+    <div class="field"><label>For "not next to" rules, next to means</label><select class="inp" data-act="clsNeighbor"><option value="" ${NEIGHBOR_MODES[c.neighborMode] ? '' : 'selected'}>Same as all classes (${esc(NEIGHBOR_MODES[DATA.settings.neighborMode] || NEIGHBOR_MODES.gap).toLowerCase()})</option>${Object.entries(NEIGHBOR_MODES).map(([k, v]) => `<option value="${k}" ${c.neighborMode === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="small muted">Counted in rug squares. A chair counts as next to the chairs beside it and the rug squares in front of it. Check with Spots, Show neighbors.</span></div></div>
     <div class="dsec"><h3>Schedule</h3>
       ${c.schedule.map((s, i) => `<div class="row" style="margin-bottom:6px"><select class="inp" data-act="schedF" data-i="${i}" data-f="day">${[1, 2, 3, 4, 5].map(d => `<option value="${d}" ${s.day === d ? 'selected' : ''}>${DAYS_LONG[d]}</option>`).join('')}</select>
         <input class="inp" type="time" data-act="schedF" data-i="${i}" data-f="start" value="${s.start}"> to <input class="inp" type="time" data-act="schedF" data-i="${i}" data-f="end" value="${s.end}"><button class="btn sm danger" data-act="schedDel" data-i="${i}">&times;</button></div>`).join('') || '<p class="note">Not scheduled.</p>'}
@@ -2445,6 +2451,7 @@ function dataMenu() {
       <div class="row" style="margin-top:6px">Switch to the next class <input class="inp" type="number" min="0" max="30" style="width:60px" data-act="setFlip" value="${s.flipMinutes}"> minutes before it starts</div>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="weekly">Weekly schedule</button></div>
       <p class="note">Using the clicker or picking a class yourself pauses the automatic switch until the next scheduled change.</p></div>
+    <div class="dsec"><h3>"Not next to" rules</h3><div class="field"><label>For all classes, next to means</label><select class="inp" data-act="setNeighbor">${Object.entries(NEIGHBOR_MODES).map(([k, v]) => `<option value="${k}" ${(DATA.settings.neighborMode || 'gap') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="small muted">A class can override this in Edit, Settings.</span></div></div>
     <div class="dsec"><h3>Roster and classes</h3><div class="row"><button class="btn" data-act="importRoster">Import Aspen roster</button><button class="btn" data-act="slidesImport">Import from Google Slides</button><button class="btn" data-act="addClass">Add a class</button></div>
       <p class="note">Aspen export columns: Name and HR Teacher are required. Student ID and School are used when present.</p></div>
     <div class="dsec"><h3>School year: ${esc(DATA.year)}</h3><button class="btn" data-act="newYear">Start a new school year</button>
@@ -2675,7 +2682,8 @@ document.addEventListener('change', (e) => {
     case 'bopDefault': c.bop.defaultView = a.checked ? 'bop' : 'chart'; delete UI.bopView[c.id]; save(); renderClass(); break;
     case 'clsField': c[a.dataset.f] = a.value; save(); renderClass(); break;
     case 'clsHr': c.hrKeys = a.value.split(',').map(x => x.trim()).filter(Boolean); save(); break;
-    case 'clsNeighbor': c.neighborMode = a.value; save(); renderDrawer(); renderStageArea(); break;
+    case 'clsNeighbor': if (a.value) c.neighborMode = a.value; else delete c.neighborMode; save(); renderDrawer(); renderStageArea(); break;
+    case 'setNeighbor': DATA.settings.neighborMode = a.value; save(); if (UI.drawer) renderDrawer(); renderStageArea(); break;
     case 'schedF': { const s = c.schedule[Number(a.dataset.i)]; s[a.dataset.f] = a.dataset.f === 'day' ? Number(a.value) : a.value; c.schedule.sort((x, y) => x.day - y.day || x.start.localeCompare(y.start)); save(); renderDrawer(); break; }
     case 'clsLayout': {
       if (!confirm('Change the room layout? This class\'s spots, zones and current seating will be cleared. History stays.')) { a.value = c.layout; return; }
