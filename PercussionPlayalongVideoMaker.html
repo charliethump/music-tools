@@ -173,6 +173,13 @@ input[type=color]{width:38px;height:32px;border:1.5px solid var(--line);border-r
 .nopts{display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:12px;background:#F6F3FB;margin-top:-4px}
 input[type=range]{width:100%;accent-color:var(--acc)}
 .nopts.off{opacity:.45;pointer-events:none}
+.pngbox{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.pngbox .row{gap:8px}
+.pngbox input[type=number]{width:58px;padding:4px 6px}
+.pngbox .seg button{padding:5px 10px;font-size:13px}
+.pngbox .lab{font-size:12.5px;font-weight:800;color:var(--muted)}
+.pngprev{width:100%;aspect-ratio:16/9;display:block;border-radius:8px;border:1px solid var(--line);background:repeating-conic-gradient(#E3E6EF 0 25%,#fff 0 50%) 0 0/16px 16px}
+.icb.on{background:var(--acc-soft);color:var(--acc)}
 .box{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .stage:has(.panel:not([hidden])) .hint{display:none}
 @media (max-height:760px){.top{padding:8px 22px}.top h1{font-size:19px}main{padding-top:10px}.stage{gap:8px;padding:10px}#strip{height:56px}#bWave{height:96px}.hint{display:none}.play{width:40px;height:40px}}
@@ -3377,9 +3384,10 @@ const ICON={
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
   dup:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
   del:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 8"/></svg>',
   ear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8.5a6 6 0 1 1 12 0c0 3.5-3.5 4.5-3.5 8a3 3 0 0 1-6 0"/></svg>'
 };
-function acts(i,n){return `<div class="acts"><button class="icb" data-a="up" aria-label="Move up" ${i?'':'disabled'}>${ICON.up}</button><button class="icb" data-a="down" aria-label="Move down" ${i<n-1?'':'disabled'}>${ICON.down}</button><button class="icb" data-a="dup" aria-label="Duplicate">${ICON.dup}</button><button class="icb del" data-a="del" aria-label="Delete" ${n>1?'':'disabled'}>${ICON.del}</button></div>`;}
+function acts(i,n,extra=''){return `<div class="acts">${extra}<button class="icb" data-a="up" aria-label="Move up" ${i?'':'disabled'}>${ICON.up}</button><button class="icb" data-a="down" aria-label="Move down" ${i<n-1?'':'disabled'}>${ICON.down}</button><button class="icb" data-a="dup" aria-label="Duplicate">${ICON.dup}</button><button class="icb del" data-a="del" aria-label="Delete" ${n>1?'':'disabled'}>${ICON.del}</button></div>`;}
 const secList=document.getElementById('secList');
 function barsTxt(o){return o.bar0===o.bar1?`Bar ${o.bar0}`:`Bars ${o.bar0}-${o.bar1}`;}
 function renderSide(){
@@ -3391,18 +3399,18 @@ function renderSide(){
       <div class="sec-fields" style="grid-template-columns:90px 1fr"><div class="field"><label>Bars</label><input type="number" min="1" max="64" value="${s.bars}" data-f="bars"></div><div class="field"><label>Words on screen (optional)</label><input type="text" value="${esc(s.text)}" placeholder="Listen..." data-f="text"></div></div></div>`;
     }else{
       const names=subNames(o.m);
-      h+=`<div class="sec${G.id===s.id?' editing':''}" data-id="${s.id}"><div class="sec-head"><span class="num${o.rowY===TOP_ROW_Y?'':' bot'}">${o.k+1}</span><b>Sequence ${o.k+1}</b><span class="bars">${barsTxt(o)}</span>${acts(i,n)}</div>
+      h+=`<div class="sec${G.id===s.id?' editing':''}" data-id="${s.id}"><div class="sec-head"><span class="num${o.rowY===TOP_ROW_Y?'':' bot'}">${o.k+1}</span><b>Sequence ${o.k+1}</b><span class="bars">${barsTxt(o)}</span>${acts(i,n,`<button class="icb${pngUI(s.id).open?' on':''}" data-a="png" title="Save as a PNG" aria-label="Save as a PNG">${ICON.img}</button>`)}</div>
       <canvas class="thumb" data-thumb="${s.id}" title="Edit the notes"></canvas>
       <div class="sec-fields"><div class="field"><label>Bars</label><input type="number" min="1" max="16" value="${s.bars}" data-f="bars"></div>
       <div class="field"><label>Squares are</label><select data-f="sub">${names.map((x,j)=>`<option value="${j}" ${s.sub===j?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>Count-in</label><select data-f="count"><option value="off" ${s.count==='off'?'selected':''}>None</option><option value="1" ${s.count==='1'?'selected':''}>1 bar</option><option value="2" ${s.count==='2'?'selected':''}>2 bars</option></select></div></div>
       <div class="namerow"><input type="text" value="${esc(s.name)}" placeholder="Title on screen (optional)" data-f="name"><input type="number" min="20" max="160" value="${s.nameSize}" data-f="nameSize" title="Title size"><input type="color" value="${s.nameColor}" data-f="nameColor" title="Title color"></div>
-      <div class="row" style="margin-top:8px"><button class="mini go" data-a="edit">Edit notes</button><span class="help">${o.noteCells.length} note${o.noteCells.length===1?'':'s'}${o.sustains.length?`, ${o.sustains.length} sustain${o.sustains.length>1?'s':''}`:''}</span></div></div>`;
+      <div class="row" style="margin-top:8px"><button class="mini go" data-a="edit">Edit notes</button><span class="help">${o.noteCells.length} note${o.noteCells.length===1?'':'s'}${o.sustains.length?`, ${o.sustains.length} sustain${o.sustains.length>1?'s':''}`:''}</span></div>${pngBox(o)}</div>`;
     }
   });
   secList.innerHTML=h;
   document.getElementById('secCount').textContent=`${TL.R.length} sequence${TL.R.length===1?'':'s'}`;
-  requestAnimationFrame(()=>secList.querySelectorAll('[data-thumb]').forEach(cv=>drawThumb(cv,TL.R.find(r=>r.sec.id===cv.dataset.thumb))));
+  requestAnimationFrame(()=>{secList.querySelectorAll('[data-thumb]').forEach(cv=>drawThumb(cv,TL.R.find(r=>r.sec.id===cv.dataset.thumb)));secList.querySelectorAll('[data-pngprev]').forEach(cv=>drawPngPrev(cv.dataset.pngprev));});
   renderBeatStat();renderSummary();renderInst();lastNow=null;
 }
 function drawThumb(cv,r){
@@ -3419,12 +3427,81 @@ function drawThumb(cv,r){
   c.strokeStyle='#FFC928';c.lineWidth=2;
   for(const s of r.sustains){const x0=6+s.startCell*step+step/2,x1=6+s.endCell*step+step/2;c.beginPath();c.moveTo(x0,h-6-sz);c.quadraticCurveTo((x0+x1)/2,h-sz+4,x1,h-6-sz);c.stroke();}
 }
+/* ================= Sequence PNG export (960 x 540, transparent) ================= */
+const PNG_UI={};let PNG_SIZE='match';
+function pngUI(id){return PNG_UI[id]||(PNG_UI[id]={open:false,mode:'all',a:1,b:4});}
+function seqBeats(r){return Math.max(1,Math.round(r.g1-r.g0));}
+function pngRange(r,u){const N=seqBeats(r);if(u.mode==='all')return[1,N];let a=Math.max(1,Math.min(N,u.a|0||1)),b=Math.max(a,Math.min(N,u.b|0||a));return[a,b];}
+function pngBox(o){
+  const u=pngUI(o.sec.id);if(!u.open)return'';
+  const N=seqBeats(o),[a,b]=pngRange(o,u);
+  return `<div class="pngbox">
+    <div class="row"><span class="lab">Beats</span><div class="seg"><button data-a="pm" data-v="all" aria-pressed="${u.mode==='all'}">All ${N}</button><button data-a="pm" data-v="range" aria-pressed="${u.mode==='range'}">Some</button></div>
+    ${u.mode==='range'?`<input type="number" min="1" max="${N}" value="${a}" data-pa aria-label="First beat"><span class="help">to</span><input type="number" min="1" max="${N}" value="${b}" data-pb aria-label="Last beat"><button class="mini" data-a="pngnext" title="Move to the next beats">Next &rsaquo;</button>`:''}</div>
+    <div class="row"><span class="lab">Size</span><div class="seg"><button data-a="ps" data-v="match" aria-pressed="${PNG_SIZE==='match'}">Same as the video</button><button data-a="ps" data-v="fill" aria-pressed="${PNG_SIZE==='fill'}">Fill the image</button></div></div>
+    <canvas class="pngprev" data-pngprev="${o.sec.id}" width="480" height="270" aria-label="PNG preview"></canvas>
+    <div class="row"><button class="mini go" data-a="pngsave">Save PNG</button><span class="help">960 x 540, transparent. Uses your Look settings.</span></div>
+  </div>`;
+}
+// beats a..b (1-based, inside the sequence) as their own little row
+function subRow(r,a,b){
+  const bt=c=>r.cellBeat[c]-r.g0;
+  let c0=0;while(c0<r.cells-1&&bt(c0)<a-1-1e-6)c0++;
+  let c1=r.cells-1;while(c1>c0&&bt(c1)>b-1e-6)c1--;
+  const notes={};for(let c=c0;c<=c1;c++)if(r.sec.notes[c])notes[c-c0]=r.sec.notes[c].slice();
+  const sus=r.sustains.filter(x=>x.startCell>=c0&&x.endCell<=c1).map(x=>({...x,startCell:x.startCell-c0,endCell:x.endCell-c0}));
+  const sub={sec:{...r.sec,notes},sustains:sus,cells:c1-c0+1,cellBeat:r.cellBeat.slice(c0,c1+2),cellBar:r.cellBar.slice(c0,c1+1),cpb:r.cpb,m:r.m,g0:r.cellBeat[c0]};
+  sub.layout=PNG_SIZE==='match'?r.layout:getLayout(sub.cells);
+  sub.noteCells=[];for(let c=0;c<sub.cells;c++)if(noteKeys(sub.sec,c).length)sub.noteCells.push(c);
+  return sub;
+}
+function seqPng(r,a,b){
+  const sub=subRow(r,a,b),sym=sub.layout.symSize;
+  let st=1;for(let c=0;c<sub.cells;c++)st=Math.max(st,noteKeys(sub.sec,c).length);
+  const sylSize=Math.max(22,Math.min(50,Math.round(sym*0.42)));
+  const top=Math.min(S.notation?-STICK_H-6:0,-sym/2-stackLift(st,sym))-14;
+  const bot=(S.syl?sym/2+18+sylSize*1.1:sym/2+SH_DY+SH_INSTR)+14;
+  const left=cellX(sub,0)-sym/2-16,right=cellX(sub,sub.cells-1)+sym/2+16;
+  const s=PNG_SIZE==='fill'?Math.min(960*0.94/(right-left),540*0.9/(bot-top),2.2):0.5;
+  const cv=document.createElement('canvas');cv.width=960;cv.height=540;const c=cv.getContext('2d');
+  c.translate(480,270);c.scale(s,s);c.translate(-(left+right)/2,-(top+bot)/2);
+  const spA=new Map();for(const x of sub.sustains){spA.set(x.startCell+':'+x.startInst,0);spA.set(x.endCell+':'+x.endInst,0);}
+  drawRowFull(c,sub,true,0,0,null,null,0,spA,null);ropes(c,sub,0);
+  return cv;
+}
+function drawPngPrev(id){
+  const cv=secList.querySelector(`[data-pngprev="${id}"]`),r=TL.R.find(x=>x.sec.id===id);if(!cv||!r)return;
+  const [a,b]=pngRange(r,pngUI(id)),img=seqPng(r,a,b),c=cv.getContext('2d');
+  c.clearRect(0,0,cv.width,cv.height);c.drawImage(img,0,0,cv.width,cv.height);
+}
+function savePng(id){
+  const r=TL.R.find(x=>x.sec.id===id);if(!r)return;const u=pngUI(id),[a,b]=pngRange(r,u),N=seqBeats(r);
+  const name=`${fileBase()} - Sequence ${r.k+1}${a===1&&b===N?'':` beats ${a}-${b}`}.png`;
+  seqPng(r,a,b).toBlob(bl=>download(bl,name),'image/png');
+}
+secList.addEventListener('input',e=>{
+  if(!('pa' in e.target.dataset)&&!('pb' in e.target.dataset))return;
+  const id=e.target.closest('.sec').dataset.id,u=pngUI(id),v=parseInt(e.target.value);if(isNaN(v))return;
+  if('pa' in e.target.dataset)u.a=v;else u.b=v;drawPngPrev(id);
+});
+secList.addEventListener('change',e=>{
+  if(!('pa' in e.target.dataset)&&!('pb' in e.target.dataset))return;
+  // tidy the numbers in place (no re-render, so the next box keeps focus)
+  const box=e.target.closest('.sec'),id=box.dataset.id,r=TL.R.find(x=>x.sec.id===id),u=pngUI(id),N=seqBeats(r);
+  if('pa' in e.target.dataset){u.a=Math.max(1,Math.min(N,u.a|0||1));if(u.b<u.a)u.b=u.a;}
+  else{u.b=Math.max(1,Math.min(N,u.b|0||1));if(u.b<u.a)u.a=u.b;}
+  box.querySelector('[data-pa]').value=u.a;box.querySelector('[data-pb]').value=u.b;drawPngPrev(id);
+});
 secList.addEventListener('click',e=>{
   const el=e.target.closest('.sec');if(!el)return;const id=el.dataset.id,i=S.sections.findIndex(s=>s.id===id);if(i<0)return;
   if(e.target.closest('[data-thumb]')){openGrid(id);return;}
   const a=e.target.closest('[data-a]');if(!a)return;
   const k=a.dataset.a;
   if(k==='edit'){openGrid(id);return;}
+  if(k==='png'){const u=pngUI(id);u.open=!u.open;renderSide();return;}
+  if(k==='pngsave'){savePng(id);return;}
+  if(k==='pngnext'){const u=pngUI(id),r=TL.R.find(x=>x.sec.id===id),N=seqBeats(r),len=u.b-u.a+1;if(u.b>=N){u.a=1;u.b=Math.min(N,len);}else{u.a=u.b+1;u.b=Math.min(N,u.b+len);}renderSide();return;}
+  if(k==='pm'||k==='ps'){const u=pngUI(id);if(k==='pm')u.mode=a.dataset.v;else PNG_SIZE=a.dataset.v;renderSide();return;}
   if(k==='up'&&i>0)[S.sections[i-1],S.sections[i]]=[S.sections[i],S.sections[i-1]];
   else if(k==='down'&&i<S.sections.length-1)[S.sections[i+1],S.sections[i]]=[S.sections[i],S.sections[i+1]];
   else if(k==='dup'){const c=JSON.parse(JSON.stringify(S.sections[i]));c.id=uid();S.sections.splice(i+1,0,c);}
