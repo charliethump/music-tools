@@ -173,6 +173,11 @@ input[type=color]{width:38px;height:32px;border:1.5px solid var(--line);border-r
 .nopts{display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:12px;background:#F6F3FB;margin-top:-4px}
 input[type=range]{width:100%;accent-color:var(--acc)}
 .nopts.off{opacity:.45;pointer-events:none}
+.stripbox{display:flex;flex-direction:column;gap:10px}
+.bgpick{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);user-select:none;touch-action:none}
+#bgPickCv{display:block;width:100%;height:auto}
+.bgbox{position:absolute;border:2.5px solid var(--label);box-shadow:0 0 0 9999px rgba(20,22,40,.55);cursor:move}
+.bgh{position:absolute;right:-8px;bottom:-8px;width:16px;height:16px;border-radius:50%;background:var(--label);border:2px solid #fff;cursor:nwse-resize}
 .pngbox{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
 .pngbox .row{gap:8px}
 .pngbox input[type=number]{width:58px;padding:4px 6px}
@@ -339,6 +344,16 @@ input[type=range]{width:100%;accent-color:var(--acc)}
         <div class="row" style="margin-top:8px"><button class="mini" id="trimReset">Use the whole video</button><span class="help" id="trimNote"></span></div>
       </div>
       <div class="box row"><button class="btn" id="stillBtn">Save PNG at the playhead</button></div>
+      <div class="box stripbox">
+        <div class="lab" style="font-size:15px;font-weight:800;color:var(--ink)">Strip for Final Cut</div>
+        <span class="help">One row of symbols with the conductor, as a short wide video to lay over the top of your class video. Same music, trim and fades as the full export.</span>
+        <div class="field"><label for="stripH">Strip height <span id="stripHTxt"></span></label><input type="range" id="stripH" min="200" max="540" step="10"></div>
+        <div class="field"><span class="lab">Background area <span class="help" style="font-weight:600">(drag the box, drag its corner to resize)</span></span>
+          <div class="bgpick" id="bgPick"><canvas id="bgPickCv" width="480" height="270"></canvas><div class="bgbox" id="bgBox"><div class="bgh" id="bgHandle"></div></div></div>
+          <div class="row" style="margin-top:6px"><button class="mini" id="bgBoxReset">Reset the box</button></div></div>
+        <label class="switch"><input type="checkbox" id="stripPrev"><span class="track"></span>Show the strip in the preview</label>
+        <div class="row"><button class="btn primary" id="stripBtn">Export strip MP4</button><span class="help" id="stripSize"></span></div>
+      </div>
       <div class="prog" id="prog"><div></div></div>
       <div class="status" id="expStatus">Renders frame by frame, so sync is exact. Keep this tab in front while it works. Needs Chrome or Edge.</div>
     </section>
@@ -2289,7 +2304,7 @@ function defaultState(){
   const s1=newRhythm();s1.count='2';
   return{title:'',ts:{num:4,den:4},meters:[],pickup:0,startBar:1,bpm:120,beats:[],
     sections:[s1],inst:DEFAULT_INST.map(([key,label])=>({key,label,custom:false})),
-    notation:false,notationColor:'#ffffff',noteWeight:4,restStyle:'quarter',barLines:false,syl:false,sylColor:true,sylColors:null,hold:true,countClick:true,fps:30,trimA:null,trimB:null,fadeIn:0,fadeOut:0,songName:''};
+    notation:false,notationColor:'#ffffff',noteWeight:4,restStyle:'quarter',barLines:false,stripH:360,stripBox:null,syl:false,sylColor:true,sylColors:null,hold:true,countClick:true,fps:30,trimA:null,trimB:null,fadeIn:0,fadeOut:0,songName:''};
 }
 let S=defaultState();
 const CUSTOM={inst:{},bg:null};   // dataURLs (kept out of the undo history)
@@ -2325,7 +2340,7 @@ function cleanState(p){
   if(Array.isArray(p.inst)&&p.inst.length)o.inst=p.inst.filter(i=>i&&i.key).map(i=>({key:String(i.key),label:String(i.label||i.key),custom:!!i.custom}));
   for(const k of ['notation','hold','countClick'])if(p[k]!=null)o[k]=!!p[k];
   if(/^#[0-9a-f]{6}$/i.test(p.notationColor))o.notationColor=p.notationColor;
-  o.noteWeight=clampInt(p.noteWeight,2,10,4);o.restStyle=p.restStyle==='z'?'z':'quarter';o.barLines=!!p.barLines;o.syl=!!p.syl;o.sylColor=p.sylColor!==false;
+  o.noteWeight=clampInt(p.noteWeight,2,10,4);o.restStyle=p.restStyle==='z'?'z':'quarter';o.barLines=!!p.barLines;o.stripH=Math.round(clampInt(p.stripH,200,540,360)/2)*2;o.stripBox=p.stripBox&&isFinite(p.stripBox.x)&&isFinite(p.stripBox.y)&&isFinite(p.stripBox.w)?{x:+p.stripBox.x,y:+p.stripBox.y,w:+p.stripBox.w}:null;o.syl=!!p.syl;o.sylColor=p.sylColor!==false;
   o.sylColors=p.sylColors&&typeof p.sylColors==='object'?Object.fromEntries(Object.keys(SYL_DEF).map(k=>[k,/^#[0-9a-f]{6}$/i.test(p.sylColors[k])?p.sylColors[k]:sylDefault()[k]])):null;
   o.fps=+p.fps===60?60:30;
   o.trimA=p.trimA!=null&&isFinite(+p.trimA)?+p.trimA:null;o.trimB=p.trimB!=null&&isFinite(+p.trimB)?+p.trimB:null;
@@ -2473,13 +2488,14 @@ function cellFrac(r,g){
 }
 
 // The hop. Times come from the beat map, so every hop lands exactly on its note however the tempo moves.
+let EDGE_L=-COND_W/2,EDGE_R=W+COND_W/2;   // where the conductor enters and leaves (wider in the strip)
 function conductorArc(r,t){
   if(r.first===null)return null;
   const sym=r.layout.symSize;
   if(t<r.tFirst){
     if(t<r.tEntry)return null;
     const tIn=(t-r.tEntry)/Math.max(r.tFirst-r.tEntry,1e-6);
-    const x=-COND_W/2+(cellX(r,r.first)+COND_W/2)*tIn;
+    const x=EDGE_L+(cellX(r,r.first)-EDGE_L)*tIn;
     const qFrac=(r.cellBeat[1]-r.cellBeat[0]);
     const arcH=Math.max(cellLift(r,r.first)+20*K,Math.max(9*K,Math.min(80*K,Math.round(60*K*qFrac))));
     return{x,arcY:-Math.round(arcH*Math.cos(tIn*Math.PI/2)),tInSpan:tIn,tX:tIn,landedCell:null,nextCell:r.first,landFrac:0,sinkFrac:0,spanBeats:0,holding:false};
@@ -2491,7 +2507,7 @@ function conductorArc(r,t){
   let span,tIn,x0,x1,tPrev=r.cellT[prev],tNext,holding=false,tLaunch=null;
   if(next===null){
     span=r.cells-prev;tNext=r.cellT[r.cells];
-    tIn=(t-tPrev)/Math.max(tNext-tPrev,1e-6);x0=cellX(r,prev);x1=W+COND_W/2;
+    tIn=(t-tPrev)/Math.max(tNext-tPrev,1e-6);x0=cellX(r,prev);x1=EDGE_R;
   }else{
     span=next-prev;tNext=r.cellT[next];
     const real=tNext-tPrev;
@@ -2557,7 +2573,7 @@ function sparkles(c,cx,cy,sym,pt,alpha=1){
 function drawRow(c,r,active,rowY,xOff=0,bounce=null,landFrac=0,sinkFrac=0,extraHide=null,pt=0,spAlpha=null,alphaOverride=null){
   const sym=r.layout.symSize,hide=new Set(extraHide||[]),halo=new Map();
   for(const s of r.sustains){if(s.type==='roll')hide.add(s.endCell+':'+s.endInst);halo.set(s.startCell+':'+s.startInst,s.type);if(s.type!=='roll')halo.set(s.endCell+':'+s.endInst,s.type);}
-  c.save();c.beginPath();c.rect(0,rowY-sym*4,W,sym*5+24*K);c.clip();
+  c.save();c.beginPath();c.rect(-W*2,rowY-sym*4,W*5,sym*5+24*K);c.clip();
   const order=instOrder();
   for(let cell=0;cell<r.cells;cell++){
     const ks=noteKeys(r.sec,cell).filter(k=>!hide.has(cell+':'+k));if(!ks.length)continue;
@@ -2923,7 +2939,134 @@ function bgCanvas(){
   c.fillStyle=`rgba(255,255,255,${BG_LIGHTEN})`;c.fillRect(0,0,W,H);
   return BG_BASE=cv;
 }
+/* ================= Strip for Final Cut ================= */
+function stripH(){return S.stripH||360;}
+function stripBox(){
+  const h=stripH(),def={x:0,w:W,y:Math.round((H-W*h/W)/2)};
+  let b=S.stripBox||def;let w=Math.max(160,Math.min(W,b.w)),bh=w*h/W;
+  if(bh>H){bh=H;w=H*W/h;}
+  return{x:Math.max(0,Math.min(W-w,b.x)),y:Math.max(0,Math.min(H-bh,b.y)),w,h:bh};
+}
+function getLayoutW(n,avail,spread=0){
+  let sym=SYMBOL_SIZE,gap=SYMBOL_GAP;const need=n*(sym+gap)-gap;
+  if(need>avail){const k=avail/need;sym=Math.max(Math.floor(sym*k),36);gap=Math.max(Math.floor(gap*k),4);}
+  else if(spread&&n>1){
+    // spread the row across most of the strip (up to 2.5 symbol widths apart), like a line of kids
+    const want=(spread-n*sym)/(n-1);gap=Math.max(gap,Math.min(want,sym*1.5));
+  }
+  return{symSize:sym,gap};
+}
+let SP=null,SP_KEY='';
+function stripPlan(){
+  const h=stripH(),key=[h,TL.R.length,TL.end,S.notation,S.syl,TL.R.map(r=>r.cells+':'+r.t0).join(',')].join('|');
+  if(SP&&SP_KEY===key&&SP.TL===TL)return SP;
+  // pass 1: how tall the tallest moment is (conductor at the top of a hop down to the syllables)
+  let top=-200,bot=60;
+  const sizeFor=s=>{
+    const avail=W/s-80;
+    return TL.R.map(r=>({...r,layout:getLayoutW(r.cells,avail,(W*0.88)/s)}));
+  };
+  const extent=rows=>{
+    let tp=-100,bt=40;
+    for(const r of rows){
+      const sym=r.layout.symSize;let st=1;for(let c=0;c<r.cells;c++)st=Math.max(st,noteKeys(r.sec,c).length);
+      const lift=stackLift(st,sym);
+      tp=Math.min(tp,-sym/2-lift-COND_H+FOOT-80*K, S.notation?-STICK_H-6:0, -sym/2-SUST_H-8*K-80);
+      const sy=Math.max(22,Math.min(50,Math.round(sym*0.42)));
+      bt=Math.max(bt,S.syl?sym/2+18+sy*1.1:sym/2+SH_DY+SH_INSTR);
+    }
+    return[tp,bt];
+  };
+  let s=0.6,rows=sizeFor(s);
+  for(let i=0;i<4;i++){[top,bot]=extent(rows);const ns=Math.min(1,(h-14)/(bot-top));if(Math.abs(ns-s)<0.002){s=ns;break;}s=ns;rows=sizeFor(s);}
+  rows=sizeFor(s);[top,bot]=extent(rows);
+  const rowYpx=h-7-bot*s;
+  // fades between sequences on the single row
+  const fin=rows.map(()=>null),fout=rows.map(()=>null),hideAt=rows.map(()=>Infinity),showAt=rows.map(()=>-Infinity);
+  for(let k=0;k+1<rows.length;k++){
+    const r=rows[k],r2=rows[k+1];
+    const fs=r.first!==null?r.cellT[r.last]:Math.max(r.t0,r.t1-0.3);
+    if(r.touchNext){
+      const fe=Math.max(fs+0.25,r2.tEntry>fs+0.05?r2.tEntry:r2.tFirst);
+      if(seqsSame(r,r2)){hideAt[k]=fs;showAt[k+1]=fs;}
+      else{fout[k]=[fs,fe];fin[k+1]=[fs,fe];}
+    }else{
+      const oe=Math.max(fs+0.3,r.t1+beatDurAt(r.g1));
+      fout[k]=[fs,oe];
+      let is=timeAt(r2.g0-barInfo(r2.bar0-1).n),ie=Math.max(r2.tEntry,is+0.3);
+      if(is<oe){is=oe;ie=Math.max(ie,is+0.3);}
+      fin[k+1]=[is,ie];
+    }
+  }
+  SP={TL,s,rows,rowYpx,fin,fout,hideAt,showAt,h,edgeL:W/2-(W/2)/s-COND_W/2,edgeR:W/2+(W/2)/s+COND_W/2};SP_KEY=key;
+  return SP;
+}
+function ramp(t,w,up){if(!w)return 1;const p=Math.max(0,Math.min(1,(t-w[0])/Math.max(w[1]-w[0],1e-6)));return up?p:1-p;}
+function stripAlpha(P,k,t){
+  let a=1;
+  if(t<P.showAt[k])a=0;if(t>=P.hideAt[k])a=0;
+  if(P.fin[k])a=Math.min(a,t<P.fin[k][0]?0:ramp(t,P.fin[k],true));
+  if(P.fout[k])a=Math.min(a,ramp(t,P.fout[k],false));
+  return a;
+}
+function drawStripRow(c,r,t,a){
+  const live=t>=r.tEntry&&t<=r.t1+0.05;
+  const arc=live?conductorArc(r,t):null,sst=live?sustainState(r,t):null;
+  const frac=r.first!==null&&t>=r.tFirst?cellFrac(r,beatAt(t)):null;
+  const rollHide=new Set(),spA=new Map();
+  if(frac!==null){
+    for(const s of r.sustains)if(s.type==='roll'&&frac>=s.startCell)rollHide.add(s.startCell+':'+s.startInst);
+    if(!sst)for(const s of r.sustains)if(frac>s.endCell){const v=Math.max(0,1-(t-r.cellT[s.endCell])/0.5);spA.set(s.startCell+':'+s.startInst,v);spA.set(s.endCell+':'+s.endInst,v);}
+  }
+  if(a>0.001){
+    drawRowFull(c,r,true,0,0,(!sst&&arc)?arc:null,rollHide,t,spA.size?spA:null,a<0.999?a:null);
+    c.save();c.globalAlpha=a;ropes(c,r,0);
+    if(frac!==null)for(const s of r.sustains)if(s.type==='roll'&&frac>s.endCell){const v=Math.max(0,1-(t-r.cellT[s.endCell])/0.5);drawRollDone(c,r,s,0,t,0,v);}
+    c.restore();
+  }
+  if(sst){if(sst.s.type==='roll')drawRoll(c,r,sst,0,t);else drawTightrope(c,r,sst,0);}
+  else if(arc)drawConductor(c,arc.x,condY(r,0,arc),pickFrame(arc,false));
+}
+function drawFCStrip(c,vt,still){
+  const P=stripPlan(),h=P.h,t=vt-TL.pad,b=stripBox();
+  c.save();c.beginPath();c.rect(0,0,W,h);c.clip();
+  c.drawImage(bgCanvas(),b.x,b.y,b.w,b.h,0,0,W,h);
+  const oL=EDGE_L,oR=EDGE_R;EDGE_L=P.edgeL;EDGE_R=P.edgeR;
+  c.save();c.translate(W/2,P.rowYpx);c.scale(P.s,P.s);c.translate(-W/2,0);
+  let owner=-1;
+  P.rows.forEach((r,k)=>{
+    const a=stripAlpha(P,k,t),live=t>=r.tEntry&&t<=r.t1+0.05;
+    if(a>0.001||live)drawStripRow(c,r,t,a);
+    if(a>0.5&&(owner<0||t>=r.t0-0.3))owner=k;
+  });
+  c.restore();EDGE_L=oL;EDGE_R=oR;
+  // titles and listening words, scaled to the strip
+  if(owner>=0){const r=P.rows[owner];if(r.sec.name)drawName(c,r.sec.name,stripAlpha(P,owner,t),Math.max(22,Math.round(r.sec.nameSize*P.s)),r.sec.nameColor);}
+  const L=TL.secs.find(o=>o.type==='rest'&&t>=o.t0&&t<o.t1);
+  if(L&&L.sec.text){const a=Math.min(1,(t-L.t0)/0.3,(L.t1-t)/0.3);drawName(c,L.sec.text,a,Math.max(24,Math.round(64*P.s)));}
+  // count-in words
+  for(const e of TL.count){
+    if(t<e.t||t>=e.end)continue;const img=IMG['c_'+e.w];if(!img)continue;
+    const k=Math.min(1,h*0.8/img.height),w=img.width*k,ih=img.height*k;c.drawImage(img,(W-w)/2,(h-ih)/2,w,ih);
+  }
+  if(!still){const f=fadeLevel(vt);if(f>0){c.fillStyle=`rgba(0,0,0,${f})`;c.fillRect(0,0,W,h);}}
+  c.restore();
+}
+let STRIP_CV=null;
+function stripCanvas(){const h=stripH();if(!STRIP_CV||STRIP_CV.height!==h){STRIP_CV=document.createElement('canvas');STRIP_CV.width=W;STRIP_CV.height=h;}return STRIP_CV;}
+function drawStripPreview(c,vt){
+  const h=stripH();
+  c.save();c.fillStyle='#111';c.fillRect(0,0,W,H);
+  c.fillStyle='#2A2D40';c.fillRect(0,h,W,H-h);
+  c.fillStyle='#8C92B0';c.font='800 44px Nunito, sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('Your class video goes here',W/2,h+(H-h)/2);
+  c.font='700 30px Nunito, sans-serif';c.fillText(`Strip preview: ${W} x ${h}`,W/2,h+(H-h)/2+56);
+  c.restore();
+  drawFCStrip(c,vt,false);
+  const TR=trimRange();
+  if(TR.cut&&(vt<TR.a-1e-6||vt>TR.b+1e-6)){c.fillStyle='rgba(20,22,40,.62)';c.fillRect(0,0,W,h);c.fillStyle='#fff';c.font='800 44px Nunito, sans-serif';c.textAlign='center';c.fillText('Cut from the export',W/2,h/2);}
+}
 function drawFrame(c,vt,still){
+  if(ui.strip&&!still){drawStripPreview(c,vt);return;}
   c.save();
   c.drawImage(bgCanvas(),0,0);
   const t=vt-TL.pad;
@@ -3755,9 +3898,9 @@ document.getElementById('bgFile').addEventListener('change',async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   const src=URL.createObjectURL(f),img=await loadImg(src);URL.revokeObjectURL(src);if(!img)return;
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;const s=Math.max(W/img.width,H/img.height);cv.getContext('2d').drawImage(img,(W-img.width*s)/2,(H-img.height*s)/2,img.width*s,img.height*s);
-  CUSTOM.bg=cv.toDataURL('image/jpeg',0.88);CUSTOM.bgImg=await loadImg(CUSTOM.bg);BG_BASE=null;save();redraw();
+  CUSTOM.bg=cv.toDataURL('image/jpeg',0.88);CUSTOM.bgImg=await loadImg(CUSTOM.bg);BG_BASE=null;save();drawBgPick();redraw();
 });
-document.getElementById('bgReset').addEventListener('click',()=>{CUSTOM.bg=null;CUSTOM.bgImg=null;BG_BASE=null;save();redraw();});
+document.getElementById('bgReset').addEventListener('click',()=>{CUSTOM.bg=null;CUSTOM.bgImg=null;BG_BASE=null;save();drawBgPick();redraw();});
 for(const id of ['notation','hold','countClick','barLines'])document.getElementById(id).addEventListener('change',e=>{S[id]=e.target.checked;afterEdit();syncNoteOpts();});
 document.getElementById('noteWeight').addEventListener('input',e=>{S.noteWeight=clampInt(e.target.value,2,10,4);syncNoteOpts();redraw();});
 document.getElementById('noteWeight').addEventListener('change',()=>commit());
@@ -3768,6 +3911,37 @@ document.querySelectorAll('[data-sc]').forEach(inp=>{
   inp.addEventListener('change',()=>commit());
 });
 document.getElementById('sylReset').addEventListener('click',()=>{S.sylColors=null;syncNoteOpts();commit();redraw();});
+const stripBtn=document.getElementById('stripBtn');
+stripBtn.addEventListener('click',()=>exportVideo('strip'));
+document.getElementById('stripH').addEventListener('input',e=>{S.stripH=Math.round(clampInt(e.target.value,200,540,360)/2)*2;syncStrip();redraw();});
+document.getElementById('stripH').addEventListener('change',()=>commit());
+document.getElementById('stripPrev').addEventListener('change',e=>{ui.strip=e.target.checked;redraw();});
+document.getElementById('bgBoxReset').addEventListener('click',()=>{S.stripBox=null;syncStrip();commit();redraw();});
+function drawBgPick(){
+  const cv=document.getElementById('bgPickCv');cv.getContext('2d').drawImage(bgCanvas(),0,0,cv.width,cv.height);
+}
+function syncStrip(){
+  document.getElementById('stripH').value=stripH();document.getElementById('stripHTxt').textContent=stripH()+' px';
+  document.getElementById('stripSize').textContent=`${W} x ${stripH()}`;
+  document.getElementById('stripPrev').checked=!!ui.strip;
+  const b=stripBox(),el=document.getElementById('bgBox'),pc=100/W,pr=100/H;
+  el.style.left=b.x*pc+'%';el.style.top=b.y*pr+'%';el.style.width=b.w*pc+'%';el.style.height=b.h*pr+'%';
+  drawBgPick();
+}
+(function(){
+  const pick=document.getElementById('bgPick'),box=document.getElementById('bgBox'),hd=document.getElementById('bgHandle');
+  let drag=null;
+  const toBg=e=>{const r=pick.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};};
+  box.addEventListener('pointerdown',e=>{e.preventDefault();box.setPointerCapture(e.pointerId);const p=toBg(e),b=stripBox();drag={mode:e.target===hd?'size':'move',p,b};});
+  box.addEventListener('pointermove',e=>{
+    if(!drag)return;const p=toBg(e),dx=p.x-drag.p.x,dy=p.y-drag.p.y,b=drag.b;
+    if(drag.mode==='move')S.stripBox={x:b.x+dx,y:b.y+dy,w:b.w};
+    else{const w=Math.max(160,b.w+Math.max(dx,dy*W/stripH()));S.stripBox={x:b.x,y:b.y,w};}
+    const c=stripBox();S.stripBox={x:c.x,y:c.y,w:c.w};syncStrip();redraw();
+  });
+  const end=()=>{if(drag){drag=null;commit();}};
+  box.addEventListener('pointerup',end);box.addEventListener('pointercancel',end);
+})();
 function syncNoteOpts(){
   document.getElementById('syl').checked=S.syl;document.getElementById('sylColor').checked=S.sylColor;
   document.getElementById('sylOpts').classList.toggle('off',!S.syl);
@@ -3796,7 +3970,7 @@ function syncInputs(){
   document.getElementById('pickup').value=S.pickup;document.getElementById('bpm').value=S.bpm;document.getElementById('startBar').value=S.startBar;
   document.getElementById('startBar').min=S.pickup?0:1;
   for(const id of ['notation','hold','countClick'])document.getElementById(id).checked=S[id];
-  syncNoteOpts();
+  syncNoteOpts();syncStrip();
   document.getElementById('notationColor').value=S.notationColor;document.getElementById('fps').value=S.fps;
   renderMeters();syncTrim();
 }
@@ -3869,11 +4043,11 @@ function convertSummer(o){
 const expBtn=document.getElementById('expBtn'),cancelBtn=document.getElementById('cancelExp'),prog=document.getElementById('prog'),expStatus=document.getElementById('expStatus');
 let cancelReq=false;
 cancelBtn.addEventListener('click',()=>{cancelReq=true;});
-expBtn.addEventListener('click',exportVideo);
+expBtn.addEventListener('click',()=>exportVideo('full'));
 function setStatus(t,err){expStatus.textContent=t;expStatus.classList.toggle('err',!!err);}
-async function pickCodecs(fps,hasAudio,sr,ch){
+async function pickCodecs(fps,hasAudio,sr,ch,vw=W,vh=H){
   if(!('VideoEncoder' in window))return null;
-  const vbase={width:W,height:H,bitrate:fps>30?16e6:12e6,framerate:fps};let v=null;
+  const vbase={width:vw,height:vh,bitrate:fps>30?16e6:12e6,framerate:fps};let v=null;
   for(const [codec,mux,extra] of [[fps>30?'avc1.64002A':'avc1.640028','avc',{avc:{format:'avc'}}],['avc1.4D0028','avc',{avc:{format:'avc'}}],['vp09.00.40.08','vp9',{}]]){
     const cfg={...vbase,codec,...extra};try{if((await VideoEncoder.isConfigSupported(cfg)).supported){v={cfg,mux};break;}}catch(e){}
   }
@@ -3892,18 +4066,19 @@ async function mixAudio(rate,ch,from,dur,fi,fo){
   }
   return oc.startRendering();
 }
-async function exportVideo(){
+async function exportVideo(kind){
   if(ui.exporting)return;pause();
+  const strip=kind==='strip',vw=W,vh=strip?stripH():H,ecv=strip?stripCanvas():view,ectx=ecv.getContext('2d');
   const fps=S.fps,TR=trimRange(),dur=TR.b-TR.a,nFrames=Math.round(dur*fps);
   const hasAudio=!!song.buf||(S.countClick&&TL.count.length>0);
   const ch=song.buf?Math.min(2,song.buf.numberOfChannels):hasAudio?2:0;
-  const codecs=await pickCodecs(fps,hasAudio,song.buf?song.buf.sampleRate:48000,ch);
+  const codecs=await pickCodecs(fps,hasAudio,song.buf?song.buf.sampleRate:48000,ch,vw,vh);
   if(!codecs){setStatus('This browser cannot encode video. Open this page in Chrome or Edge.',true);return;}
   if(hasAudio&&!codecs.a){setStatus('This browser cannot encode the audio track. Open this page in Chrome or Edge.',true);return;}
-  ui.exporting=true;cancelReq=false;expBtn.disabled=true;cancelBtn.hidden=false;prog.style.display='block';prog.firstElementChild.style.width='0';
+  ui.exporting=true;cancelReq=false;expBtn.disabled=true;stripBtn.disabled=true;cancelBtn.hidden=false;prog.style.display='block';prog.firstElementChild.style.width='0';
   document.getElementById('playBtn').disabled=true;
   let failure=null;
-  const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:codecs.v.mux,width:W,height:H,frameRate:fps},audio:codecs.a?{codec:codecs.a.mux,sampleRate:codecs.a.cfg.sampleRate,numberOfChannels:ch}:undefined,fastStart:'in-memory',firstTimestampBehavior:'offset'});
+  const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:codecs.v.mux,width:vw,height:vh,frameRate:fps},audio:codecs.a?{codec:codecs.a.mux,sampleRate:codecs.a.cfg.sampleRate,numberOfChannels:ch}:undefined,fastStart:'in-memory',firstTimestampBehavior:'offset'});
   const started=performance.now();
   try{
     if(codecs.a){
@@ -3918,21 +4093,21 @@ async function exportVideo(){
     const fdur=Math.round(1e6/fps),gop=fps*2;
     for(let i=0;i<nFrames;i++){
       if(cancelReq)throw new Error('cancel');if(failure)throw failure;
-      drawFrame(vctx,TR.a+i/fps);
-      const vf=new VideoFrame(view,{timestamp:Math.round(i*1e6/fps),duration:fdur});venc.encode(vf,{keyFrame:i%gop===0});vf.close();
+      if(strip){ectx.clearRect(0,0,vw,vh);drawFCStrip(ectx,TR.a+i/fps,false);}else{const sp=ui.strip;ui.strip=false;drawFrame(vctx,TR.a+i/fps);ui.strip=sp;}
+      const vf=new VideoFrame(ecv,{timestamp:Math.round(i*1e6/fps),duration:fdur});venc.encode(vf,{keyFrame:i%gop===0});vf.close();
       while(venc.encodeQueueSize>6)await new Promise(r=>{venc.addEventListener('dequeue',r,{once:true});setTimeout(r,20);});
-      if(i%15===0){const p=(i+1)/nFrames,el=(performance.now()-started)/1000,left=p>0.02?el/p-el:0;prog.firstElementChild.style.width=(p*100).toFixed(1)+'%';setStatus(`Rendering frame ${i+1} of ${nFrames}${left?`, about ${Math.ceil(left)} s left`:''}`);updateClock(TR.a+i/fps);await new Promise(r=>setTimeout(r,0));}
+      if(i%15===0){const p=(i+1)/nFrames,el=(performance.now()-started)/1000,left=p>0.02?el/p-el:0;prog.firstElementChild.style.width=(p*100).toFixed(1)+'%';setStatus(`Rendering frame ${i+1} of ${nFrames}${left?`, about ${Math.ceil(left)} s left`:''}`);if(strip){vctx.fillStyle='#111';vctx.fillRect(0,0,W,H);vctx.drawImage(ecv,0,0);}updateClock(TR.a+i/fps);await new Promise(r=>setTimeout(r,0));}
     }
     await venc.flush();venc.close();if(failure)throw failure;
     muxer.finalize();
-    const blob=new Blob([muxer.target.buffer],{type:'video/mp4'});download(blob,fileBase()+' playalong.mp4');
+    const blob=new Blob([muxer.target.buffer],{type:'video/mp4'});download(blob,fileBase()+(strip?' strip.mp4':' playalong.mp4'));
     prog.firstElementChild.style.width='100%';
     const note=codecs.v.mux!=='avc'||(codecs.a&&codecs.a.mux!=='aac')?' This browser could not make H.264/AAC, so Final Cut may not open it; use Chrome or Edge.':'';
     setStatus(`Done: ${(blob.size/1048576).toFixed(1)} MB in ${Math.round((performance.now()-started)/1000)} s. Check your Downloads folder.${note}`,!!note);
   }catch(e){
     if(e&&e.message==='cancel')setStatus('Export cancelled.');else{setStatus('Export failed: '+(e&&e.message||e),true);console.error(e);}
   }finally{
-    ui.exporting=false;expBtn.disabled=false;cancelBtn.hidden=true;document.getElementById('playBtn').disabled=false;
+    ui.exporting=false;expBtn.disabled=false;stripBtn.disabled=false;cancelBtn.hidden=true;document.getElementById('playBtn').disabled=false;
     setTimeout(()=>{if(!ui.exporting)prog.style.display='none';},3000);redraw();
   }
 }
