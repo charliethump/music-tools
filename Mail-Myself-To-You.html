@@ -110,7 +110,9 @@
   #grid {
     display: flex; flex-wrap: wrap; justify-content: center;
     gap: calc(var(--envW) * 0.12);
+    transition: opacity .4s ease;
   }
+  #grid.dim { opacity: .15; }
   .env {
     width: var(--envW);
     aspect-ratio: 1000 / 560;
@@ -585,14 +587,50 @@ async function flyIn() {
       delay: order.indexOf(i) * 90,
       easing: 'cubic-bezier(.2,.8,.25,1)',
       fill: 'backwards'
-    }).finished;
+    }).finished.catch(() => {});
   });
   await Promise.all(runs);
+  settleEnvelopes();
   busy = false;
 }
 
 /* ---------- Animation helpers ---------- */
-const anim = (el, frames, opts) => el.animate(frames, { fill: 'forwards', ...opts }).finished;
+const anim = (el, frames, opts) => el.animate(frames, { fill: 'forwards', ...opts }).finished.catch(() => {});
+// A cancelled animation rejects its promise; never let that stop a sequence midway
+const done = a => a.finished.catch(() => {});
+
+// Clear any leftover opacity on the envelopes and make sure the grid is not dimmed
+function settleEnvelopes() {
+  gridEl.classList.remove('dim');
+  gridEl.querySelectorAll('.env').forEach(e => {
+    e.style.opacity = '';
+    e.getAnimations().forEach(a => { if (a.playState === 'finished') a.cancel(); });
+  });
+}
+
+/* Fallback for older graphics (e.g. EWS MacBook + Promethean): force every
+   envelope to full opacity and make the browser repaint them. */
+function forceOpaque() {
+  if (screen !== 'mail' || busy) return;
+  gridEl.classList.remove('dim');
+  gridEl.style.opacity = '1';
+  gridEl.querySelectorAll('.env').forEach(e => {
+    e.getAnimations().forEach(a => { if (a.playState !== 'running') a.cancel(); });
+    e.style.opacity = '1';
+    // nudge the compositor so a stale faded layer gets redrawn
+    e.style.transform = 'translateZ(0)';
+    void e.offsetWidth;
+    e.style.transform = '';
+  });
+  void gridEl.offsetWidth;
+  gridEl.style.opacity = '';
+}
+let opaqueQueued = false;
+mailEl.addEventListener('pointermove', () => {
+  if (opaqueQueued) return;
+  opaqueQueued = true;
+  requestAnimationFrame(() => { opaqueQueued = false; forceOpaque(); });
+});
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 /* ---------- Open ---------- */
@@ -632,10 +670,8 @@ async function openEnvelope(num) {
   envEl.style.visibility = 'hidden';
   current = { num, stage, envEl, bigLetter: null };
 
-  // Dim the other envelopes
-  gridEl.querySelectorAll('.env').forEach(e => {
-    if (e !== envEl) anim(e, [{ opacity: 1 }, { opacity: 0.15 }], { duration: 400 });
-  });
+  // Dim the other envelopes (one class on the grid, so un-dimming can't get stuck)
+  gridEl.classList.add('dim');
 
   // 1. Fly from grid spot to center, growing
   const s = from.width / W;
@@ -741,15 +777,16 @@ async function closeEnvelope() {
   usedStack.push(envEl.dataset.num);
   sizeGrid();
 
+  gridEl.classList.remove('dim');   // fades back to full opacity
   const moves = others.map(e => {
     const a = before.get(e), b = e.getBoundingClientRect();
-    e.getAnimations().forEach(x => x.cancel()); // clear dim
-    return e.animate([
-      { transform: `translate(${a.left - b.left}px, ${a.top - b.top}px)`, opacity: 0.15 },
-      { transform: 'translate(0,0)', opacity: 1 }
-    ], { duration: T.reflow, easing: 'cubic-bezier(.2,.8,.2,1)' }).finished;
+    return done(e.animate([
+      { transform: `translate(${a.left - b.left}px, ${a.top - b.top}px)` },
+      { transform: 'translate(0,0)' }
+    ], { duration: T.reflow, easing: 'cubic-bezier(.2,.8,.2,1)' }));
   });
   await Promise.all(moves);
+  settleEnvelopes();
 
   if (others.length === 0) doneEl.classList.add('show');
 
@@ -757,6 +794,8 @@ async function closeEnvelope() {
   screen = 'mail';
   busy = false;
   updateUndo();
+  forceOpaque();
+  setTimeout(forceOpaque, 600);   // again after the grid's fade-in has had time to finish
 }
 
 function closeInstant() {
@@ -766,6 +805,7 @@ function closeInstant() {
   mingus.phase = 'down';
   mingusBtn.classList.remove('show');
   skipBtn.classList.remove('show');
+  gridEl.classList.remove('dim');
   if (!current) return;
   current.bigLetter && current.bigLetter.remove();
   current.stage.remove();
@@ -825,17 +865,18 @@ async function undoLast() {
 
   const moves = visible.map(e => {
     const a = before.get(e), b = e.getBoundingClientRect();
-    return e.animate([
+    return done(e.animate([
       { transform: `translate(${a.left - b.left}px, ${a.top - b.top}px)` },
       { transform: 'translate(0,0)' }
-    ], { duration: T.reflow, easing: 'cubic-bezier(.2,.8,.2,1)' }).finished;
+    ], { duration: T.reflow, easing: 'cubic-bezier(.2,.8,.2,1)' }));
   });
-  moves.push(envEl.animate([
+  moves.push(done(envEl.animate([
     { transform: 'scale(0.4)', opacity: 0 },
     { transform: 'scale(1.06)', opacity: 1, offset: 0.7 },
     { transform: 'scale(1)', opacity: 1 }
-  ], { duration: T.reflow, easing: 'ease-out' }).finished);
+  ], { duration: T.reflow, easing: 'ease-out' })));
   await Promise.all(moves);
+  settleEnvelopes();
 
   busy = false;
   updateUndo();

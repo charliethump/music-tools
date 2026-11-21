@@ -147,6 +147,8 @@ body.picker #visBtn{display:none}
 /* ---------- dancer (L): small character dancing in the bottom right while the music plays ---------- */
 #danceBtn{position:fixed;left:calc(1vw + 15vh);bottom:.8vh;width:4.4vh;height:4.4vh;padding:.8vh;border:0;border-radius:1vh;background:none;color:var(--navy);opacity:.22;cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center}
 #danceBtn:hover{opacity:.6}
+/* cursor hides after 2 s without moving during the game (not on the set picker, ?mark or the sound panel) */
+body.nocursor:not(.picker):not(.mark-open):not(.fx-open),body.nocursor:not(.picker):not(.mark-open):not(.fx-open) *{cursor:none !important}
 #danceBtn svg{width:100%;height:100%}
 #danceBtn.on{color:var(--blue)}
 body.picker #danceBtn{display:none}
@@ -1522,6 +1524,18 @@ function mLoop(){
   }
   mRaf = requestAnimationFrame(mLoop);
 }
+
+/* ================= HIDE THE CURSOR =================
+   After CURSOR_HIDE ms without the mouse moving, the pointer disappears. Any movement brings it back. */
+const CURSOR_HIDE = 2000;
+let cursorTimer = 0;
+function cursorWake(){
+  document.body.classList.remove('nocursor');
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.add('nocursor'), CURSOR_HIDE);
+}
+['mousemove','mousedown','wheel','touchstart'].forEach(ev => document.addEventListener(ev, cursorWake, {passive: true}));
+cursorWake();
 
 /* ================= START ================= */
 document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
