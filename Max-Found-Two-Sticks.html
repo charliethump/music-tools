@@ -138,6 +138,7 @@ body.sub.reading #subNav{display:flex}
 #subNav button:disabled{opacity:.35;cursor:default}
 #subNav button[hidden]{display:none}
 #subReturn{display:none}
+body.noCursor, body.noCursor *{cursor:none!important}   /* hidden while reading; any mouse movement brings it back */
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:18px;z-index:60;background:#1a1c20}
 </style>
 </head>
@@ -308,6 +309,7 @@ const VOLUNTEER_AMB = 0.5;         // background level while a volunteer has the
 const VOLUNTEER_FADE_SEC = 5;      // how long that fade takes
 const END_BELLS_LEVEL = 0.5;      // The End bells (1 = original volume)
 const END_FADE_SEC = 10;           // background sounds fade out over this long when The End appears
+const CURSOR_HIDE_MS = 2000;       // hide the mouse pointer after this long without movement (book only)
 const FLIP_MS = 950;               // old whole-page flip (flipToRigid)
 const PAGE_TURN = 'curl';          // 'curl' = turn from the corner, 'rigid' = the old whole-page flip
 const CURL_MS = 1200;              // corner turn, start to finish
@@ -1956,6 +1958,18 @@ $('endBtn').onclick = e => { e.stopPropagation(); initAudio(); next(); };
 $('soundBtn').onclick = e => { e.stopPropagation(); initAudio(); toggleAmbience(); };
 $('fsBtn').onclick = e => { e.stopPropagation(); toggleFullscreen(); };
 addEventListener('resize', layout);
+// Hide the pointer after a couple of seconds of no movement while the book is up (not on the setup, start or page-picker screens)
+let cursorTimer = 0;
+function cursorWake() {
+  document.body.classList.remove('noCursor');
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => {
+    const menu = $('splash').style.display === 'block' || $('subStart').style.display === 'block' || $('pages').style.display === 'flex';
+    if (!menu) document.body.classList.add('noCursor'); else cursorWake();
+  }, CURSOR_HIDE_MS);
+}
+['mousemove', 'mousedown', 'wheel'].forEach(t => addEventListener(t, cursorWake, { passive: true }));
+cursorWake();
 
 /* ---------- Start ---------- */
 (async function boot() {
