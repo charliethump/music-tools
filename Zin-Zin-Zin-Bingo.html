@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zin! Zin! Zin! Bingo</title>
+<link rel="icon" id="favicon" type="image/svg+xml" href="">
 <style>
 @font-face{font-family:"Fredoka";src:url("zin-zin-zin-bingo/fonts/fredoka-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block}
 *{box-sizing:border-box}
@@ -17,21 +18,30 @@ body.menu-open{background:#f3f3f3}
 .slide{position:absolute;inset:0;background:#f3f3f3;will-change:opacity,transform}
 .layer{position:absolute;display:block;pointer-events:none}
 .hot{position:absolute;cursor:pointer;z-index:3}
-#yt{position:absolute;z-index:5;opacity:0;visibility:hidden;pointer-events:none;background:#000}
-#yt iframe,#ytplayer{width:100%;height:100%;border:0;display:block}
-#ytmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:bold 28px Georgia,serif;background:#222}
+/* YouTube players: the iframe is taller than its box so YouTube's title bar and bottom overlays fall outside it */
+.ythost{position:absolute;z-index:5;opacity:0;pointer-events:none;background:#000;overflow:hidden;left:0;top:0;width:740px;height:555px}
+.ytinner{position:absolute;left:0;right:0;top:-110px;bottom:-110px}
+.ytinner iframe{width:100%;height:100%;border:0;display:block}
+.ytmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:bold 28px Georgia,serif;background:#222}
 #black{position:absolute;inset:0;background:#000;z-index:50;display:none}
 .miss{position:absolute;left:24px;top:24px;z-index:4;background:#b00;color:#fff;font:bold 26px Georgia,serif;padding:10px 16px;border-radius:8px}
 
-/* recap / check */
+/* recap / called so far (overlay) */
+#overlay{position:absolute;inset:0;z-index:10;display:none}
 .recap .title{position:absolute;left:33px;top:32px;width:1857px;height:228px}
 .recap h2{position:absolute;left:52px;top:206px;margin:0;font:bold 88px/1.1 Georgia,serif;color:#000}
-.recap .grid{position:absolute;left:40px;top:330px;width:1840px;height:730px;display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center}
+.recap .grid{position:absolute;left:40px;top:325px;width:1840px;height:600px;display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center}
 .recap .cell{position:relative;opacity:0;transition:opacity .5s linear}
 .recap .cell.on{opacity:1}
-.recap .empty{position:absolute;left:0;right:0;top:560px;text-align:center;font:bold 60px Georgia,serif;color:#555}
+.recap .empty{position:absolute;left:0;right:0;top:540px;text-align:center;font:bold 60px Georgia,serif;color:#555}
 .chipno{position:absolute;left:-14px;top:-14px;width:30%;height:30%;border-radius:50%;background:#ffef00;border:3px solid #000;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:bold;color:#000;z-index:2}
-#check{position:absolute;inset:0;z-index:10;display:none}
+.sbtn{position:absolute;font:bold 46px Georgia,serif;padding:18px 36px;border-radius:18px;border:5px solid #000;background:#fff;color:#000;cursor:pointer;box-shadow:0 6px 0 rgba(0,0,0,.35);z-index:6}
+.sbtn.red{background:#d40d12;color:#fff}
+.sbtn .k{display:inline-block;min-width:52px;margin-right:16px;padding:0 8px;border-radius:10px;background:rgba(0,0,0,.12);font-size:38px}
+.sbtn.red .k{background:rgba(255,255,255,.25)}
+.sbtn.undo{font-size:36px;padding:12px 26px}
+.pulse{animation:pulse .5s ease-in-out 2}
+@keyframes pulse{50%{transform:scale(1.08)}}
 
 /* answer tiles (shared by recap and menu) */
 .tile{position:relative;width:var(--s);height:var(--s);border:calc(var(--s)*.022) solid #000;background:#fff;overflow:hidden}
@@ -39,6 +49,17 @@ body.menu-open{background:#f3f3f3}
 .tile.num{display:flex;align-items:center;justify-content:center}
 .tile.num span{font-family:"Fredoka",Arial Rounded MT Bold,Arial,sans-serif;font-weight:600;line-height:1;text-shadow:0 calc(var(--s)*.012) calc(var(--s)*.012) rgba(0,0,0,.35);white-space:nowrap}
 .tile.inst{border:none}
+
+/* winner + trade screens */
+.big{position:absolute;left:0;right:0;text-align:center;font-family:"Fredoka",Arial Rounded MT Bold,Arial,sans-serif;font-weight:600;color:#d40d12;text-shadow:5px 9px 6px rgba(0,0,0,.45);line-height:1}
+.sub{position:absolute;left:0;right:0;text-align:center;font:bold 66px Georgia,serif;color:#000}
+.confetti{position:absolute;inset:0;pointer-events:none}
+.card{position:absolute;width:360px;height:466px;box-shadow:0 10px 24px rgba(0,0,0,.35);border-radius:12px}
+.cardA{left:520px;top:420px;animation:swapA 4s ease-in-out infinite}
+.cardB{left:1040px;top:420px;animation:swapB 4s ease-in-out infinite}
+@keyframes swapA{0%,20%{transform:translate(0,0) rotate(-6deg)}45%,70%{transform:translate(520px,0) rotate(6deg)}95%,100%{transform:translate(0,0) rotate(-6deg)}}
+@keyframes swapB{0%,20%{transform:translate(0,0) rotate(6deg)}45%,70%{transform:translate(-520px,0) rotate(-6deg)}95%,100%{transform:translate(0,0) rotate(6deg)}}
+.swaparrows{position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none}
 
 /* hover controls */
 #ctrls{position:fixed;left:12px;top:12px;z-index:100;display:flex;gap:8px;opacity:0;transition:opacity .3s;pointer-events:none}
@@ -77,12 +98,12 @@ body.menu-open{background:#f3f3f3}
 <body>
 <div id="viewport">
   <div id="stage">
-    <div id="yt"><div id="ytplayer"></div><div id="ytmsg"></div></div>
-    <div id="check"></div>
+    <div id="overlay"></div>
     <div id="black"></div>
   </div>
 </div>
 <div id="ctrls">
+  <button data-act="skip">Skip demo (S)</button>
   <button data-act="check">Called so far (C)</button>
   <button data-act="end">End game (E)</button>
   <button data-act="full">Full screen (F)</button>
@@ -115,7 +136,7 @@ body.menu-open{background:#f3f3f3}
       <input class="linkbox" id="linkBox" readonly>
     </section>
     <section class="keys">
-      <b>Clicker / foot pedal / arrow keys:</b> next and back &nbsp;·&nbsp; <kbd>R</kbd> replay the clip &nbsp;·&nbsp; <kbd>C</kbd> called so far (click through, then it returns to the game) &nbsp;·&nbsp; <kbd>E</kbd> or the stop sign: end game &nbsp;·&nbsp; <kbd>F</kbd> full screen &nbsp;·&nbsp; <kbd>B</kbd> black screen<br>
+      <b>Clicker / foot pedal / arrow keys:</b> next and back &nbsp;·&nbsp; <kbd>R</kbd> replay the clip &nbsp;·&nbsp; <kbd>S</kbd> skip the demo &nbsp;·&nbsp; <kbd>C</kbd> called so far &nbsp;·&nbsp; <kbd>E</kbd> or the stop sign: end game &nbsp;·&nbsp; <kbd>1</kbd> / <kbd>2</kbd> pick the on-screen choices &nbsp;·&nbsp; <kbd>U</kbd> undo &nbsp;·&nbsp; <kbd>F</kbd> full screen &nbsp;·&nbsp; <kbd>B</kbd> black screen<br>
       A copied link opens straight into the game (or demo) with these settings; paste it into a Slides link.
     </section>
   </div>
@@ -157,9 +178,19 @@ const NUMBERS = [
 // Demo slides 11-12 (violin by sound) and 16-19 (trumpet video)
 const DEMO_AUDIO = ['violin-demo.mp3', 'violin.mp3'];   // first one that exists is used
 const DEMO_VIDEO = 'Yv4iKpMhSaA';
+const DEMO_SPEED = 0.5;        // demo fades run at half the deck's length
+const MAX_SAME_IN_A_ROW = 2;   // never more than this many video / audio / number calls in a row
+
+// Favicon: pick 1, 2 or 3
+const FAVICON_CHOICE = 1;
+const FAVICONS = {
+  1: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="#ffef00" stroke="#000" stroke-width="6"/><path d="M36 14v24.5a8 8 0 1 1-5-7.4V14z" fill="#000"/><path d="M36 14c5 3 10 5 10 12-3-4-6-5-10-5z" fill="#000"/></svg>`,
+  2: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="3" y="3" width="58" height="58" rx="8" fill="#fff" stroke="#000" stroke-width="5"/><rect x="10" y="10" width="13" height="13" fill="#f4642a"/><rect x="25.5" y="10" width="13" height="13" fill="#2b6f8f"/><rect x="41" y="10" width="13" height="13" fill="#f4642a"/><rect x="10" y="25.5" width="13" height="13" fill="#2b6f8f"/><rect x="25.5" y="25.5" width="13" height="13" fill="#e2a23a"/><rect x="41" y="25.5" width="13" height="13" fill="#2b6f8f"/><rect x="10" y="41" width="13" height="13" fill="#f4642a"/><rect x="25.5" y="41" width="13" height="13" fill="#2b6f8f"/><rect x="41" y="41" width="13" height="13" fill="#f4642a"/><circle cx="32" cy="32" r="9" fill="#ffef00" stroke="#000" stroke-width="3"/></svg>`,
+  3: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#d40d12"/><circle cx="32" cy="32" r="17" fill="#fff"/><text x="32" y="41" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="25" fill="#000">B</text></svg>`
+};
 
 /* ===================================================================== */
-const SLIDES = {"2":{"transition":{"type":"push","dur":1000},"layers":[{"file":"s2_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s2_1.webp","x":77,"y":79,"w":855,"h":1001,"spid":"151"},{"file":"s2_2.webp","x":989,"y":79,"w":855,"h":1001,"spid":"152"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"151","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"152","kind":"in","start":0,"dur":500}]}]},"3":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s3_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"4":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s4_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"5":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s5_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"6":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s6_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s6_1.webp","x":202,"y":405,"w":1516,"h":269,"spid":"183"}],"timeline":[{"auto":true,"fx":[{"spid":"183","kind":"in","start":0,"dur":1000}]}]},"7":{"transition":{"type":"fade","dur":1000},"layers":[{"file":"s5_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"8":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s8_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s8_1.webp","x":210,"y":652,"w":124,"h":124,"spid":"199"}],"timeline":[{"auto":false,"fx":[{"spid":"199","kind":"in","start":0,"dur":500}]}]},"9":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s9_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s9_1.webp","x":1415,"y":800,"w":124,"h":124,"spid":"210"}],"timeline":[{"auto":false,"fx":[{"spid":"210","kind":"in","start":0,"dur":500}]}]},"10":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s10_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s10_1.webp","x":60,"y":679,"w":307,"h":115,"spid":"217"},{"file":"s10_2.webp","x":602,"y":801,"w":400,"h":245,"spid":"218"},{"file":"s10_3.webp","x":201,"y":428,"w":268,"h":199,"spid":"219"},{"file":"s10_4.webp","x":110,"y":768,"w":272,"h":312,"spid":"220"},{"file":"s10_5.webp","x":431,"y":222,"w":203,"h":225,"spid":"221"},{"file":"s10_6.webp","x":473,"y":457,"w":261,"h":175,"spid":"222"},{"file":"s10_7.webp","x":704,"y":634,"w":173,"h":238,"spid":"223"},{"file":"s10_8.webp","x":100,"y":272,"w":127,"h":242,"spid":"224"},{"file":"s10_9.webp","x":787,"y":206,"w":119,"h":456,"spid":"225"},{"file":"s10_10.webp","x":1041,"y":302,"w":110,"h":136,"spid":"226"},{"file":"s10_11.webp","x":1593,"y":847,"w":103,"h":135,"spid":"227"},{"file":"s10_12.webp","x":1064,"y":582,"w":117,"h":133,"spid":"228"},{"file":"s10_13.webp","x":1495,"y":316,"w":126,"h":123,"spid":"229"},{"file":"s10_14.webp","x":1270,"y":520,"w":100,"h":134,"spid":"230"},{"file":"s10_15.webp","x":1374,"y":710,"w":109,"h":134,"spid":"231"},{"file":"s10_16.webp","x":1704,"y":461,"w":99,"h":135,"spid":"232"},{"file":"s10_17.webp","x":1502,"y":571,"w":106,"h":134,"spid":"233"},{"file":"s10_18.webp","x":1321,"y":271,"w":98,"h":134,"spid":"234"},{"file":"s10_19.webp","x":1072,"y":870,"w":196,"h":159,"spid":"235"},{"file":"s10_20.webp","x":347,"y":659,"w":224,"h":421,"spid":"236"}],"timeline":[{"auto":false,"fx":[{"spid":"218","kind":"in","start":0,"dur":100},{"spid":"217","kind":"in","start":100,"dur":100},{"spid":"219","kind":"in","start":200,"dur":100},{"spid":"220","kind":"in","start":300,"dur":100},{"spid":"221","kind":"in","start":400,"dur":100},{"spid":"222","kind":"in","start":500,"dur":100},{"spid":"223","kind":"in","start":600,"dur":100},{"spid":"224","kind":"in","start":700,"dur":100},{"spid":"225","kind":"in","start":800,"dur":100},{"spid":"236","kind":"in","start":900,"dur":100}]},{"auto":false,"fx":[{"spid":"226","kind":"in","start":0,"dur":100},{"spid":"227","kind":"in","start":100,"dur":100},{"spid":"228","kind":"in","start":200,"dur":100},{"spid":"229","kind":"in","start":300,"dur":100},{"spid":"230","kind":"in","start":400,"dur":100},{"spid":"231","kind":"in","start":500,"dur":100},{"spid":"232","kind":"in","start":600,"dur":100},{"spid":"233","kind":"in","start":700,"dur":100},{"spid":"234","kind":"in","start":800,"dur":100},{"spid":"235","kind":"in","start":900,"dur":100}]}]},"11":{"transition":{"type":"fade","dur":1500},"layers":[{"file":"s11_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"12":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s12_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s12_1.webp","x":368,"y":638,"w":124,"h":124,"spid":"260"},{"file":"s12_2.webp","x":941,"y":147,"w":949,"h":933,"spid":"261"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"260","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"261","kind":"in","start":0,"dur":500}]}]},"13":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s13_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s13_1.webp","x":807,"y":310,"w":299,"h":460,"spid":"275"}],"timeline":[{"auto":false,"fx":[{"spid":"275","kind":"in","start":0,"dur":500}]}]},"14":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s14_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s14_1.webp","x":545,"y":785,"w":124,"h":124,"spid":"289"}],"timeline":[{"auto":false,"fx":[{"spid":"289","kind":"in","start":0,"dur":500}]}]},"15":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s15_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s15_1.webp","x":1443,"y":477,"w":124,"h":124,"spid":"303"}],"timeline":[{"auto":false,"fx":[{"spid":"303","kind":"in","start":0,"dur":500}]}]},"16":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s16_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s16_1.webp","x":691,"y":228,"w":538,"h":401,"spid":"317"}],"timeline":[{"auto":false,"fx":[{"spid":"317","kind":"in","start":0,"dur":1000}]}]},"17":{"transition":null,"layers":[{"file":"s16_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s17_1.webp","x":691,"y":228,"w":538,"h":404,"spid":"331"}],"timeline":[{"auto":true,"fx":[{"spid":"331","kind":"in","start":0,"dur":1000}]}]},"18":{"transition":null,"layers":[{"file":"s18_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s18_1.webp","x":16,"y":146,"w":948,"h":934,"spid":"344"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"344","kind":"in","start":0,"dur":500}]}]},"19":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s19_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s19_1.webp","x":1573,"y":815,"w":124,"h":124,"spid":"360"}],"timeline":[{"auto":false,"fx":[{"spid":"360","kind":"in","start":0,"dur":500}]}]},"20":{"transition":{"type":"fade","dur":1000},"layers":[{"file":"s2_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s20_1.webp","x":1315,"y":348,"w":514,"h":660,"spid":"365"},{"file":"s20_2.webp","x":703,"y":348,"w":514,"h":660,"spid":"366"},{"file":"s20_3.webp","x":91,"y":348,"w":514,"h":660,"spid":"367"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null},{"file":"s20_5.webp","x":69,"y":251,"w":1618,"h":88,"spid":"369"},{"file":"s20_6.webp","x":136,"y":974,"w":428,"h":106,"spid":"370"},{"file":"s20_7.webp","x":678,"y":974,"w":563,"h":106,"spid":"371"},{"file":"s20_8.webp","x":1376,"y":974,"w":392,"h":106,"spid":"372"},{"file":"s20_9.webp","x":1881,"y":1025,"w":18,"h":27,"spid":null},{"file":"s20_10.webp","x":148,"y":585,"w":86,"h":85,"spid":"374"},{"file":"s20_11.webp","x":260,"y":585,"w":86,"h":85,"spid":"375"},{"file":"s20_12.webp","x":357,"y":585,"w":86,"h":85,"spid":"376"},{"file":"s20_13.webp","x":466,"y":584,"w":85,"h":86,"spid":"377"},{"file":"s20_14.webp","x":104,"y":608,"w":494,"h":38,"spid":"378"},{"file":"s20_15.webp","x":866,"y":481,"w":86,"h":85,"spid":"379"},{"file":"s20_16.webp","x":866,"y":594,"w":86,"h":84,"spid":"380"},{"file":"s20_17.webp","x":866,"y":690,"w":86,"h":85,"spid":"381"},{"file":"s20_18.webp","x":866,"y":799,"w":86,"h":84,"spid":"382"},{"file":"s20_19.webp","x":890,"y":442,"w":38,"h":494,"spid":"383"},{"file":"s20_20.webp","x":1372,"y":477,"w":86,"h":86,"spid":"384"},{"file":"s20_21.webp","x":1476,"y":581,"w":86,"h":86,"spid":"385"},{"file":"s20_22.webp","x":1580,"y":690,"w":85,"h":85,"spid":"386"},{"file":"s20_23.webp","x":1690,"y":798,"w":86,"h":85,"spid":"387"},{"file":"s20_24.webp","x":1353,"y":458,"w":438,"h":445,"spid":"388"}],"timeline":[{"auto":true,"fx":[{"spid":"369","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"367","kind":"in","start":0,"dur":1000},{"spid":"374","kind":"in","start":1000,"dur":200},{"spid":"375","kind":"in","start":1200,"dur":200},{"spid":"376","kind":"in","start":1400,"dur":200},{"spid":"377","kind":"in","start":1600,"dur":200},{"spid":"378","kind":"in","start":1800,"dur":1000},{"spid":"370","kind":"in","start":1800,"dur":1000}]},{"auto":false,"fx":[{"spid":"366","kind":"in","start":0,"dur":1000},{"spid":"379","kind":"in","start":1000,"dur":200},{"spid":"380","kind":"in","start":1200,"dur":200},{"spid":"381","kind":"in","start":1400,"dur":200},{"spid":"382","kind":"in","start":1600,"dur":200},{"spid":"383","kind":"in","start":1800,"dur":1000},{"spid":"371","kind":"in","start":1800,"dur":1000}]},{"auto":false,"fx":[{"spid":"365","kind":"in","start":0,"dur":1000},{"spid":"384","kind":"in","start":1000,"dur":200},{"spid":"385","kind":"in","start":1200,"dur":200},{"spid":"386","kind":"in","start":1400,"dur":200},{"spid":"387","kind":"in","start":1600,"dur":200},{"spid":"388","kind":"in","start":1800,"dur":1000},{"spid":"372","kind":"in","start":1800,"dur":1000}]}]},"21":{"transition":{"type":"fade","dur":1000},"layers":[{"file":"s21_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s21_1.webp","x":18,"y":452,"w":608,"h":628,"spid":"394"},{"file":"s21_2.webp","x":75,"y":296,"w":1614,"h":125,"spid":"395"},{"file":"s21_3.webp","x":661,"y":497,"w":1169,"h":396,"spid":"396"}],"timeline":[{"auto":true,"fx":[{"spid":"395","kind":"in","start":0,"dur":500},{"spid":"394","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"396","kind":"in","start":0,"dur":500}]}]},"66":{"transition":{"type":"push","dur":750},"layers":[{"file":"s2_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s66_1.webp","x":91,"y":113,"w":697,"h":601,"spid":"885"},{"file":"s66_2.webp","x":568,"y":423,"w":137,"h":185,"spid":"886"},{"file":"s66_3.webp","x":741,"y":614,"w":124,"h":124,"spid":"887"},{"file":"s66_4.webp","x":706,"y":727,"w":124,"h":124,"spid":"888"},{"file":"s66_5.webp","x":728,"y":658,"w":124,"h":124,"spid":"889"},{"file":"s66_6.webp","x":706,"y":563,"w":124,"h":124,"spid":"890"},{"file":"s66_7.webp","x":666,"y":624,"w":124,"h":124,"spid":"891"},{"file":"s66_8.webp","x":636,"y":577,"w":124,"h":124,"spid":"892"},{"file":"s66_9.webp","x":631,"y":727,"w":125,"h":124,"spid":"893"},{"file":"s66_10.webp","x":636,"y":656,"w":124,"h":124,"spid":"894"},{"file":"s66_11.webp","x":1,"y":861,"w":893,"h":155,"spid":"895"},{"file":"s66_12.webp","x":978,"y":44,"w":504,"h":619,"spid":"896"},{"file":"s66_13.webp","x":992,"y":54,"w":476,"h":598,"spid":"897"},{"file":"s66_14.webp","x":1007,"y":65,"w":446,"h":577,"spid":"898"},{"file":"s66_15.webp","x":992,"y":65,"w":476,"h":599,"spid":"899"},{"file":"s66_16.webp","x":979,"y":44,"w":502,"h":618,"spid":"900"},{"file":"s66_17.webp","x":1309,"y":339,"w":611,"h":429,"spid":"901"},{"file":"s66_18.webp","x":1126,"y":856,"w":776,"h":132,"spid":"902"},{"file":"s66_19.webp","x":1367,"y":746,"w":281,"h":124,"spid":"903"}],"timeline":[{"auto":true,"fx":[{"spid":"885","kind":"in","start":0,"dur":500},{"spid":"886","kind":"in","start":0,"dur":500},{"spid":"887","kind":"in","start":0,"dur":500},{"spid":"888","kind":"in","start":0,"dur":500},{"spid":"889","kind":"in","start":0,"dur":500},{"spid":"890","kind":"in","start":0,"dur":500},{"spid":"891","kind":"in","start":0,"dur":500},{"spid":"892","kind":"in","start":0,"dur":500},{"spid":"893","kind":"in","start":0,"dur":500},{"spid":"894","kind":"in","start":0,"dur":500},{"spid":"895","kind":"in","start":0,"dur":500},{"spid":"886","kind":"out","start":500,"dur":500},{"spid":"886","kind":"in","start":1000,"dur":500},{"spid":"886","kind":"out","start":1500,"dur":500},{"spid":"886","kind":"in","start":2000,"dur":500},{"spid":"886","kind":"out","start":2500,"dur":500},{"spid":"886","kind":"in","start":3000,"dur":500}]},{"auto":false,"fx":[{"spid":"896","kind":"in","start":0,"dur":1},{"spid":"897","kind":"in","start":1,"dur":200},{"spid":"898","kind":"in","start":201,"dur":200},{"spid":"899","kind":"in","start":401,"dur":200},{"spid":"900","kind":"in","start":601,"dur":200},{"spid":"901","kind":"in","start":801,"dur":500},{"spid":"902","kind":"in","start":1301,"dur":500},{"spid":"903","kind":"in","start":1301,"dur":500}]}]},"22":{"transition":null,"layers":[{"file":"s22_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s22_1.webp","x":589,"y":37,"w":742,"h":556,"spid":"402"},{"file":"s22_2.webp","x":19,"y":91,"w":1901,"h":989,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"402","kind":"in","start":0,"dur":1000}]}]},"48":{"transition":null,"layers":[{"file":"s48_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s48_1.webp","x":1267,"y":18,"w":330,"h":601,"spid":"691"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"691","kind":"in","start":0,"dur":1}]}]},"57":{"transition":null,"layers":[{"file":"s57_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"49":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s49_1.webp","x":1224,"y":19,"w":455,"h":609,"spid":"702"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"702","kind":"in","start":0,"dur":1}]}]},"50":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s50_1.webp","x":1225,"y":16,"w":394,"h":612,"spid":"713"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"713","kind":"in","start":0,"dur":1}]}]},"51":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s51_1.webp","x":1211,"y":2,"w":458,"h":618,"spid":"724"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"724","kind":"in","start":0,"dur":1}]}]},"52":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s52_1.webp","x":1224,"y":21,"w":455,"h":608,"spid":"735"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"735","kind":"in","start":0,"dur":1}]}]},"53":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s53_1.webp","x":1218,"y":21,"w":443,"h":605,"spid":"746"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"746","kind":"in","start":0,"dur":1}]}]},"54":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s54_1.webp","x":1225,"y":13,"w":420,"h":617,"spid":"757"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"757","kind":"in","start":0,"dur":1}]}]},"55":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s55_1.webp","x":1211,"y":16,"w":437,"h":610,"spid":"768"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"768","kind":"in","start":0,"dur":1}]}]},"56":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s56_1.webp","x":1208,"y":23,"w":442,"h":605,"spid":"779"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"779","kind":"in","start":0,"dur":1}]}]},"extra":{"speaker11":[888,229,144,144],"speaker12":[888,229,144,144],"speaker57":[1232,183,297,297],"video17":{"rect":[691,228,537,403],"spid":"331"},"video22":{"rect":[590,38,740,555],"spid":"402"},"stop22":[1882,1042,38,38],"stop48":[1882,1042,38,38],"stop57":[1882,1042,38,38]}};
+const SLIDES = {"2":{"transition":{"type":"push","dur":1000},"layers":[{"file":"s2_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s2_1.webp","x":77,"y":79,"w":855,"h":1001,"spid":"151"},{"file":"s2_2.webp","x":989,"y":79,"w":855,"h":1001,"spid":"152"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"151","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"152","kind":"in","start":0,"dur":500}]}]},"3":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s3_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"4":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s4_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"5":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s5_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"6":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s6_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s6_1.webp","x":202,"y":405,"w":1516,"h":269,"spid":"183"}],"timeline":[{"auto":true,"fx":[{"spid":"183","kind":"in","start":0,"dur":1000}]}]},"7":{"transition":{"type":"fade","dur":1000},"layers":[{"file":"s5_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"8":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s8_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s8_1.webp","x":210,"y":652,"w":124,"h":124,"spid":"199"}],"timeline":[{"auto":false,"fx":[{"spid":"199","kind":"in","start":0,"dur":500}]}]},"9":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s9_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s9_1.webp","x":1415,"y":800,"w":124,"h":124,"spid":"210"}],"timeline":[{"auto":false,"fx":[{"spid":"210","kind":"in","start":0,"dur":500}]}]},"10":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s10_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s10_1.webp","x":60,"y":679,"w":307,"h":115,"spid":"217"},{"file":"s10_2.webp","x":602,"y":801,"w":400,"h":245,"spid":"218"},{"file":"s10_3.webp","x":201,"y":428,"w":268,"h":199,"spid":"219"},{"file":"s10_4.webp","x":110,"y":768,"w":272,"h":312,"spid":"220"},{"file":"s10_5.webp","x":431,"y":222,"w":203,"h":225,"spid":"221"},{"file":"s10_6.webp","x":473,"y":457,"w":261,"h":175,"spid":"222"},{"file":"s10_7.webp","x":704,"y":634,"w":173,"h":238,"spid":"223"},{"file":"s10_8.webp","x":100,"y":272,"w":127,"h":242,"spid":"224"},{"file":"s10_9.webp","x":787,"y":206,"w":119,"h":456,"spid":"225"},{"file":"s10_10.webp","x":1041,"y":302,"w":110,"h":136,"spid":"226"},{"file":"s10_11.webp","x":1593,"y":847,"w":103,"h":135,"spid":"227"},{"file":"s10_12.webp","x":1064,"y":582,"w":117,"h":133,"spid":"228"},{"file":"s10_13.webp","x":1495,"y":316,"w":126,"h":123,"spid":"229"},{"file":"s10_14.webp","x":1270,"y":520,"w":100,"h":134,"spid":"230"},{"file":"s10_15.webp","x":1374,"y":710,"w":109,"h":134,"spid":"231"},{"file":"s10_16.webp","x":1704,"y":461,"w":99,"h":135,"spid":"232"},{"file":"s10_17.webp","x":1502,"y":571,"w":106,"h":134,"spid":"233"},{"file":"s10_18.webp","x":1321,"y":271,"w":98,"h":134,"spid":"234"},{"file":"s10_19.webp","x":1072,"y":870,"w":196,"h":159,"spid":"235"},{"file":"s10_20.webp","x":347,"y":659,"w":224,"h":421,"spid":"236"}],"timeline":[{"auto":false,"fx":[{"spid":"218","kind":"in","start":0,"dur":100},{"spid":"217","kind":"in","start":100,"dur":100},{"spid":"219","kind":"in","start":200,"dur":100},{"spid":"220","kind":"in","start":300,"dur":100},{"spid":"221","kind":"in","start":400,"dur":100},{"spid":"222","kind":"in","start":500,"dur":100},{"spid":"223","kind":"in","start":600,"dur":100},{"spid":"224","kind":"in","start":700,"dur":100},{"spid":"225","kind":"in","start":800,"dur":100},{"spid":"236","kind":"in","start":900,"dur":100}]},{"auto":false,"fx":[{"spid":"226","kind":"in","start":0,"dur":100},{"spid":"227","kind":"in","start":100,"dur":100},{"spid":"228","kind":"in","start":200,"dur":100},{"spid":"229","kind":"in","start":300,"dur":100},{"spid":"230","kind":"in","start":400,"dur":100},{"spid":"231","kind":"in","start":500,"dur":100},{"spid":"232","kind":"in","start":600,"dur":100},{"spid":"233","kind":"in","start":700,"dur":100},{"spid":"234","kind":"in","start":800,"dur":100},{"spid":"235","kind":"in","start":900,"dur":100}]}]},"11":{"transition":{"type":"fade","dur":1500},"layers":[{"file":"s11_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"12":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s12_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s12_1.webp","x":368,"y":638,"w":124,"h":124,"spid":"260"},{"file":"s12_2.webp","x":941,"y":147,"w":949,"h":933,"spid":"261"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"260","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"261","kind":"in","start":0,"dur":500}]}]},"13":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s13_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s13_1.webp","x":807,"y":310,"w":299,"h":460,"spid":"275"}],"timeline":[{"auto":false,"fx":[{"spid":"275","kind":"in","start":0,"dur":500}]}]},"14":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s14_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s14_1.webp","x":545,"y":785,"w":124,"h":124,"spid":"289"}],"timeline":[{"auto":false,"fx":[{"spid":"289","kind":"in","start":0,"dur":500}]}]},"15":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s15_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s15_1.webp","x":1443,"y":477,"w":124,"h":124,"spid":"303"}],"timeline":[{"auto":false,"fx":[{"spid":"303","kind":"in","start":0,"dur":500}]}]},"16":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s16_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s16_1.webp","x":691,"y":228,"w":538,"h":401,"spid":"317"}],"timeline":[{"auto":false,"fx":[{"spid":"317","kind":"in","start":0,"dur":1000}]}]},"17":{"transition":null,"layers":[{"file":"s16_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s17_1.webp","x":691,"y":228,"w":538,"h":404,"spid":"331"}],"timeline":[{"auto":true,"fx":[{"spid":"331","kind":"in","start":0,"dur":1000}]}]},"18":{"transition":null,"layers":[{"file":"s18_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s18_1.webp","x":16,"y":146,"w":948,"h":934,"spid":"344"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"344","kind":"in","start":0,"dur":500}]}]},"19":{"transition":{"type":"fade","dur":750},"layers":[{"file":"s19_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s19_1.webp","x":1573,"y":815,"w":124,"h":124,"spid":"360"}],"timeline":[{"auto":false,"fx":[{"spid":"360","kind":"in","start":0,"dur":500}]}]},"20":{"transition":{"type":"fade","dur":1000},"layers":[{"file":"s2_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s20_1.webp","x":1315,"y":348,"w":514,"h":660,"spid":"365"},{"file":"s20_2.webp","x":703,"y":348,"w":514,"h":660,"spid":"366"},{"file":"s20_3.webp","x":91,"y":348,"w":514,"h":660,"spid":"367"},{"file":"s2_3.webp","x":24,"y":28,"w":1872,"h":244,"spid":null},{"file":"s20_5.webp","x":69,"y":251,"w":1618,"h":88,"spid":"369"},{"file":"s20_6.webp","x":136,"y":974,"w":428,"h":106,"spid":"370"},{"file":"s20_7.webp","x":678,"y":974,"w":563,"h":106,"spid":"371"},{"file":"s20_8.webp","x":1376,"y":974,"w":392,"h":106,"spid":"372"},{"file":"s20_9.webp","x":148,"y":585,"w":86,"h":85,"spid":"374"},{"file":"s20_10.webp","x":260,"y":585,"w":86,"h":85,"spid":"375"},{"file":"s20_11.webp","x":357,"y":585,"w":86,"h":85,"spid":"376"},{"file":"s20_12.webp","x":466,"y":584,"w":85,"h":86,"spid":"377"},{"file":"s20_13.webp","x":104,"y":608,"w":494,"h":38,"spid":"378"},{"file":"s20_14.webp","x":866,"y":481,"w":86,"h":85,"spid":"379"},{"file":"s20_15.webp","x":866,"y":594,"w":86,"h":84,"spid":"380"},{"file":"s20_16.webp","x":866,"y":690,"w":86,"h":85,"spid":"381"},{"file":"s20_17.webp","x":866,"y":799,"w":86,"h":84,"spid":"382"},{"file":"s20_18.webp","x":890,"y":442,"w":38,"h":494,"spid":"383"},{"file":"s20_19.webp","x":1372,"y":477,"w":86,"h":86,"spid":"384"},{"file":"s20_20.webp","x":1476,"y":581,"w":86,"h":86,"spid":"385"},{"file":"s20_21.webp","x":1580,"y":690,"w":85,"h":85,"spid":"386"},{"file":"s20_22.webp","x":1690,"y":798,"w":86,"h":85,"spid":"387"},{"file":"s20_23.webp","x":1353,"y":458,"w":438,"h":445,"spid":"388"}],"timeline":[{"auto":true,"fx":[{"spid":"369","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"367","kind":"in","start":0,"dur":1000},{"spid":"374","kind":"in","start":1000,"dur":200},{"spid":"375","kind":"in","start":1200,"dur":200},{"spid":"376","kind":"in","start":1400,"dur":200},{"spid":"377","kind":"in","start":1600,"dur":200},{"spid":"378","kind":"in","start":1800,"dur":1000},{"spid":"370","kind":"in","start":1800,"dur":1000}]},{"auto":false,"fx":[{"spid":"366","kind":"in","start":0,"dur":1000},{"spid":"379","kind":"in","start":1000,"dur":200},{"spid":"380","kind":"in","start":1200,"dur":200},{"spid":"381","kind":"in","start":1400,"dur":200},{"spid":"382","kind":"in","start":1600,"dur":200},{"spid":"383","kind":"in","start":1800,"dur":1000},{"spid":"371","kind":"in","start":1800,"dur":1000}]},{"auto":false,"fx":[{"spid":"365","kind":"in","start":0,"dur":1000},{"spid":"384","kind":"in","start":1000,"dur":200},{"spid":"385","kind":"in","start":1200,"dur":200},{"spid":"386","kind":"in","start":1400,"dur":200},{"spid":"387","kind":"in","start":1600,"dur":200},{"spid":"388","kind":"in","start":1800,"dur":1000},{"spid":"372","kind":"in","start":1800,"dur":1000}]}]},"21":{"transition":{"type":"fade","dur":1000},"layers":[{"file":"s21_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s21_1.webp","x":18,"y":452,"w":608,"h":628,"spid":"394"},{"file":"s21_2.webp","x":75,"y":296,"w":1614,"h":125,"spid":"395"},{"file":"s21_3.webp","x":661,"y":497,"w":1169,"h":396,"spid":"396"}],"timeline":[{"auto":true,"fx":[{"spid":"395","kind":"in","start":0,"dur":500},{"spid":"394","kind":"in","start":0,"dur":500}]},{"auto":false,"fx":[{"spid":"396","kind":"in","start":0,"dur":500}]}]},"66":{"transition":{"type":"push","dur":750},"layers":[{"file":"s2_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s66_1.webp","x":91,"y":113,"w":697,"h":601,"spid":"885"},{"file":"s66_2.webp","x":568,"y":423,"w":137,"h":185,"spid":"886"},{"file":"s66_3.webp","x":741,"y":614,"w":124,"h":124,"spid":"887"},{"file":"s66_4.webp","x":706,"y":727,"w":124,"h":124,"spid":"888"},{"file":"s66_5.webp","x":728,"y":658,"w":124,"h":124,"spid":"889"},{"file":"s66_6.webp","x":706,"y":563,"w":124,"h":124,"spid":"890"},{"file":"s66_7.webp","x":666,"y":624,"w":124,"h":124,"spid":"891"},{"file":"s66_8.webp","x":636,"y":577,"w":124,"h":124,"spid":"892"},{"file":"s66_9.webp","x":631,"y":727,"w":125,"h":124,"spid":"893"},{"file":"s66_10.webp","x":636,"y":656,"w":124,"h":124,"spid":"894"},{"file":"s66_11.webp","x":1,"y":861,"w":893,"h":155,"spid":"895"},{"file":"s66_12.webp","x":978,"y":44,"w":504,"h":619,"spid":"896"},{"file":"s66_13.webp","x":992,"y":54,"w":476,"h":598,"spid":"897"},{"file":"s66_14.webp","x":1007,"y":65,"w":446,"h":577,"spid":"898"},{"file":"s66_15.webp","x":992,"y":65,"w":476,"h":599,"spid":"899"},{"file":"s66_16.webp","x":979,"y":44,"w":502,"h":618,"spid":"900"},{"file":"s66_17.webp","x":1309,"y":339,"w":611,"h":429,"spid":"901"},{"file":"s66_18.webp","x":1126,"y":856,"w":776,"h":132,"spid":"902"},{"file":"s66_19.webp","x":1367,"y":746,"w":281,"h":124,"spid":"903"}],"timeline":[{"auto":true,"fx":[{"spid":"885","kind":"in","start":0,"dur":500},{"spid":"886","kind":"in","start":0,"dur":500},{"spid":"887","kind":"in","start":0,"dur":500},{"spid":"888","kind":"in","start":0,"dur":500},{"spid":"889","kind":"in","start":0,"dur":500},{"spid":"890","kind":"in","start":0,"dur":500},{"spid":"891","kind":"in","start":0,"dur":500},{"spid":"892","kind":"in","start":0,"dur":500},{"spid":"893","kind":"in","start":0,"dur":500},{"spid":"894","kind":"in","start":0,"dur":500},{"spid":"895","kind":"in","start":0,"dur":500},{"spid":"886","kind":"out","start":500,"dur":500},{"spid":"886","kind":"in","start":1000,"dur":500},{"spid":"886","kind":"out","start":1500,"dur":500},{"spid":"886","kind":"in","start":2000,"dur":500},{"spid":"886","kind":"out","start":2500,"dur":500},{"spid":"886","kind":"in","start":3000,"dur":500}]},{"auto":false,"fx":[{"spid":"896","kind":"in","start":0,"dur":1},{"spid":"897","kind":"in","start":1,"dur":200},{"spid":"898","kind":"in","start":201,"dur":200},{"spid":"899","kind":"in","start":401,"dur":200},{"spid":"900","kind":"in","start":601,"dur":200},{"spid":"901","kind":"in","start":801,"dur":500},{"spid":"902","kind":"in","start":1301,"dur":500},{"spid":"903","kind":"in","start":1301,"dur":500}]}]},"22":{"transition":null,"layers":[{"file":"s22_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s22_1.webp","x":589,"y":37,"w":742,"h":556,"spid":"402"},{"file":"s22_2.webp","x":19,"y":91,"w":1901,"h":989,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"402","kind":"in","start":0,"dur":1000}]}]},"48":{"transition":null,"layers":[{"file":"s48_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s48_1.webp","x":1267,"y":18,"w":330,"h":601,"spid":"691"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"691","kind":"in","start":0,"dur":1}]}]},"57":{"transition":null,"layers":[{"file":"s57_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null}],"timeline":[]},"49":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s49_1.webp","x":1224,"y":19,"w":455,"h":609,"spid":"702"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"702","kind":"in","start":0,"dur":1}]}]},"50":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s50_1.webp","x":1225,"y":16,"w":394,"h":612,"spid":"713"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"713","kind":"in","start":0,"dur":1}]}]},"51":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s51_1.webp","x":1211,"y":2,"w":458,"h":618,"spid":"724"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"724","kind":"in","start":0,"dur":1}]}]},"52":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s52_1.webp","x":1224,"y":21,"w":455,"h":608,"spid":"735"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"735","kind":"in","start":0,"dur":1}]}]},"53":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s53_1.webp","x":1218,"y":21,"w":443,"h":605,"spid":"746"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"746","kind":"in","start":0,"dur":1}]}]},"54":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s54_1.webp","x":1225,"y":13,"w":420,"h":617,"spid":"757"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"757","kind":"in","start":0,"dur":1}]}]},"55":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s55_1.webp","x":1211,"y":16,"w":437,"h":610,"spid":"768"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"768","kind":"in","start":0,"dur":1}]}]},"56":{"transition":null,"layers":[{"file":"s49_0.webp","x":0,"y":0,"w":1920,"h":1080,"spid":null},{"file":"s56_1.webp","x":1208,"y":23,"w":442,"h":605,"spid":"779"},{"file":"s48_2.webp","x":261,"y":308,"w":1659,"h":772,"spid":null}],"timeline":[{"auto":false,"fx":[{"spid":"779","kind":"in","start":0,"dur":1}]}]},"extra":{"speaker11":[888,229,144,144],"speaker12":[888,229,144,144],"speaker57":[1232,183,297,297],"video17":{"rect":[691,228,537,403],"spid":"331"},"video22":{"rect":[590,38,740,555],"spid":"402"},"stop22":[1882,1042,38,38],"stop48":[1882,1042,38,38],"stop57":[1882,1042,38,38]}};
 const X = SLIDES.extra;
 const DEMO_SLIDES = []; for (let i = 2; i <= 21; i++) DEMO_SLIDES.push(i);
 const STORE_KEY = 'zinBingo.settings.v1';
@@ -170,6 +201,7 @@ const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls)
 const rand = n => Math.floor(Math.random() * n);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const box = (e, r) => Object.assign(e.style, {left: r[0] + 'px', top: r[1] + 'px', width: r[2] + 'px', height: r[3] + 'px'});
+$('#favicon').href = 'data:image/svg+xml,' + encodeURIComponent(FAVICONS[FAVICON_CHOICE] || FAVICONS[1]);
 
 /* ---------- stage scaling ---------- */
 function fit() {
@@ -192,43 +224,105 @@ const usableAudio = inst => inst.audio.filter(f => audioOK[f] !== false);
 INSTRUMENTS.forEach(i => i.audio.forEach(probeAudio));
 DEMO_AUDIO.forEach(probeAudio);
 
-/* ---------- YouTube ---------- */
-const yt = {
-  host: $('#yt'), msg: $('#ytmsg'), player: null, ready: false, id: null, wantPlay: false,
-  place(r) { box(this.host, r); },
-  show(dur) { const h = this.host; h.style.visibility = 'visible'; h.style.transition = dur ? `opacity ${dur}ms linear` : 'none'; if (!dur) void h.offsetWidth; h.style.opacity = 1; },
-  hide() { const h = this.host; h.style.transition = 'none'; h.style.opacity = 0; h.style.visibility = 'hidden'; },
-  cue(id) { this.id = id; this.wantPlay = false; this.msg.style.display = 'none'; if (this.ready) this.player.cueVideoById(id); },
-  play() { this.wantPlay = true; if (this.ready) { if (this.player.getVideoData && this.player.getVideoData().video_id !== this.id) this.player.loadVideoById(this.id); else this.player.playVideo(); } },
-  pause() { this.wantPlay = false; if (this.ready) this.player.pauseVideo(); },
-  stop() { this.wantPlay = false; if (this.ready) this.player.stopVideo(); },
-  replay() { if (!this.ready) return; this.player.seekTo(0, true); this.player.playVideo(); },
-  error(t) { this.msg.textContent = t; this.msg.style.display = 'flex'; }
-};
-window.onYouTubeIframeAPIReady = () => {
-  yt.player = new YT.Player('ytplayer', {
-    width: '100%', height: '100%',
-    playerVars: {controls: 0, rel: 0, modestbranding: 1, playsinline: 1, disablekb: 1, iv_load_policy: 3, fs: 0},
-    events: {
-      onReady() { yt.ready = true; if (yt.id) { if (yt.wantPlay) yt.player.loadVideoById(yt.id); else yt.player.cueVideoById(yt.id); } },
-      onStateChange(e) { if (e.data === YT.PlayerState.ENDED) { yt.player.seekTo(0, true); yt.player.pauseVideo(); } },
-      onError(e) { yt.error(`This video couldn't play (YouTube error ${e.data}). Check that it's allowed to be embedded.`); }
+/* ---------- YouTube: a pool of players so upcoming videos load ahead of time ---------- */
+const YT_SLOTS = 4;
+let ytApiReady = false, ytApiFailed = false, ytClock = 0;
+const slots = [];
+for (let i = 0; i < YT_SLOTS; i++) {
+  const host = el('div', 'ythost'), inner = el('div', 'ytinner'), pd = el('div'), msg = el('div', 'ytmsg');
+  pd.id = 'ytp' + i; inner.appendChild(pd); host.appendChild(inner); host.appendChild(msg);
+  stage.insertBefore(host, $('#overlay'));
+  slots.push({host, msg, pid: pd.id, player: null, ready: false, id: null, prepared: false, wantPlay: false, used: 0, poll: null, watchdog: null});
+}
+function slotLoad(s) {
+  s.prepared = false; s.msg.style.display = 'none';
+  if (!s.ready) return;
+  s.player.mute();
+  s.player.loadVideoById({videoId: s.id, startSeconds: 0});
+}
+function slotState(s, st) {
+  if (st === YT.PlayerState.PLAYING) {
+    if (!s.wantPlay) {            // a preload: let it buffer, then hold at the start
+      s.player.pauseVideo(); s.player.seekTo(0, true); s.prepared = true;
+    } else {
+      s.prepared = true; s.player.unMute(); clearTimeout(s.watchdog);
+      clearInterval(s.poll);
+      s.poll = setInterval(() => {  // stop just before the end so YouTube's end screen never shows
+        try { const d = s.player.getDuration(), t = s.player.getCurrentTime(); if (d && t >= d - 0.35) { s.player.pauseVideo(); clearInterval(s.poll); } } catch (e) {}
+      }, 150);
     }
+  }
+}
+window.onYouTubeIframeAPIReady = () => {
+  ytApiReady = true;
+  slots.forEach(s => {
+    s.player = new YT.Player(s.pid, {
+      width: '100%', height: '100%',
+      playerVars: {controls: 0, rel: 0, modestbranding: 1, playsinline: 1, disablekb: 1, iv_load_policy: 3, fs: 0, cc_load_policy: 0, showinfo: 0},
+      events: {
+        onReady() { s.ready = true; if (s.id) slotLoad(s); },
+        onStateChange(e) { slotState(s, e.data); },
+        onError(e) { s.msg.textContent = `This video couldn't play (YouTube error ${e.data}). Check that it's allowed to be embedded.`; s.msg.style.display = 'flex'; }
+      }
+    });
   });
 };
-(function () { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api';
-  s.onerror = () => yt.error('YouTube could not load. Check the internet connection.'); document.head.appendChild(s); })();
+(function () { const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api';
+  sc.onerror = () => { ytApiFailed = true; }; document.head.appendChild(sc); })();
+
+const yt = {
+  get(id, keep = []) {     // the slot holding this video, loading it into a free slot if needed
+    let s = slots.find(x => x.id === id);
+    if (s) return s;
+    const free = slots.filter(x => !keep.includes(x.id) && x !== yt.current).sort((a, b) => a.used - b.used);
+    s = free[0] || slots[0];
+    s.id = id; s.used = ++ytClock; s.wantPlay = false; clearInterval(s.poll);
+    slotLoad(s);
+    return s;
+  },
+  current: null,
+  attach(id, rect) {
+    const s = yt.get(id); yt.current = s; s.used = ++ytClock;
+    slots.forEach(x => { if (x !== s) yt.hideSlot(x); });
+    box(s.host, rect); yt.hideSlot(s);
+    if (ytApiFailed) { s.msg.textContent = 'YouTube could not load. Check the internet connection.'; s.msg.style.display = 'flex'; }
+    return s;
+  },
+  hideSlot(s) { s.host.style.transition = 'none'; s.host.style.opacity = 0; s.host.style.visibility = ''; },
+  show(dur) { const s = yt.current; if (!s) return; const h = s.host; h.style.transition = dur ? `opacity ${dur}ms linear` : 'none'; if (!dur) void h.offsetWidth; h.style.opacity = 1; },
+  play() {
+    const s = yt.current; if (!s) return;
+    s.wantPlay = true; s.used = ++ytClock;
+    if (!s.ready) return;           // onReady -> load -> PLAYING will start it
+    s.player.unMute();
+    if (s.prepared) { s.player.seekTo(0, true); s.player.playVideo(); }
+    else s.player.playVideo();
+    clearTimeout(s.watchdog);
+    s.watchdog = setTimeout(() => {   // if it still isn't playing, load it fresh
+      try { if (s.wantPlay && s.player.getPlayerState() !== YT.PlayerState.PLAYING) s.player.loadVideoById({videoId: s.id, startSeconds: 0}); } catch (e) {}
+    }, 2500);
+  },
+  pause() { const s = yt.current; if (!s || !s.ready) return; s.wantPlay = false; clearTimeout(s.watchdog); s.player.pauseVideo(); },
+  release() {   // leaving the slide: rewind and keep it loaded
+    const s = yt.current; if (!s) return; yt.current = null;
+    s.wantPlay = false; clearInterval(s.poll); clearTimeout(s.watchdog); yt.hideSlot(s);
+    if (s.ready) { s.player.pauseVideo(); s.player.seekTo(0, true); s.player.mute(); }
+  },
+  replay() { const s = yt.current; if (!s || !s.ready) return; s.wantPlay = true; s.player.unMute(); s.player.seekTo(0, true); s.player.playVideo(); },
+  preload(ids) { ids.slice(0, YT_SLOTS - 1).forEach(id => yt.get(id, ids.concat(yt.current ? [yt.current.id] : []))); }
+};
 
 /* ---------- layered slide (rebuilt from the Google Slides deck) ---------- */
 function layeredSlide(n, o = {}) {
-  const d = SLIDES[n], root = el('div', 'slide'), L = {};
+  const d = SLIDES[n], root = el('div', 'slide'), L = {}, sp = o.speed || 1;
   for (const ly of d.layers) {
     let node;
     if (ly.spid && o.replace && ly.spid in o.replace) { node = o.replace[ly.spid]; if (!node) continue; }
     else { node = new Image(); node.src = BASE + 'slides/' + ly.file; node.draggable = false; box(node, [ly.x, ly.y, ly.w, ly.h]); }
     node.classList.add('layer'); root.appendChild(node); if (ly.spid) L[ly.spid] = node;
   }
-  const groups = d.timeline, init = {};
+  const groups = d.timeline.map(g => ({auto: g.auto, fx: g.fx.map(f => Object.assign({}, f, {start: f.start * sp, dur: f.dur > 1 ? f.dur * sp : f.dur}))}));
+  const init = {};
   groups.forEach(g => g.fx.forEach(f => { if (!(f.spid in init)) init[f.spid] = f.kind === 'out'; }));
   let gi = 0, timers = [], running = null;
   const vis = (s, v, dur) => { const e = L[s]; if (!e) return; e.style.transition = dur ? `opacity ${dur}ms linear` : 'none'; if (!dur) void e.offsetWidth; e.style.opacity = v ? 1 : 0; };
@@ -248,9 +342,11 @@ function layeredSlide(n, o = {}) {
     gi = i + 1;
   }
   function restore(k) { reset(); for (let i = 0; i < k; i++) groups[i].fx.forEach(f => apply(f, 'restore')); gi = k; }
+  let tr = d.transition;
+  if (tr && tr.type === 'fade') tr = {type: 'fade', dur: tr.dur * sp};
   const scr = {
-    el: root, transition: d.transition, slide: n,
-    enter(back, tdur) { if (back) restore(groups.length); else { reset(); gi = 0; if (groups[0] && groups[0].auto) play(0, tdur || 0); } o.onEnter && o.onEnter(back); },
+    el: root, transition: tr, slide: n,
+    enter(back, tdur) { o.onEnter && o.onEnter(back); if (back) restore(groups.length); else { reset(); gi = 0; if (groups[0] && groups[0].auto) play(0, tdur || 0); } },
     next() { if (running) { finish(); return true; } if (gi < groups.length) { play(gi); return true; } return false; },
     prev() { if (running) finish(); const floor = groups[0] && groups[0].auto ? 1 : 0; if (gi > floor) { restore(gi - 1); return true; } return false; },
     leave() { clear(); running = null; o.onLeave && o.onLeave(); },
@@ -273,46 +369,43 @@ function getDemoAudio() {
 }
 const playFromStart = a => { try { a.currentTime = 0; } catch (e) {} const p = a.play(); if (p) p.catch(() => {}); };
 
+/* video slide wiring shared by demo slide 17 and the game's video calls */
+function videoHooks(V, getId, onReveal) {
+  return {
+    replace: {[V.spid]: null},
+    onEnter() { yt.attach(getId(), V.rect); },
+    onFx(s, k, mode, dur) { if (s !== V.spid || k !== 'in') return; onReveal && onReveal(); yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); },
+    onLeave() { yt.release(); },
+    onReplay() { yt.replay(); },
+    onPause() { yt.pause(); }
+  };
+}
+
 /* ---------- demo screens ---------- */
 function demoScreen(n) {
-  const o = {};
+  let o = {speed: DEMO_SPEED};
   if (n === 11 || n === 12) {
     o.hots = [[X['speaker' + n], () => playFromStart(getDemoAudio())]];
     o.onReplay = () => playFromStart(getDemoAudio());
     o.onPause = () => getDemoAudio().pause();
     if (n === 11) o.onEnter = back => { if (!back) playFromStart(getDemoAudio()); };
   }
-  if (n === 17) {
-    const V = X.video17;
-    o.replace = {[V.spid]: null};
-    o.onEnter = back => { yt.place(V.rect); if (!back) yt.hide(); yt.cue(DEMO_VIDEO); };
-    o.onReset = () => yt.hide();
-    o.onFx = (s, k, mode, dur) => { if (s !== V.spid || k !== 'in') return; yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); };
-    o.onLeave = () => { yt.stop(); yt.hide(); };
-    o.onReplay = () => yt.replay();
-    o.onPause = () => yt.pause();
-  }
-  const s = layeredSlide(n, o); s.demoAudio = (n === 11 || n === 12); return s;
+  if (n === 17) o = Object.assign(o, videoHooks(X.video17, () => DEMO_VIDEO));
+  const s = layeredSlide(n, o); s.demoAudio = (n === 11 || n === 12);
+  if (n === 17) s.videoId = DEMO_VIDEO;
+  return s;
 }
 
 /* ---------- call screens ---------- */
 const digitLayer = n => SLIDES[47 + n].layers.find(l => l.spid);
 const NUM_SPID = digitLayer(1).spid;
 
-function callScreen(call, idx) {
-  const stop = [X.stop22, () => endGame(), 22];
+function callScreen(call) {
+  const stop = [X.stop22, () => openRecap('end'), 22];
   let s;
   if (call.kind === 'video') {
-    const V = X.video22;
-    s = layeredSlide(22, {
-      replace: {[V.spid]: null}, hots: [stop],
-      onEnter(back) { yt.place(V.rect); if (!back) yt.hide(); yt.cue(call.clip); },
-      onReset() { yt.hide(); },
-      onFx(sp, k, mode, dur) { if (sp !== V.spid || k !== 'in') return; call.revealed = true; yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); },
-      onLeave() { yt.stop(); yt.hide(); },
-      onReplay() { if (call.revealed) yt.replay(); },
-      onPause() { yt.pause(); }
-    });
+    s = layeredSlide(22, Object.assign(videoHooks(X.video22, () => call.clip, () => call.revealed = true), {hots: [stop]}));
+    s.videoId = call.clip;
   } else if (call.kind === 'number') {
     const D = digitLayer(call.num.n), img = new Image();
     img.src = BASE + 'slides/' + D.file; img.draggable = false; box(img, [D.x, D.y, D.w, D.h]);
@@ -345,15 +438,23 @@ function tileFor(item) {
   t.appendChild(im); return t;
 }
 
-function recapScreen(mode) {
+function stageButton(html, cls, rect, fn) {
+  const b = el('button', 'sbtn ' + (cls || ''), html);
+  Object.assign(b.style, rect);
+  b.addEventListener('click', e => { e.stopPropagation(); fn(); b.blur(); });
+  return b;
+}
+
+/* ---------- recap (used for "called so far" and for ending a game) ---------- */
+function recapScreen(kind) {
   const called = calls.slice(0, Math.max(0, pos - DEMO_LEN + 1)).filter(c => c.revealed);
   const root = el('div', 'slide recap');
   const ti = new Image(); ti.src = BASE + 'title.webp'; ti.className = 'title'; root.appendChild(ti);
-  const h = el('h2'); h.textContent = mode === 'check' ? 'Called so far…' : 'Let’s check every answer…'; root.appendChild(h);
+  const h = el('h2'); h.textContent = kind === 'check' ? 'Called so far…' : 'Let’s check every answer…'; root.appendChild(h);
   const grid = el('div', 'grid'); root.appendChild(grid);
-  const N = called.length, W = 1840, Hh = 730, gap = 26;
+  const N = called.length, W = 1840, Hh = 600, gap = 24;
   let size = 60;
-  for (let s = 250; s >= 60; s -= 2) { const cols = Math.floor((W + gap) / (s + gap)); if (cols < 1) continue; const rows = Math.ceil(N / cols); if (rows * (s + gap) - gap <= Hh) { size = s; break; } }
+  for (let s = 240; s >= 60; s -= 2) { const cols = Math.floor((W + gap) / (s + gap)); if (cols < 1) continue; const rows = Math.ceil(N / cols); if (rows * (s + gap) - gap <= Hh) { size = s; break; } }
   grid.style.setProperty('--s', size + 'px'); grid.style.gap = gap + 'px';
   const cells = called.map((c, i) => {
     const cell = el('div', 'cell'); cell.appendChild(tileFor(c.item));
@@ -361,15 +462,105 @@ function recapScreen(mode) {
     grid.appendChild(cell); return cell;
   });
   if (!N) root.appendChild(el('div', 'empty', 'Nothing has been called yet.'));
+  root.appendChild(stageButton('↶ Undo', 'undo', {left: '40px', bottom: '36px'}, closeOverlay));
+  let choices = [];
+  if (kind === 'end') {
+    choices = [
+      stageButton('<span class="k">1</span>We have a winner!', 'red', {right: '520px', bottom: '30px'}, () => weHaveAWinner()),
+      stageButton('<span class="k">2</span>Keep playing', '', {right: '40px', bottom: '30px'}, closeOverlay)
+    ];
+    choices.forEach(b => root.appendChild(b));
+  }
   let shown = 0;
   return {
-    el: root, transition: {type: 'fade', dur: 500}, recap: true,
-    enter(back) { shown = back ? N : 0; cells.forEach((c, i) => { c.style.transition = 'none'; c.classList.toggle('on', i < shown); void c.offsetWidth; c.style.transition = ''; }); },
-    next() { if (shown < N) { cells[shown++].classList.add('on'); return true; } return false; },
+    el: root, kind,
+    enter() { shown = 0; cells.forEach(c => c.classList.remove('on')); },
+    next() {
+      if (shown < N) { cells[shown++].classList.add('on'); return true; }
+      if (kind === 'end') { choices.forEach(b => { b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse'); }); return true; }
+      return false;
+    },
     prev() { if (shown > 0) { const c = cells[--shown]; c.style.transition = 'none'; c.classList.remove('on'); void c.offsetWidth; c.style.transition = ''; return true; } return false; },
-    leave() {}
+    choose(n) { if (kind === 'end') (n === 1 ? weHaveAWinner : closeOverlay)(); }
   };
 }
+
+let overlay = null;
+function openRecap(kind) {
+  if (mode !== 'play') return;
+  if (overlay && overlay.kind === kind) return;
+  const fresh = !overlay;
+  if (overlay) closeOverlay(true);
+  if (fresh) active && active.pauseMedia && active.pauseMedia();
+  if (yt.current) yt.current.host.style.visibility = 'hidden';
+  overlay = recapScreen(kind);
+  const c = $('#overlay'); c.innerHTML = ''; c.appendChild(overlay.el); c.style.display = 'block';
+  overlay.el.style.opacity = 0; void overlay.el.offsetWidth; overlay.el.style.transition = 'opacity 300ms linear'; overlay.el.style.opacity = 1;
+  overlay.enter();
+}
+function closeOverlay(switching) {
+  overlay = null; $('#overlay').style.display = 'none'; $('#overlay').innerHTML = '';
+  if (!switching && yt.current) yt.current.host.style.visibility = '';
+}
+
+/* ---------- winner / new round / clean up ---------- */
+function confetti(canvas) {
+  const ctx = canvas.getContext('2d');
+  const cols = ['#d40d12', '#f4642a', '#f2ce2d', '#0886d0', '#a34cb6', '#2e9e3e', '#ffef00', '#e0407f'];
+  const make = first => ({x: Math.random() * 1920, y: first ? -Math.random() * 1200 : -30, w: 16 + Math.random() * 14, h: 9 + Math.random() * 10,
+    vy: 3 + Math.random() * 4, vx: -1.5 + Math.random() * 3, r: Math.random() * 6.3, vr: -0.15 + Math.random() * 0.3, sw: Math.random() * 6.3, c: cols[rand(cols.length)]});
+  const P = Array.from({length: 240}, () => make(true));
+  let run = true;
+  (function frame() {
+    if (!run) return;
+    ctx.clearRect(0, 0, 1920, 1080);
+    for (const p of P) {
+      p.y += p.vy; p.sw += 0.05; p.x += p.vx + Math.sin(p.sw) * 1.2; p.r += p.vr;
+      if (p.y > 1110) Object.assign(p, make(false));
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.max(0.2, Math.abs(Math.cos(p.sw * 2)))); ctx.restore();
+    }
+    requestAnimationFrame(frame);
+  })();
+  return () => { run = false; };
+}
+function winnerScreen() {
+  const root = el('div', 'slide');
+  const cv = el('canvas', 'confetti'); cv.width = 1920; cv.height = 1080; root.appendChild(cv);
+  const w = el('div', 'big', 'Winner!'); Object.assign(w.style, {top: '170px', fontSize: '340px'}); root.appendChild(w);
+  root.appendChild(stageButton('<span class="k">1</span>Play a new round', 'red', {left: '250px', top: '760px'}, newRoundPrompt));
+  root.appendChild(stageButton('<span class="k">2</span>Collect the cards and chips', '', {right: '250px', top: '760px'}, collect));
+  let stop = null;
+  return {el: root, transition: {type: 'fade', dur: 500},
+    enter() { stop && stop(); stop = confetti(cv); },
+    next() { return true; }, prev() { return true; },
+    leave() { stop && stop(); stop = null; },
+    choose(n) { (n === 1 ? newRoundPrompt : collect)(); }};
+}
+function tradeScreen() {
+  const root = el('div', 'slide');
+  const t = el('div', 'big', 'New round!'); Object.assign(t.style, {top: '40px', fontSize: '190px'}); root.appendChild(t);
+  const s = el('div', 'sub', 'Clear your chips, then trade cards with a neighbor!'); s.style.top = '228px'; root.appendChild(s);
+  root.insertAdjacentHTML('beforeend', `<svg class="swaparrows" viewBox="0 0 1920 1080">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d40d12"/></marker></defs>
+    <path d="M700 395 Q960 300 1200 385" stroke="#d40d12" stroke-width="22" fill="none" stroke-linecap="round" marker-end="url(#ah)"/>
+    <path d="M1220 915 Q960 1010 720 925" stroke="#d40d12" stroke-width="22" fill="none" stroke-linecap="round" marker-end="url(#ah)"/></svg>`);
+  const a = new Image(); a.src = BASE + 'cards/card1.webp'; a.className = 'card cardA'; root.appendChild(a);
+  const b = new Image(); b.src = BASE + 'cards/card2.webp'; b.className = 'card cardB'; root.appendChild(b);
+  return {el: root, transition: {type: 'fade', dur: 500}, enter() {}, next() { return false; }, prev() { return false; }, leave() {},
+    after: startRound, before: () => show(postScreens.winner, {back: true})};
+}
+let postScreens = {};
+function weHaveAWinner() {
+  closeOverlay(true);
+  mode = 'post';
+  postScreens = {winner: winnerScreen(), trade: tradeScreen(), clean: layeredSlide(66)};
+  postScreens.clean.after = openMenu;
+  postScreens.clean.before = () => show(postScreens.winner, {back: true});
+  show(postScreens.winner);
+}
+function newRoundPrompt() { if (mode === 'post') show(postScreens.trade); }
+function collect() { if (mode === 'post') show(postScreens.clean); }
 
 function plainScreen(html) {
   const root = el('div', 'slide');
@@ -394,7 +585,9 @@ if (fromLink) {
 }
 const save = () => { if (fromLink) return; try { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); } catch (e) {} };
 
-/* ---------- deck building (random, repeats only after everything has been called once) ---------- */
+/* ---------- deck building ----------
+   Every selected item is called once (random order) before anything repeats.
+   No more than MAX_SAME_IN_A_ROW video / audio / number calls in a row. */
 let calls = [], usage = {}, pool = [];
 function buildPool() {
   pool = [];
@@ -407,14 +600,30 @@ function buildPool() {
   if (settings.fmt.n) NUMBERS.filter(n => settings.num.includes(n.n)).forEach(n => pool.push({type: 'num', num: n, key: 'n' + n.n, formats: ['number']}));
 }
 function leastUsed(list, counts) { const m = Math.min(...list.map(x => counts[x] || 0)); const c = list.filter(x => (counts[x] || 0) === m); return c[rand(c.length)]; }
+function tooMany(kinds, k) { const n = MAX_SAME_IN_A_ROW; if (kinds.length < n) return false; for (let i = 1; i <= n; i++) if (kinds[kinds.length - i] !== k) return false; return true; }
 function addPass() {
   if (!pool.length) return false;
-  const order = shuffle(pool.slice());
-  const last = calls.length ? calls[calls.length - 1].item.key : null;
-  if (order.length > 1 && order[0].key === last) { const j = 1 + rand(order.length - 1); [order[0], order[j]] = [order[j], order[0]]; }
-  for (const it of order) {
+  const tailKinds = calls.map(c => c.kind).slice(-MAX_SAME_IN_A_ROW);
+  const lastKey = calls.length ? calls[calls.length - 1].item.key : null;
+  let best = null, bestBad = Infinity;
+  for (let attempt = 0; attempt < 400 && bestBad > 0; attempt++) {
+    const rem = shuffle(pool.slice()), out = [], kinds = tailKinds.slice(); let bad = 0;
+    while (rem.length) {
+      const prevKey = out.length ? out[out.length - 1].item.key : lastKey;
+      let idx = -1, kind = null;
+      for (let i = 0; i < rem.length; i++) {
+        if (rem[i].key === prevKey && rem.length > 1) continue;
+        const ok = rem[i].formats.filter(f => !tooMany(kinds, f));
+        if (ok.length) { idx = i; kind = leastUsed(ok, (usage[rem[i].key] || {fmt: {}}).fmt); break; }
+      }
+      if (idx < 0) { idx = 0; kind = leastUsed(rem[0].formats, (usage[rem[0].key] || {fmt: {}}).fmt); bad++; }
+      out.push({item: rem.splice(idx, 1)[0], kind}); kinds.push(kind);
+    }
+    if (bad < bestBad) { best = out; bestBad = bad; }
+  }
+  for (const {item: it, kind} of best) {
     const u = usage[it.key] || (usage[it.key] = {fmt: {}, clip: {}});
-    const kind = leastUsed(it.formats, u.fmt); u.fmt[kind] = (u.fmt[kind] || 0) + 1;
+    u.fmt[kind] = (u.fmt[kind] || 0) + 1;
     let clip = null;
     if (kind === 'video') clip = leastUsed(it.inst.videos, u.clip);
     if (kind === 'audio') clip = leastUsed(usableAudio(it.inst), u.clip);
@@ -425,16 +634,15 @@ function addPass() {
 }
 
 /* ---------- flow ---------- */
-let mode = 'menu';      // menu | play | end
-let seq = [];           // main sequence of screens (demo + calls)
-let DEMO_LEN = 0, pos = 0, active = null, endSeq = [], endPos = 0;
+let mode = 'menu';      // menu | splash | play | post
+let seq = [], DEMO_LEN = 0, pos = 0, active = null, pendingFull = false;
 const callScreens = {};
 
 function screenAt(i) {
   if (i < DEMO_LEN) return seq[i];
   const ci = i - DEMO_LEN;
   while (calls.length <= ci) if (!addPass()) return null;
-  if (!callScreens[ci]) callScreens[ci] = callScreen(calls[ci], ci);
+  if (!callScreens[ci]) callScreens[ci] = callScreen(calls[ci]);
   return callScreens[ci];
 }
 
@@ -442,12 +650,12 @@ function show(s, {back = false, trans} = {}) {
   const old = active;
   if (old && old !== s) old.leave();
   if (old === s) { s.enter(back, 0); return; }
-  stage.insertBefore(s.el, $('#yt'));
+  stage.insertBefore(s.el, slots[0].host);
   s.el.style.transition = 'none'; s.el.style.opacity = 1; s.el.style.transform = '';
   const t = back ? null : (trans !== undefined ? trans : s.transition);
   active = s;
   if (!s.demoAudio && demoAudio) demoAudio.pause();
-  setTimeout(preloadAhead, 50);
+  setTimeout(preloadAhead, 60);
   if (!old || !t) { if (old) old.el.remove(); s.enter(back, 0); return; }
   const done = () => { if (active !== old) old.el.remove(); old.el.style.transform = ''; old.el.style.transition = 'none'; };
   if (t.type === 'push') {
@@ -461,75 +669,75 @@ function show(s, {back = false, trans} = {}) {
   setTimeout(done, t.dur + 20);
   s.enter(false, t.dur);
 }
-function preloadAhead() { if (mode === 'play') screenAt(pos + 1); }
+/* load the next few videos into spare players so they're buffered before we get there */
+function preloadAhead() {
+  if (mode !== 'play') return;
+  const ids = [];
+  for (let i = pos + 1; i <= pos + 8 && ids.length < YT_SLOTS - 1; i++) {
+    const s = screenAt(i); if (!s) break;
+    if (s.videoId && !ids.includes(s.videoId) && !(yt.current && yt.current.id === s.videoId)) ids.push(s.videoId);
+  }
+  yt.preload(ids);
+}
 
+function resetCalls() { calls = []; usage = {}; for (const k in callScreens) delete callScreens[k]; buildPool(); }
 function startGame(fromKey) {
-  save();
-  calls = []; usage = {}; for (const k in callScreens) delete callScreens[k];
-  buildPool();
+  save(); resetCalls();
   seq = settings.demo ? DEMO_SLIDES.map(demoScreen) : [];
   DEMO_LEN = seq.length; pos = 0;
   $('#menu').style.display = 'none'; document.body.classList.remove('menu-open');
   mode = 'play';
   if (settings.full && fromKey !== 'nofs') goFull();
   const first = screenAt(0);
-  if (!first) { alertNoItems(); return; }
+  if (!first) { noItems(); return; }
   show(first, {trans: null});
-  preloadAhead();
 }
-function alertNoItems() { show(plainScreen('<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:bold 70px Georgia,serif;text-align:center;padding:80px">Nothing is selected to call.<br>Open the menu and pick some instruments or numbers.</div>'), {trans: null}); }
+function startRound() {   // new round, same settings, no demo
+  resetCalls(); seq = []; DEMO_LEN = 0; pos = 0; mode = 'play';
+  const first = screenAt(0); if (!first) { noItems(); return; }
+  show(first, {trans: null});
+}
+function skipDemo() {
+  if (mode !== 'play' || pos >= DEMO_LEN) return;
+  if (overlay) closeOverlay();
+  pos = DEMO_LEN; const s = screenAt(pos); if (s) show(s, {trans: null});
+}
+function noItems() { show(plainScreen('<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:bold 70px Georgia,serif;text-align:center;padding:80px">Nothing is selected to call.<br>Open the menu and pick some instruments or numbers.</div>'), {trans: null}); }
 
 function next() {
-  if (checkOn) { if (!checkScr.next()) closeCheck(); return; }
+  if (overlay) { if (!overlay.next()) closeOverlay(); return; }
   if (mode === 'splash') { startGame('nofs'); return; }
+  if (!active) return;
   if (mode === 'play') {
-    if (active && active.next()) return;
+    if (active.next()) return;
     const s = screenAt(pos + 1); if (!s) return;
     pos++; show(s);
-  } else if (mode === 'end') {
+  } else if (mode === 'post') {
     if (active.next()) return;
-    if (endPos === 0) { endPos = 1; show(endSeq[1]); }
-    else openMenu();
+    active.after && active.after();
   }
 }
 function prev() {
-  if (checkOn) { if (!checkScr.prev()) closeCheck(); return; }
+  if (overlay) { if (!overlay.prev()) closeOverlay(); return; }
+  if (!active) return;
   if (mode === 'play') {
-    if (active && active.prev()) return;
-    if (pos > 0) { pos--; show(screenAt(pos), {back: true}); }
-  } else if (mode === 'end') {
     if (active.prev()) return;
-    if (endPos === 1) { endPos = 0; show(endSeq[0], {back: true}); }
-    else { mode = 'play'; show(screenAt(pos), {back: true}); }
+    if (pos > 0) { pos--; show(screenAt(pos), {back: true}); }
+  } else if (mode === 'post') {
+    if (active.prev()) return;
+    active.before && active.before();
   }
 }
-function endGame() {
-  if (mode !== 'play') return;
-  if (checkOn) closeCheck();
-  mode = 'end'; endPos = 0;
-  endSeq = [recapScreen('end'), layeredSlide(66)];
-  show(endSeq[0]);
+function choose(n) {
+  if (overlay && overlay.choose) overlay.choose(n);
+  else if (mode === 'post' && active && active.choose) active.choose(n);
 }
-
-/* ---------- called-so-far overlay ---------- */
-let checkOn = false, checkScr = null, ytWasVisible = false, pendingFull = false;
-function openCheck() {
-  if (mode !== 'play' || checkOn) return;
-  checkOn = true;
-  active && active.pauseMedia && active.pauseMedia();
-  ytWasVisible = yt.host.style.visibility === 'visible'; if (ytWasVisible) yt.host.style.visibility = 'hidden';
-  checkScr = recapScreen('check');
-  const c = $('#check'); c.innerHTML = ''; c.appendChild(checkScr.el); c.style.display = 'block';
-  checkScr.el.style.opacity = 0; void checkScr.el.offsetWidth; checkScr.el.style.transition = 'opacity 300ms linear'; checkScr.el.style.opacity = 1;
-  checkScr.enter(false);
-}
-function closeCheck() { checkOn = false; $('#check').style.display = 'none'; $('#check').innerHTML = ''; if (ytWasVisible) yt.host.style.visibility = 'visible'; }
 
 /* ---------- menu ---------- */
 function openMenu() {
+  if (overlay) closeOverlay();
   if (active) { active.leave(); active.el.remove(); active = null; }
-  if (checkOn) closeCheck();
-  yt.stop(); yt.hide(); if (demoAudio) demoAudio.pause();
+  yt.release(); if (demoAudio) demoAudio.pause();
   mode = 'menu'; $('#menu').style.display = 'block'; document.body.classList.add('menu-open');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   refreshMenu();
@@ -598,7 +806,7 @@ function refreshMenu() {
   });
   document.querySelectorAll('#numTiles .pick').forEach(p => p.classList.toggle('off', !settings.num.includes(+p.dataset.n)));
   $('#optDemo').checked = settings.demo; $('#optFull').checked = settings.full;
-  buildPool();
+  if (mode === 'menu') buildPool();
   const ni = pool.filter(p => p.type === 'inst').length, nn = pool.filter(p => p.type === 'num').length;
   const skipped = settings.inst.length - ni;
   let txt = `${ni} instrument${ni === 1 ? '' : 's'} + ${nn} number${nn === 1 ? '' : 's'} = ${ni + nn} calls before anything repeats.`;
@@ -610,6 +818,7 @@ function refreshMenu() {
 /* ---------- input ---------- */
 function goFull() { const d = document.documentElement; if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().catch(() => {}); }
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else goFull(); }
+function toggleBlack() { const b = $('#black'); b.style.display = b.style.display === 'block' ? 'none' : 'block'; }
 const NEXT = ['PageDown', 'ArrowRight', 'ArrowDown', ' ', 'Enter', 'n', 'N'];
 const PREV = ['PageUp', 'ArrowLeft', 'ArrowUp', 'Backspace', 'p', 'P'];
 document.addEventListener('keydown', e => {
@@ -617,36 +826,45 @@ document.addEventListener('keydown', e => {
   if (pendingFull && e.key !== 'Escape') { pendingFull = false; goFull(); }
   if (e.key === 'F5' || (e.key === 'r' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); return; }   // clicker "present" button sends F5
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.repeat && !NEXT.concat(PREV).includes(e.key)) return;
   const k = e.key;
-  if (NEXT.includes(k)) { e.preventDefault(); if (!e.repeat) next(); }
-  else if (PREV.includes(k)) { e.preventDefault(); if (!e.repeat) prev(); }
-  else if (k === 'r' || k === 'R') { if (!checkOn && active && active.replay) active.replay(); }
-  else if (k === 'c' || k === 'C') { checkOn ? closeCheck() : openCheck(); }
-  else if (k === 'e' || k === 'E') endGame();
-  else if (k === 'f' || k === 'F') toggleFull();
-  else if (k === 'b' || k === 'B' || k === '.') { const b = $('#black'); b.style.display = b.style.display === 'block' ? 'none' : 'block'; }
-  else if (k === 'Escape' && checkOn) closeCheck();
+  if (NEXT.includes(k)) { e.preventDefault(); if (!e.repeat) next(); return; }
+  if (PREV.includes(k)) { e.preventDefault(); if (!e.repeat) prev(); return; }
+  if (e.repeat) return;
+  const lk = k.toLowerCase();
+  if (lk === 'r') { if (!overlay && active && active.replay) active.replay(); }
+  else if (lk === 'c') { overlay && overlay.kind === 'check' ? closeOverlay() : openRecap('check'); }
+  else if (lk === 'e') openRecap('end');
+  else if (lk === 's') skipDemo();
+  else if (lk === 'u' || k === 'Escape') { if (overlay) closeOverlay(); }
+  else if (k === '1' || k === '2') choose(+k);
+  else if (lk === 'f') toggleFull();
+  else if (lk === 'b' || k === '.') toggleBlack();
 });
-viewport.addEventListener('click', e => { if (mode === 'menu') return; if (pendingFull) { pendingFull = false; goFull(); } next(); });
+viewport.addEventListener('click', () => { if (mode === 'menu') return; if (pendingFull) { pendingFull = false; goFull(); } next(); });
 viewport.addEventListener('contextmenu', e => e.preventDefault());
 let hideT;
 document.addEventListener('mousemove', () => {
   if (mode === 'menu') return;
+  $('#ctrls [data-act="skip"]').style.display = (mode === 'play' && pos < DEMO_LEN) ? '' : 'none';
   $('#ctrls').classList.add('show'); viewport.classList.remove('hide-cursor');
   clearTimeout(hideT); hideT = setTimeout(() => { $('#ctrls').classList.remove('show'); viewport.classList.add('hide-cursor'); }, 2200);
 });
 $('#ctrls').addEventListener('click', e => {
   const a = e.target.dataset.act; if (!a) return; e.stopPropagation();
-  if (a === 'check') { checkOn ? closeCheck() : openCheck(); }
-  if (a === 'end') endGame();
+  if (a === 'skip') skipDemo();
+  if (a === 'check') { overlay && overlay.kind === 'check' ? closeOverlay() : openRecap('check'); }
+  if (a === 'end') openRecap('end');
   if (a === 'full') toggleFull();
   if (a === 'menu') openMenu();
   e.target.blur();
 });
 
 /* preload slide images so the demo never flashes */
-function preloadImages() { const seen = new Set(); for (const k in SLIDES) { if (k === 'extra') continue; for (const l of SLIDES[k].layers) if (!seen.has(l.file)) { seen.add(l.file); new Image().src = BASE + 'slides/' + l.file; } } }
+function preloadImages() {
+  const seen = new Set();
+  for (const k in SLIDES) { if (k === 'extra') continue; for (const l of SLIDES[k].layers) if (!seen.has(l.file)) { seen.add(l.file); new Image().src = BASE + 'slides/' + l.file; } }
+  ['cards/card1.webp', 'cards/card2.webp', 'title.webp'].forEach(f => new Image().src = BASE + f);
+}
 
 /* ---------- boot ---------- */
 buildMenu(); refreshMenu(); preloadImages();
