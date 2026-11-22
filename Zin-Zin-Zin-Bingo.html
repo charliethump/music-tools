@@ -34,6 +34,11 @@ body.menu-open{background:#f3f3f3}
 .recap .cell{position:relative;opacity:0;transition:opacity .5s linear}
 .recap .cell.on{opacity:1}
 .recap .empty{position:absolute;left:0;right:0;top:540px;text-align:center;font:bold 60px Georgia,serif;color:#555}
+/* numbered bingo ball */
+.ball{position:absolute;z-index:7;border-radius:50%;pointer-events:none;will-change:transform;
+  background:radial-gradient(circle at 34% 30%,#ff8a8a 0,#e3171c 30%,#b00b10 70%,#6e0508 100%);box-shadow:0 8px 16px rgba(0,0,0,.35)}
+.ballface{position:absolute;left:19%;top:19%;width:62%;height:62%;border-radius:50%;background:#fff;box-shadow:inset 0 -4px 6px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center}
+.ballface span{font:600 64px/1 "Fredoka",Arial Rounded MT Bold,Arial,sans-serif;color:#000;letter-spacing:-1px}
 .chipno{position:absolute;left:-14px;top:-14px;width:30%;height:30%;border-radius:50%;background:#ffef00;border:3px solid #000;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:bold;color:#000;z-index:2}
 .sbtn{position:absolute;font:bold 46px Georgia,serif;padding:18px 36px;border-radius:18px;border:5px solid #000;background:#fff;color:#000;cursor:pointer;box-shadow:0 6px 0 rgba(0,0,0,.35);z-index:6}
 .sbtn.red{background:#d40d12;color:#fff}
@@ -179,6 +184,9 @@ const NUMBERS = [
 const DEMO_AUDIO = ['violin-demo.mp3', 'violin.mp3'];   // first one that exists is used
 const DEMO_VIDEO = 'Yv4iKpMhSaA';
 const DEMO_SPEED = 0.5;        // demo fades run at half the deck's length
+// New-question signal: 'chime' (built in), 'none', or a file name in the audio folder (e.g. 'next.mp3')
+const SIGNAL_SOUND = 'chime';
+const SIGNAL_VOLUME = 1;       // 0 to 1.5
 const MAX_SAME_IN_A_ROW = 2;   // never more than this many video / audio / number calls in a row
 
 // Favicon: pick 1, 2 or 3
@@ -400,7 +408,59 @@ function demoScreen(n) {
 const digitLayer = n => SLIDES[47 + n].layers.find(l => l.spid);
 const NUM_SPID = digitLayer(1).spid;
 
-function callScreen(call) {
+/* ---------- new-question signal: numbered bingo ball + chime ---------- */
+let actx = null;
+function audioCtx() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
+let signalAudio = null;
+function playSignal() {
+  if (SIGNAL_SOUND === 'none') return;
+  if (SIGNAL_SOUND !== 'chime') {            // a file in the audio folder
+    if (!signalAudio) { signalAudio = new Audio(BASE + 'audio/' + SIGNAL_SOUND); signalAudio.preload = 'auto'; }
+    playFromStart(signalAudio); return;
+  }
+  const c = audioCtx(); if (!c) return;
+  const t0 = c.currentTime + 0.01;
+  [[784, 0], [1047, 0.16]].forEach(([f, dt]) => {     // two bell notes: G5 then C6
+    [[1, 0.22, 'sine'], [2, 0.06, 'sine'], [3, 0.03, 'triangle']].forEach(([mult, vol, type]) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.value = f * mult;
+      g.gain.setValueAtTime(0, t0 + dt);
+      g.gain.linearRampToValueAtTime(vol * SIGNAL_VOLUME, t0 + dt + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + (mult === 1 ? 1.1 : 0.5));
+      o.connect(g); g.connect(c.destination); o.start(t0 + dt); o.stop(t0 + dt + 1.2);
+    });
+  });
+}
+document.addEventListener('keydown', () => audioCtx(), {once: true});
+document.addEventListener('pointerdown', () => audioCtx(), {once: true});
+
+const BALL = {size: 170, left: 1700, top: 30, dur: 1700, land: 0.28};
+function addBall(s, number) {
+  const b = el('div', 'ball'); b.innerHTML = `<div class="ballface"><span>${number}</span></div>`;
+  if (number > 99) b.querySelector('span').style.fontSize = '46px';
+  box(b, [BALL.left, BALL.top, BALL.size, BALL.size]); s.el.appendChild(b);
+  const cx = BALL.left + BALL.size / 2, cy = BALL.top + BALL.size / 2, dx = 960 - cx, dy = 540 - cy, big = 2.3;
+  let anim = null, chimeT = null;
+  const enter = s.enter, leave = s.leave;
+  s.enter = (back, tdur) => {
+    if (anim) anim.cancel(); clearTimeout(chimeT);
+    if (!back && b.animate) {
+      anim = b.animate([
+        {transform: `translate(${dx}px,${dy - 900}px) scale(${big}) rotate(-200deg)`, offset: 0, easing: 'cubic-bezier(.5,0,1,1)'},
+        {transform: `translate(${dx}px,${dy}px) scale(${big}) rotate(0deg)`, offset: BALL.land, easing: 'ease-out'},
+        {transform: `translate(${dx}px,${dy - 90}px) scale(${big}) rotate(0deg)`, offset: 0.36, easing: 'ease-in'},
+        {transform: `translate(${dx}px,${dy}px) scale(${big}) rotate(0deg)`, offset: 0.44},
+        {transform: `translate(${dx}px,${dy}px) scale(${big}) rotate(0deg)`, offset: 0.68, easing: 'ease-in-out'},
+        {transform: 'translate(0,0) scale(1) rotate(360deg)', offset: 1}
+      ], {duration: BALL.dur, fill: 'none'});
+      chimeT = setTimeout(playSignal, BALL.dur * BALL.land);
+    }
+    enter(back, tdur);
+  };
+  s.leave = () => { if (anim) anim.finish(); clearTimeout(chimeT); leave(); };
+}
+
+function callScreen(call, number) {
   const stop = [X.stop22, () => openRecap('end'), 22];
   let s;
   if (call.kind === 'video') {
@@ -413,15 +473,18 @@ function callScreen(call) {
   } else {
     const a = new Audio(BASE + 'audio/' + call.clip); a.preload = 'auto';
     a.addEventListener('error', () => { if (!s.el.querySelector('.miss')) s.el.appendChild(el('div', 'miss', 'Audio file missing: ' + call.clip)); });
+    let wait = null;   // the clip starts once the ball has landed in its corner
+    const now = () => { clearTimeout(wait); playFromStart(a); };
     s = layeredSlide(57, {
-      hots: [stop, [X.speaker57, () => playFromStart(a)]],
-      onEnter(back) { call.revealed = true; if (!back) playFromStart(a); },
-      onLeave() { a.pause(); },
-      onReplay() { playFromStart(a); },
-      onPause() { a.pause(); }
+      hots: [stop, [X.speaker57, now]],
+      onEnter(back) { call.revealed = true; clearTimeout(wait); if (!back) wait = setTimeout(() => playFromStart(a), BALL.dur); },
+      onLeave() { clearTimeout(wait); a.pause(); },
+      onReplay: now,
+      onPause() { clearTimeout(wait); a.pause(); }
     });
   }
-  s.call = call;
+  s.call = call; call.number = number;
+  addBall(s, number);
   return s;
 }
 
@@ -458,7 +521,7 @@ function recapScreen(kind) {
   grid.style.setProperty('--s', size + 'px'); grid.style.gap = gap + 'px';
   const cells = called.map((c, i) => {
     const cell = el('div', 'cell'); cell.appendChild(tileFor(c.item));
-    const chip = el('div', 'chipno'); chip.textContent = i + 1; chip.style.fontSize = (size * 0.16) + 'px'; cell.appendChild(chip);
+    const chip = el('div', 'chipno'); chip.textContent = c.number || i + 1; chip.style.fontSize = (size * 0.16) + 'px'; cell.appendChild(chip);
     grid.appendChild(cell); return cell;
   });
   if (!N) root.appendChild(el('div', 'empty', 'Nothing has been called yet.'));
@@ -642,7 +705,7 @@ function screenAt(i) {
   if (i < DEMO_LEN) return seq[i];
   const ci = i - DEMO_LEN;
   while (calls.length <= ci) if (!addPass()) return null;
-  if (!callScreens[ci]) callScreens[ci] = callScreen(calls[ci]);
+  if (!callScreens[ci]) callScreens[ci] = callScreen(calls[ci], ci + 1);
   return callScreens[ci];
 }
 
