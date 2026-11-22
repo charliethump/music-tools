@@ -41,6 +41,19 @@ body.menu-open{background:#f3f3f3}
 .ballface{position:absolute;left:19%;top:19%;width:62%;height:62%;border-radius:50%;background:#fff;box-shadow:inset 0 -4px 6px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center}
 .ballface span{font:600 130px/1 "Fredoka",Arial Rounded MT Bold,Arial,sans-serif;color:#000;letter-spacing:-1px}
 .ball3d{position:absolute;left:0;top:0;width:1920px;height:1080px;z-index:8;pointer-events:none;display:none}
+/* rules bar on call slides */
+.rules{position:absolute;left:0;top:865px;width:1920px;height:215px;background:linear-gradient(#1f5aa0,#17457d);border-top:6px solid #0e2f57;color:#fff;z-index:2}
+.rgrid{position:absolute;left:40px;top:22px;width:166px;height:166px;filter:drop-shadow(0 4px 4px rgba(0,0,0,.35))}
+.rchip{transform:scale(0);transform-box:fill-box;transform-origin:center;transition:transform .2s cubic-bezier(.3,1.6,.6,1)}
+.rchip.on{transform:scale(1)}
+.rline{transition:opacity .25s}
+.rlabel{position:absolute;left:228px;top:0;height:209px;display:flex;align-items:center;gap:14px;font:bold 52px Georgia,serif;white-space:nowrap}
+.rarrow{width:72px;height:54px;flex:none}
+.rsep{position:absolute;top:26px;width:3px;height:157px;background:rgba(255,255,255,.3)}
+.rbadge{position:absolute;top:0;height:209px;display:flex;align-items:center;gap:20px;font:bold 46px/1.15 Georgia,serif;white-space:nowrap}
+.rbadge svg{width:150px;height:150px;flex:none;filter:drop-shadow(0 4px 4px rgba(0,0,0,.35))}
+.rbadge b{color:#ffef00}
+.stopsign{position:absolute;z-index:3;pointer-events:none}
 .chipno{position:absolute;left:-14px;top:-14px;width:30%;height:30%;border-radius:50%;background:#ffef00;border:3px solid #000;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:bold;color:#000;z-index:2}
 .sbtn{position:absolute;font:bold 46px Georgia,serif;padding:18px 36px;border-radius:18px;border:5px solid #000;background:#fff;color:#000;cursor:pointer;box-shadow:0 6px 0 rgba(0,0,0,.35);z-index:6}
 .sbtn.red{background:#d40d12;color:#fff}
@@ -349,11 +362,11 @@ const yt = {
 
 /* ---------- layered slide (rebuilt from the Google Slides deck) ---------- */
 function layeredSlide(n, o = {}) {
-  const d = SLIDES[n], root = el('div', 'slide'), L = {}, sp = o.speed || 1;
+  const d = typeof n === 'object' ? n : SLIDES[n], root = el('div', 'slide'), L = {}, sp = o.speed || 1;
   for (const ly of d.layers) {
     let node;
     if (ly.spid && o.replace && ly.spid in o.replace) { node = o.replace[ly.spid]; if (!node) continue; }
-    else { node = new Image(); node.src = BASE + 'slides/' + ly.file; node.draggable = false; box(node, [ly.x, ly.y, ly.w, ly.h]); }
+    else { node = new Image(); node.src = ly.src || BASE + 'slides/' + ly.file; node.draggable = false; box(node, [ly.x, ly.y, ly.w, ly.h]); }
     node.classList.add('layer'); root.appendChild(node); if (ly.spid) L[ly.spid] = node;
   }
   const groups = d.timeline.map(g => ({auto: g.auto, fx: g.fx.map(f => Object.assign({}, f, {start: f.start * sp, dur: f.dur > 1 ? f.dur * sp : f.dur}))}));
@@ -596,15 +609,78 @@ function addBall(s, number, still) {
   s.leave = () => { if (anim) anim.cancel(); b.style.display = 'none'; clearTimeout(chimeT); ballFX.stop(); leave(); };
 }
 
+/* ---------- call slides: question on top, rules bar along the bottom ---------- */
+const CALL = {
+  video:  {label: [15, 80, 570, 443], rect: [600, 40, 1280, 720]},
+  number: {label: [90, 330, 1080, 199], digitCenterX: 1480, digitTop: 25, digitHeight: 800},
+  audio:  {label: [100, 340, 1060, 200], speaker: [1280, 170, 470, 470]},
+  stop:   [1862, 1022, 50, 50]
+};
+const SPEAKER_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="49" fill="#e0e0e0"/><path d="M27 41h11l14-12v42L38 59H27z" fill="#595959"/><path d="M60 38a15 15 0 0 1 0 24M66 31a25 25 0 0 1 0 38" stroke="#595959" stroke-width="5.5" fill="none" stroke-linecap="round"/></svg>');
+const callLayer = (src, r, spid) => ({src, x: r[0], y: r[1], w: r[2], h: r[3], spid: spid || null});
+function callSlideDef(kind, n) {
+  if (kind === 'video') return {transition: null, layers: [callLayer(BASE + 'call/video-label.webp', CALL.video.label), callLayer('', CALL.video.rect, 'vid')],
+    timeline: [{auto: false, fx: [{spid: 'vid', kind: 'in', start: 0, dur: 1000}]}]};
+  if (kind === 'number') {
+    const D = digitLayer(n), k = CALL.number.digitHeight / D.h, w = D.w * k;
+    return {transition: null, layers: [callLayer(BASE + 'call/group-of.webp', CALL.number.label),
+      callLayer(BASE + 'slides/' + D.file, [CALL.number.digitCenterX - w / 2, CALL.number.digitTop, w, CALL.number.digitHeight], 'dig')],
+      timeline: [{auto: false, fx: [{spid: 'dig', kind: 'in', start: 0, dur: 1}]}]};
+  }
+  return {transition: null, layers: [callLayer(BASE + 'call/sound-only.webp', CALL.audio.label), callLayer(SPEAKER_SVG, CALL.audio.speaker)], timeline: []};
+}
+
+/* rules bar: animated winning-lines grid + two picture badges */
+const RULE_PATTERNS = [
+  {label: 'Sideways',    cells: [[0, 1], [1, 1], [2, 1], [3, 1]], arrow: 'M8 30h64M18 20L8 30l10 10M62 20l10 10-10 10'},
+  {label: 'Up-and-down', cells: [[1, 0], [1, 1], [1, 2], [1, 3]], arrow: 'M40 2v56M30 12l10-10 10 10M30 48l10 10 10-10'},
+  {label: 'Diagonal',    cells: [[0, 0], [1, 1], [2, 2], [3, 3]], arrow: 'M14 6l52 48M14 18V6h12M66 42v12H54'}
+];
+const cellXY = (c, r) => [21 + c * 39, 21 + r * 39];
+const TROPHY_SVG = `<svg viewBox="0 0 100 100"><path d="M31 18H17a12 12 0 0 0 16 20M69 18h14a12 12 0 0 1-16 20" fill="none" stroke="#000" stroke-width="6"/><path d="M28 10h44v22a22 22 0 0 1-44 0z" fill="#f7c51e" stroke="#000" stroke-width="4"/><path d="M50 17l3.5 7.5 8 1-6 5.5 1.6 8-7.1-4-7.1 4 1.6-8-6-5.5 8-1z" fill="#fff6c2"/><rect x="44" y="53" width="12" height="14" fill="#f7c51e" stroke="#000" stroke-width="4"/><rect x="32" y="67" width="36" height="10" rx="2" fill="#f7c51e" stroke="#000" stroke-width="4"/><rect x="25" y="77" width="50" height="13" rx="3" fill="#8b5a2b" stroke="#000" stroke-width="4"/></svg>`;
+const CLEAR_SVG = `<svg viewBox="0 0 100 100"><g transform="rotate(-14 40 50)"><rect x="12" y="18" width="52" height="66" rx="5" fill="#fff" stroke="#000" stroke-width="4"/>${[0,1,2,3].map(r => [0,1,2,3].map(c => `<rect x="${18 + c * 11.5}" y="${28 + r * 13}" width="9" height="10" fill="${(r + c) % 2 ? '#f4a26b' : '#6aa2b8'}"/>`).join('')).join('')}</g><path d="M66 30c10 2 16 8 18 16" stroke="#000" stroke-width="3" fill="none" stroke-dasharray="4 4"/><path d="M62 52c10 4 15 10 16 18" stroke="#000" stroke-width="3" fill="none" stroke-dasharray="4 4"/><circle cx="85" cy="54" r="8" fill="#ffef00" stroke="#000" stroke-width="3"/><circle cx="79" cy="78" r="8" fill="#ffef00" stroke="#000" stroke-width="3"/><circle cx="63" cy="92" r="7" fill="#ffef00" stroke="#000" stroke-width="3"/></svg>`;
+function rulesBar() {
+  const bar = el('div', 'rules');
+  const cells = [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(c => { const [x, y] = cellXY(c, r); return `<rect x="${x - 17}" y="${y - 17}" width="34" height="34" rx="3" fill="${(r + c) % 2 ? '#f6b384' : '#9cc3d3'}"/>`; }).join('')).join('');
+  bar.innerHTML = `
+    <svg class="rgrid" viewBox="0 0 160 160"><rect x="1.5" y="1.5" width="157" height="157" rx="10" fill="#fff" stroke="#000" stroke-width="3"/>${cells}
+      <line class="rline" stroke="#7b4fc2" stroke-width="9" stroke-linecap="round" opacity="0"/>
+      ${[0, 1, 2, 3].map(() => '<circle class="rchip" r="13" fill="#ffef00" stroke="#000" stroke-width="3.5"/>').join('')}</svg>
+    <div class="rlabel"><svg class="rarrow" viewBox="0 0 80 60"><path fill="none" stroke="#ffef00" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span></div>
+    <div class="rsep" style="left:640px"></div>
+    <div class="rbadge" style="left:680px">${TROPHY_SVG}<div>First correct<br><b>BINGO</b> wins!</div></div>
+    <div class="rsep" style="left:1250px"></div>
+    <div class="rbadge" style="left:1290px">${CLEAR_SVG}<div>Wrong answer?<br><b>Clear</b> your card.</div></div>`;
+  const keep = ruleStep; ruleStep = Math.floor(ruleStep / 10) * 10; rulesTick(bar); ruleStep = keep; rulesTick(bar);
+  return bar;
+}
+let ruleStep = 0;
+function rulesTick(bar) {
+  // 10 steps per pattern: 0 = move (hidden), 1-4 = chips drop in, 5-8 = line shows, 9 = everything fades
+  const phase = Math.floor(ruleStep / 10), step = ruleStep % 10, P = RULE_PATTERNS[phase];
+  const pts = P.cells.map(([c, r]) => cellXY(c, r)), chips = bar.querySelectorAll('.rchip'), ln = bar.querySelector('.rline');
+  if (step === 0) {
+    bar.querySelector('.rlabel span').textContent = P.label;
+    bar.querySelector('.rarrow path').setAttribute('d', P.arrow);
+    chips.forEach((ch, i) => { ch.setAttribute('cx', pts[i][0]); ch.setAttribute('cy', pts[i][1]); });
+    const [a, b] = [pts[0], pts[3]], ex = (b[0] - a[0]) * 0.12, ey = (b[1] - a[1]) * 0.12;
+    ln.setAttribute('x1', a[0] - ex); ln.setAttribute('y1', a[1] - ey); ln.setAttribute('x2', b[0] + ex); ln.setAttribute('y2', b[1] + ey);
+  }
+  chips.forEach((ch, i) => ch.classList.toggle('on', step >= 1 && step <= 8 && step > i));
+  ln.setAttribute('opacity', step >= 5 && step <= 8 ? 0.85 : 0);
+}
+setInterval(() => { ruleStep = (ruleStep + 1) % 30; document.querySelectorAll('#stage .rules').forEach(b => rulesTick(b)); }, 250);
+
 function callScreen(call, number, opt = {}) {
-  const stop = [X.stop22, () => openRecap('end'), 22];
+  const stop = [CALL.stop, () => openRecap('end'), 10];
+  const V = {spid: 'vid', rect: CALL.video.rect};
   let s;
   if (call.kind === 'video') {
     /* fallback: this instrument's other video, then its audio clip, then a message */
     const tried = [call.clip];
     const fallback = () => {
       const other = call.item.inst.videos.find(v => !tried.includes(v));
-      if (other) { tried.push(other); call.clip = other; s.videoId = other; yt.swapTo(other, X.video22.rect, fallback); return; }
+      if (other) { tried.push(other); call.clip = other; s.videoId = other; yt.swapTo(other, V.rect, fallback); return; }
       const aud = usableAudio(call.item.inst)[0];
       if (aud) {
         call.kind = 'audio'; call.clip = aud;
@@ -615,25 +691,25 @@ function callScreen(call, number, opt = {}) {
       }
       yt.message("This video won't play and there's no audio clip for it. Press next to move on.");
     };
-    s = layeredSlide(22, Object.assign(videoHooks(X.video22, () => call.clip, () => call.revealed = true, fallback), {hots: [stop]}));
+    s = layeredSlide(callSlideDef('video'), Object.assign(videoHooks(V, () => call.clip, () => call.revealed = true, fallback), {hots: [stop]}));
     s.videoId = call.clip;
   } else if (call.kind === 'number') {
-    const D = digitLayer(call.num.n), img = new Image();
-    img.src = BASE + 'slides/' + D.file; img.draggable = false; box(img, [D.x, D.y, D.w, D.h]);
-    s = layeredSlide(48, {replace: {[NUM_SPID]: img}, hots: [stop], onFx(sp, k) { if (k === 'in') call.revealed = true; }});
+    s = layeredSlide(callSlideDef('number', call.num.n), {hots: [stop], onFx(sp, k) { if (k === 'in') call.revealed = true; }});
   } else {
     const a = new Audio(BASE + 'audio/' + call.clip); a.preload = 'auto';
     a.addEventListener('error', () => { if (!s.el.querySelector('.miss')) s.el.appendChild(el('div', 'miss', 'Audio file missing: ' + call.clip)); });
-    let wait = null;   // the clip starts once the ball has landed in its corner
+    let wait = null;   // the clip starts as the ball rolls away
     const now = () => { clearTimeout(wait); playFromStart(a); };
-    s = layeredSlide(57, {
-      hots: [stop, [X.speaker57, now]],
+    s = layeredSlide(callSlideDef('audio'), {
+      hots: [stop, [CALL.audio.speaker, now]],
       onEnter(back) { call.revealed = true; clearTimeout(wait); if (!back) wait = setTimeout(() => playFromStart(a), opt.noBall ? 0 : BALL_TIMING.roll * 1000); },
       onLeave() { clearTimeout(wait); a.pause(); },
       onReplay: now,
       onPause() { clearTimeout(wait); a.pause(); }
     });
   }
+  s.el.appendChild(rulesBar());
+  const st = new Image(); st.src = BASE + 'call/stop.webp'; st.className = 'stopsign'; st.draggable = false; box(st, CALL.stop); s.el.appendChild(st);
   s.call = call; call.number = number;
   addBall(s, number, opt.noBall);
   return s;
