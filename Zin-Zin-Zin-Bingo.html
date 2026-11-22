@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zin! Zin! Zin! Bingo</title>
+<script type="importmap">{"imports":{"three":"./zin-zin-zin-bingo/lib/three.module.min.js"}}</script>
 <link rel="icon" id="favicon" type="image/svg+xml" href="">
 <style>
 @font-face{font-family:"Fredoka";src:url("zin-zin-zin-bingo/fonts/fredoka-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:block}
@@ -38,7 +39,8 @@ body.menu-open{background:#f3f3f3}
 .ball{position:absolute;z-index:7;border-radius:50%;pointer-events:none;will-change:transform;
   background:radial-gradient(circle at 34% 30%,#ff8a8a 0,#e3171c 30%,#b00b10 70%,#6e0508 100%);box-shadow:0 8px 16px rgba(0,0,0,.35)}
 .ballface{position:absolute;left:19%;top:19%;width:62%;height:62%;border-radius:50%;background:#fff;box-shadow:inset 0 -4px 6px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center}
-.ballface span{font:600 64px/1 "Fredoka",Arial Rounded MT Bold,Arial,sans-serif;color:#000;letter-spacing:-1px}
+.ballface span{font:600 130px/1 "Fredoka",Arial Rounded MT Bold,Arial,sans-serif;color:#000;letter-spacing:-1px}
+.ball3d{position:absolute;left:0;top:0;width:1920px;height:1080px;z-index:8;pointer-events:none;display:none}
 .chipno{position:absolute;left:-14px;top:-14px;width:30%;height:30%;border-radius:50%;background:#ffef00;border:3px solid #000;display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:bold;color:#000;z-index:2}
 .sbtn{position:absolute;font:bold 46px Georgia,serif;padding:18px 36px;border-radius:18px;border:5px solid #000;background:#fff;color:#000;cursor:pointer;box-shadow:0 6px 0 rgba(0,0,0,.35);z-index:6}
 .sbtn.red{background:#d40d12;color:#fff}
@@ -467,30 +469,131 @@ function playSignal() {
 document.addEventListener('keydown', () => audioCtx(), {once: true});
 document.addEventListener('pointerdown', () => audioCtx(), {once: true});
 
-const BALL = {size: 170, left: 1700, top: 30, dur: 1700, land: 0.28};
+/* ---------- the ball: falls, bounces, rolls off. Real 3D (three.js) with a flat CSS fallback ---------- */
+const BALL_TIMING = (() => {   // seconds; shared by the 3D ball and the fallback
+  const tFall = 0.55, e = 0.42, T = {land: tFall, bounces: []};
+  let t = tFall, v = 1;
+  for (let k = 0; k < 3; k++) { v *= e; const d = 2 * v * tFall / 1; T.bounces.push({start: t, dur: d * 1, v}); t += d; }
+  T.settled = t; T.roll = t + 0.3; T.rollDur = 0.85; T.total = T.roll + T.rollDur;
+  return T;
+})();
+const ballFX = (() => {
+  const R = 170, REST_Y = -40, START_Y = 1050, EXIT_X = 1400;
+  const cv = el('canvas', 'ball3d'); cv.width = 1920; cv.height = 1080;
+  stage.insertBefore(cv, $('#overlay'));
+  let THREE = null, renderer, scene, camera, group, labelMat, labelCtx, labelTex, raf = 0, ready = false, run = 0, frames = 0;
+  async function init() {
+    try {
+      THREE = await import('./' + BASE + 'lib/three.module.min.js');
+      const {RoomEnvironment} = await import('./' + BASE + 'lib/RoomEnvironment.js');
+      renderer = new THREE.WebGLRenderer({canvas: cv, alpha: true, antialias: true, powerPreference: 'high-performance'});
+      renderer.setPixelRatio(1); renderer.setSize(1920, 1080, false); renderer.setClearColor(0x000000, 0);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+      renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      scene = new THREE.Scene();
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+      camera = new THREE.PerspectiveCamera(20, 1920 / 1080, 50, 12000);
+      camera.position.set(0, 320, 3060); camera.lookAt(0, 0, 0);
+      const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+      sun.position.set(-700, 1500, 1100); sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      Object.assign(sun.shadow.camera, {left: -1600, right: 1900, top: 1600, bottom: -1600, near: 100, far: 6000});
+      sun.shadow.bias = -0.0005; sun.shadow.radius = 6;
+      scene.add(sun); scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), new THREE.ShadowMaterial({opacity: 0.3}));
+      floor.rotation.x = -Math.PI / 2; floor.position.y = REST_Y - R; floor.receiveShadow = true; scene.add(floor);
+      group = new THREE.Group(); scene.add(group);
+      const body = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 64),
+        new THREE.MeshPhysicalMaterial({color: 0xd40d12, roughness: 0.3, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.06}));
+      body.castShadow = true; group.add(body);
+      // number label: a white disc printed on the front and back of the ball
+      const lg = new THREE.SphereGeometry(R * 1.004, 96, 64), pos = lg.attributes.position, uv = lg.attributes.uv, a = R * 0.6;
+      for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i); uv.setXY(i, (z >= 0 ? x : -x) / (2 * a) + 0.5, y / (2 * a) + 0.5); }
+      const lc = document.createElement('canvas'); lc.width = lc.height = 512; labelCtx = lc.getContext('2d');
+      labelTex = new THREE.CanvasTexture(lc); labelTex.colorSpace = THREE.SRGBColorSpace; labelTex.anisotropy = 8;
+      labelTex.wrapS = labelTex.wrapT = THREE.ClampToEdgeWrapping;
+      labelMat = new THREE.MeshPhysicalMaterial({map: labelTex, transparent: true, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.08, polygonOffset: true, polygonOffsetFactor: -1});
+      group.add(new THREE.Mesh(lg, labelMat));
+      try { await document.fonts.load('600 200px Fredoka'); } catch (e) {}
+      drawLabel(1); renderer.compile(scene, camera); renderer.render(scene, camera); renderer.clear();
+      ready = true;
+    } catch (e) { ready = false; console.warn('3D ball unavailable, using flat ball', e); }
+  }
+  function drawLabel(n) {
+    const c = labelCtx; c.clearRect(0, 0, 512, 512);
+    c.beginPath(); c.arc(256, 256, 254, 0, Math.PI * 2); c.fillStyle = '#f4f4f4'; c.fill();
+    c.beginPath(); c.arc(256, 256, 236, 0, Math.PI * 2); c.fillStyle = '#ffffff'; c.fill();
+    c.fillStyle = '#111'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const txt = String(n); c.font = `600 ${txt.length === 1 ? 300 : txt.length === 2 ? 240 : 170}px Fredoka, Arial, sans-serif`;
+    c.fillText(txt, 256, 272);
+    labelTex.needsUpdate = true;
+  }
+  function pose(t) {   // position / rotation / squash at time t (s)
+    const T = BALL_TIMING, H = START_Y - REST_Y, g = 2 * H / (T.land * T.land), v0 = g * T.land;
+    let y = REST_Y, x = 0, rx = 0, rz = 0, sq = 0;
+    if (t < T.land) {
+      y = START_Y - 0.5 * g * t * t; const k = 1 - t / T.land;
+      rx = -2.6 * k * k; rz = 1.1 * k * k;
+    } else if (t < T.settled) {
+      for (const b of T.bounces) if (t >= b.start && t < b.start + b.dur) { const tau = t - b.start, v = b.v * v0; y = REST_Y + v * tau - 0.5 * g * tau * tau; }
+    }
+    // squash right after each impact
+    [T.land].concat(T.bounces.map(b => b.start + b.dur)).forEach((ti, i) => { const tau = t - ti; if (tau >= 0 && tau < 0.09) sq = Math.max(sq, 0.13 * Math.pow(0.42, i) * Math.sin(Math.PI * tau / 0.09)); });
+    if (t >= T.roll) { const tau = Math.min(t - T.roll, T.rollDur), acc = 2 * EXIT_X / (T.rollDur * T.rollDur); x = 0.5 * acc * tau * tau; rz = -x / R; }
+    return {x, y, rx, rz, sq};
+  }
+  function frame(now) {
+    const me = run, t = (now - frame.start) / 1000;
+    if (me !== run) return;
+    const p = pose(t);
+    group.position.set(p.x, p.y - R * p.sq, 0);
+    group.rotation.set(p.rx, 0, p.rz);
+    group.scale.set(1 + p.sq * 0.5, 1 - p.sq, 1 + p.sq * 0.5);
+    renderer.render(scene, camera); frames++;
+    if (t < BALL_TIMING.total) raf = requestAnimationFrame(frame);
+    else { if (frames / BALL_TIMING.total < 15) { ready = false; console.warn('3D ball too slow here, switching to the flat ball'); } stop(); }
+  }
+  function stop() { run++; cancelAnimationFrame(raf); cv.style.display = 'none'; if (renderer) renderer.clear(); }
+  return {
+    init, get ready() { return ready; },
+    play(n) {
+      if (!ready) return false;
+      stop(); drawLabel(n); cv.style.display = 'block';
+      const me = run; frames = 0; requestAnimationFrame(now => { if (me !== run) return; frame.start = now; frame(now); });
+      return true;
+    },
+    stop
+  };
+})();
+ballFX.init();
+
 function addBall(s, number, still) {
+  // flat fallback ball (only used if 3D isn't available on this computer)
   const b = el('div', 'ball'); b.innerHTML = `<div class="ballface"><span>${number}</span></div>`;
-  if (number > 99) b.querySelector('span').style.fontSize = '46px';
-  box(b, [BALL.left, BALL.top, BALL.size, BALL.size]); s.el.appendChild(b);
-  const cx = BALL.left + BALL.size / 2, cy = BALL.top + BALL.size / 2, dx = 960 - cx, dy = 540 - cy, big = 2.3;
+  if (number > 99) b.querySelector('span').style.fontSize = '92px';
+  box(b, [960 - 170, 500 - 170, 340, 340]); b.style.display = 'none'; s.el.appendChild(b);
   let anim = null, chimeT = null;
-  const enter = s.enter, leave = s.leave;
+  const T = BALL_TIMING, enter = s.enter, leave = s.leave;
   s.enter = (back, tdur) => {
-    if (anim) anim.cancel(); clearTimeout(chimeT);
-    if (!back && !still && b.animate) {
-      anim = b.animate([
-        {transform: `translate(${dx}px,${dy - 900}px) scale(${big}) rotate(-200deg)`, offset: 0, easing: 'cubic-bezier(.5,0,1,1)'},
-        {transform: `translate(${dx}px,${dy}px) scale(${big}) rotate(0deg)`, offset: BALL.land, easing: 'ease-out'},
-        {transform: `translate(${dx}px,${dy - 90}px) scale(${big}) rotate(0deg)`, offset: 0.36, easing: 'ease-in'},
-        {transform: `translate(${dx}px,${dy}px) scale(${big}) rotate(0deg)`, offset: 0.44},
-        {transform: `translate(${dx}px,${dy}px) scale(${big}) rotate(0deg)`, offset: 0.68, easing: 'ease-in-out'},
-        {transform: 'translate(0,0) scale(1) rotate(360deg)', offset: 1}
-      ], {duration: BALL.dur, fill: 'none'});
-      chimeT = setTimeout(playSignal, BALL.dur * BALL.land);
+    if (anim) anim.cancel(); clearTimeout(chimeT); b.style.display = 'none'; ballFX.stop();
+    if (!back && !still) {
+      chimeT = setTimeout(playSignal, T.land * 1000);
+      if (!ballFX.play(number) && b.animate) {
+        b.style.display = 'block';
+        const f = x => x / T.total;
+        const kf = [{transform: 'translate(0,-900px) rotate(-200deg)', offset: 0, easing: 'cubic-bezier(.5,0,1,1)'},
+                    {transform: 'translate(0,0) rotate(0deg)', offset: f(T.land), easing: 'ease-out'}];
+        T.bounces.forEach(bn => { kf.push({transform: `translate(0,${-bn.v * bn.v * 900}px)`, offset: f(bn.start + bn.dur / 2), easing: 'ease-in'}); kf.push({transform: 'translate(0,0)', offset: f(bn.start + bn.dur), easing: 'ease-out'}); });
+        kf.push({transform: 'translate(0,0) rotate(0deg)', offset: f(T.roll), easing: 'ease-in'});
+        kf.push({transform: 'translate(1400px,0) rotate(470deg)', offset: 1});
+        anim = b.animate(kf, {duration: T.total * 1000});
+        anim.onfinish = () => { b.style.display = 'none'; };
+      }
     }
     enter(back, tdur);
   };
-  s.leave = () => { if (anim) anim.finish(); clearTimeout(chimeT); leave(); };
+  s.leave = () => { if (anim) anim.cancel(); b.style.display = 'none'; clearTimeout(chimeT); ballFX.stop(); leave(); };
 }
 
 function callScreen(call, number, opt = {}) {
@@ -525,7 +628,7 @@ function callScreen(call, number, opt = {}) {
     const now = () => { clearTimeout(wait); playFromStart(a); };
     s = layeredSlide(57, {
       hots: [stop, [X.speaker57, now]],
-      onEnter(back) { call.revealed = true; clearTimeout(wait); if (!back) wait = setTimeout(() => playFromStart(a), opt.noBall ? 0 : BALL.dur); },
+      onEnter(back) { call.revealed = true; clearTimeout(wait); if (!back) wait = setTimeout(() => playFromStart(a), opt.noBall ? 0 : BALL_TIMING.roll * 1000); },
       onLeave() { clearTimeout(wait); a.pause(); },
       onReplay: now,
       onPause() { clearTimeout(wait); a.pause(); }
