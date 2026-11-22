@@ -23,6 +23,7 @@ body.menu-open{background:#f3f3f3}
 .ythost{position:absolute;z-index:5;opacity:0;pointer-events:none;background:#000;overflow:hidden;left:0;top:0;width:740px;height:555px}
 .ytinner{position:absolute;left:0;right:0;top:-110px;bottom:-110px}
 .ytinner iframe{width:100%;height:100%;border:0;display:block}
+.ytload{position:absolute;left:0;right:0;bottom:0;display:none;justify-content:center;padding:14px;color:#fff;font:bold 30px Georgia,serif;background:rgba(0,0,0,.55);z-index:2}
 .ytmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:bold 28px Georgia,serif;background:#222}
 #black{position:absolute;inset:0;background:#000;z-index:50;display:none}
 .miss{position:absolute;left:24px;top:24px;z-index:4;background:#b00;color:#fff;font:bold 26px Georgia,serif;padding:10px 16px;border-radius:8px}
@@ -43,11 +44,11 @@ body.menu-open{background:#f3f3f3}
 .ball3d{position:absolute;left:0;top:0;width:1920px;height:1080px;z-index:8;pointer-events:none;display:none}
 /* rules bar on call slides */
 .rules{position:absolute;left:0;top:865px;width:1920px;height:215px;background:linear-gradient(#1f5aa0,#17457d);border-top:6px solid #0e2f57;color:#fff;z-index:2}
-.rgrid{position:absolute;left:40px;top:22px;width:166px;height:166px;filter:drop-shadow(0 4px 4px rgba(0,0,0,.35))}
+.rgrid{position:absolute;left:420px;top:22px;width:166px;height:166px;filter:drop-shadow(0 4px 4px rgba(0,0,0,.35))}
 .rchip{transform:scale(0);transform-box:fill-box;transform-origin:center;transition:transform .2s cubic-bezier(.3,1.6,.6,1)}
 .rchip.on{transform:scale(1)}
 .rline{transition:opacity .25s}
-.rlabel{position:absolute;left:228px;top:0;height:209px;display:flex;align-items:center;gap:14px;font:bold 52px Georgia,serif;white-space:nowrap}
+.rlabel{position:absolute;left:44px;top:0;height:209px;display:flex;align-items:center;font:bold 46px/1.15 Georgia,serif;white-space:nowrap}
 .rarrow{width:72px;height:54px;flex:none}
 .rsep{position:absolute;top:26px;width:3px;height:157px;background:rgba(255,255,255,.3)}
 .rbadge{position:absolute;top:0;height:209px;display:flex;align-items:center;gap:20px;font:bold 46px/1.15 Georgia,serif;white-space:nowrap}
@@ -260,14 +261,14 @@ DEMO_AUDIO.forEach(probeAudio);
 
 /* ---------- YouTube: a pool of players so upcoming videos are cued (player ready) before we get there ---------- */
 const YT_SLOTS = 4;
-const VIDEO_TIMEOUT = 4000;   // ms to wait for a video to start before falling back
+const VIDEO_TIMEOUT = 15000;  // ms to wait for a video to start before falling back (slow school Wi-Fi can take a while)
 let ytApiReady = false, ytApiFailed = false, ytClock = 0;
 const slots = [];
 for (let i = 0; i < YT_SLOTS; i++) {
-  const host = el('div', 'ythost'), inner = el('div', 'ytinner'), pd = el('div'), msg = el('div', 'ytmsg');
-  pd.id = 'ytp' + i; inner.appendChild(pd); host.appendChild(inner); host.appendChild(msg);
+  const host = el('div', 'ythost'), inner = el('div', 'ytinner'), pd = el('div'), msg = el('div', 'ytmsg'), load = el('div', 'ytload', 'Loading video…');
+  pd.id = 'ytp' + i; inner.appendChild(pd); host.appendChild(inner); host.appendChild(msg); host.appendChild(load);
   stage.insertBefore(host, $('#overlay'));
-  slots.push({host, msg, pid: pd.id, player: null, ready: false, id: null, cued: false, failed: null, wantPlay: false, used: 0, poll: null, watchdog: null});
+  slots.push({host, msg, load, pid: pd.id, player: null, ready: false, id: null, cued: false, failed: null, wantPlay: false, used: 0, poll: null, watchdog: null});
 }
 function slotLoad(s) {
   s.cued = false; s.failed = null; s.msg.style.display = 'none';
@@ -277,7 +278,7 @@ function slotState(s, st) {
   if (st === YT.PlayerState.CUED) { s.cued = true; if (s.wantPlay) { s.player.unMute(); s.player.playVideo(); } }
   if (st === YT.PlayerState.PLAYING) {
     if (!s.wantPlay) { s.player.pauseVideo(); return; }
-    clearTimeout(s.watchdog); clearInterval(s.poll);
+    s.played = true; clearTimeout(s.watchdog); clearInterval(s.poll); s.load.style.display = 'none'; s.msg.style.display = 'none';
     s.poll = setInterval(() => {  // stop just before the end so YouTube's end screen never shows
       try { const d = s.player.getDuration(), t = s.player.getCurrentTime(); if (d && t >= d - 0.35) { s.player.pauseVideo(); clearInterval(s.poll); } } catch (e) {}
     }, 150);
@@ -304,7 +305,7 @@ window.onYouTubeIframeAPIReady = () => {
 (function () { const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api';
   sc.onerror = () => { ytApiFailed = true; }; document.head.appendChild(sc); })();
 
-const YT_ERRORS = {2: 'bad video ID', 5: 'the player hit an error', 100: 'video is private or removed', 101: 'embedding is turned off', 150: 'embedding is turned off', 153: 'YouTube needs the page to be on the web (not opened as a file)', timeout: "it didn't start in time", noapi: "YouTube couldn't load"};
+const YT_ERRORS = {2: 'bad video ID', 5: 'the player hit an error', 100: 'video is private or removed', 101: 'embedding is turned off', 150: 'embedding is turned off', 153: 'YouTube needs the page to be on the web (not opened as a file)', timeout: "it was still loading after 15 seconds", blocked: "the browser wouldn't start it", noapi: "YouTube couldn't load"};
 const yt = {
   get(id, keep = []) {     // the slot holding this video, cueing it into a free slot if needed
     let s = slots.find(x => x.id === id);
@@ -327,19 +328,23 @@ const yt = {
   play() {
     const s = yt.current; if (!s) return;
     s.wantPlay = true; s.used = ++ytClock;
-    clearTimeout(s.watchdog);
+    clearTimeout(s.watchdog); s.load.style.display = 'none';
     if (s.failed != null) { yt.fail(s.failed); return; }
     if (ytApiFailed) { yt.fail('noapi'); return; }
     if (s.ready && s.cued) { s.player.unMute(); s.player.playVideo(); }   // otherwise CUED / onReady starts it
-    let extra = true;
+    const asked = performance.now(); let nudged = false;
     const check = () => {
       if (!s.wantPlay || s !== yt.current) return;
-      let st = -1; try { st = s.player.getPlayerState(); } catch (e) {}
-      if (st === YT.PlayerState.PLAYING) return;
-      if (st === YT.PlayerState.BUFFERING && extra) { extra = false; s.watchdog = setTimeout(check, VIDEO_TIMEOUT); return; }  // slow network: give it one more wait
-      yt.fail('timeout');
+      let st = -2; try { st = s.player.getPlayerState(); } catch (e) {}
+      if (st === YT.PlayerState.PLAYING) { s.load.style.display = 'none'; return; }
+      const waited = performance.now() - asked;
+      if (waited > 1500) s.load.style.display = 'flex';          // let the class know it's coming
+      const idle = st === YT.PlayerState.CUED || st === YT.PlayerState.PAUSED;
+      if (idle && waited > 2500 && !nudged && s.ready) { nudged = true; try { s.player.unMute(); s.player.playVideo(); } catch (e) {} }
+      if (waited > VIDEO_TIMEOUT) { s.load.style.display = 'none'; yt.fail(idle ? 'blocked' : 'timeout'); return; }
+      s.watchdog = setTimeout(check, 400);
     };
-    s.watchdog = setTimeout(check, VIDEO_TIMEOUT);
+    s.watchdog = setTimeout(check, 400);
   },
   fail(reason) {
     const s = yt.current; if (!s) return;
@@ -348,15 +353,16 @@ const yt = {
     if (yt.onFail) yt.onFail(reason);
     else yt.message(`This video won't play (${YT_ERRORS[reason] || 'YouTube error ' + reason}). Press next to move on.`);
   },
-  message(txt) { const s = yt.current; if (!s) return; s.msg.textContent = txt; s.msg.style.display = 'flex'; yt.show(0); },
+  message(txt) { const s = yt.current; if (!s) return; s.load.style.display = 'none'; s.msg.textContent = txt; s.msg.style.display = 'flex'; yt.show(0); },
   swapTo(id, rect, onFail) { yt.release(); yt.attach(id, rect, onFail); yt.show(0); yt.play(); },
   pause() { const s = yt.current; if (!s) return; s.wantPlay = false; clearTimeout(s.watchdog); if (s.ready) s.player.pauseVideo(); },
   release() {   // leaving the slide: rewind and keep it cued
     const s = yt.current; if (!s) return; yt.current = null; yt.onFail = null;
     s.wantPlay = false; clearInterval(s.poll); clearTimeout(s.watchdog); yt.hideSlot(s);
-    if (s.ready && s.failed == null) { try { s.player.pauseVideo(); s.player.seekTo(0, true); } catch (e) {} }
+    s.load.style.display = 'none';
+    if (s.ready && s.failed == null && s.played) { try { s.player.pauseVideo(); s.player.seekTo(0, true); } catch (e) {} }   // (seeking an unplayed video would start it)
   },
-  replay() { const s = yt.current; if (!s || !s.ready || s.failed != null) return; s.wantPlay = true; s.player.unMute(); s.player.seekTo(0, true); s.player.playVideo(); },
+  replay() { const s = yt.current; if (!s || !s.ready || s.failed != null) return; s.msg.style.display = 'none'; s.player.unMute(); s.player.seekTo(0, true); yt.play(); },
   preload(ids) { ids.slice(0, YT_SLOTS - 1).forEach(id => yt.get(id, ids.concat(yt.current ? [yt.current.id] : []))); }
 };
 
@@ -440,10 +446,11 @@ function demoScreen(n) {
   }
   if (n === 17) {
     let vid = DEMO_VIDEO;
-    const fallback = () => {
+    const fallback = reason => {
+      if (reason === 'blocked') { yt.message('The browser didn’t let this video start. Press R to start it.'); return; }
       const other = DEMO_VIDEO_BACKUPS.find(v => v !== vid);
       if (other && vid === DEMO_VIDEO) { vid = other; yt.swapTo(vid, X.video17.rect, fallback); }
-      else yt.message("This video won't play. Press next to move on.");
+      else yt.message(`This video won't play (${YT_ERRORS[reason] || 'YouTube error ' + reason}). Press R to try again or next to move on.`);
     };
     o = Object.assign(o, videoHooks(X.video17, () => vid, null, fallback));
   }
@@ -643,10 +650,10 @@ function rulesBar() {
   const bar = el('div', 'rules');
   const cells = [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(c => { const [x, y] = cellXY(c, r); return `<rect x="${x - 17}" y="${y - 17}" width="34" height="34" rx="3" fill="${(r + c) % 2 ? '#f6b384' : '#9cc3d3'}"/>`; }).join('')).join('');
   bar.innerHTML = `
+    <div class="rlabel">Winning cards<br>can be…</div>
     <svg class="rgrid" viewBox="0 0 160 160"><rect x="1.5" y="1.5" width="157" height="157" rx="10" fill="#fff" stroke="#000" stroke-width="3"/>${cells}
       <line class="rline" stroke="#7b4fc2" stroke-width="9" stroke-linecap="round" opacity="0"/>
       ${[0, 1, 2, 3].map(() => '<circle class="rchip" r="13" fill="#ffef00" stroke="#000" stroke-width="3.5"/>').join('')}</svg>
-    <div class="rlabel"><svg class="rarrow" viewBox="0 0 80 60"><path fill="none" stroke="#ffef00" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span></div>
     <div class="rsep" style="left:640px"></div>
     <div class="rbadge" style="left:680px">${TROPHY_SVG}<div>First correct<br><b>BINGO</b> wins!</div></div>
     <div class="rsep" style="left:1250px"></div>
@@ -660,8 +667,6 @@ function rulesTick(bar) {
   const phase = Math.floor(ruleStep / 10), step = ruleStep % 10, P = RULE_PATTERNS[phase];
   const pts = P.cells.map(([c, r]) => cellXY(c, r)), chips = bar.querySelectorAll('.rchip'), ln = bar.querySelector('.rline');
   if (step === 0) {
-    bar.querySelector('.rlabel span').textContent = P.label;
-    bar.querySelector('.rarrow path').setAttribute('d', P.arrow);
     chips.forEach((ch, i) => { ch.setAttribute('cx', pts[i][0]); ch.setAttribute('cy', pts[i][1]); });
     const [a, b] = [pts[0], pts[3]], ex = (b[0] - a[0]) * 0.12, ey = (b[1] - a[1]) * 0.12;
     ln.setAttribute('x1', a[0] - ex); ln.setAttribute('y1', a[1] - ey); ln.setAttribute('x2', b[0] + ex); ln.setAttribute('y2', b[1] + ey);
@@ -677,8 +682,10 @@ function callScreen(call, number, opt = {}) {
   let s;
   if (call.kind === 'video') {
     /* fallback: this instrument's other video, then its audio clip, then a message */
-    const tried = [call.clip];
-    const fallback = () => {
+    const tried = [call.clip], why = [];
+    const fallback = reason => {
+      why.push(YT_ERRORS[reason] || 'YouTube error ' + reason);
+      if (reason === 'blocked') { yt.message('The browser didn’t let this video start. Press R to start it.'); return; }
       const other = call.item.inst.videos.find(v => !tried.includes(v));
       if (other) { tried.push(other); call.clip = other; s.videoId = other; yt.swapTo(other, V.rect, fallback); return; }
       const aud = usableAudio(call.item.inst)[0];
@@ -689,7 +696,7 @@ function callScreen(call, number, opt = {}) {
         if (active === s) show(ns, {trans: null});
         return;
       }
-      yt.message("This video won't play and there's no audio clip for it. Press next to move on.");
+      yt.message(`Neither ${call.item.inst.name} video would play (${why.join('; ')}) and there's no audio clip yet. Press R to try again or next to move on.`);
     };
     s = layeredSlide(callSlideDef('video'), Object.assign(videoHooks(V, () => call.clip, () => call.revealed = true, fallback), {hots: [stop]}));
     s.videoId = call.clip;
