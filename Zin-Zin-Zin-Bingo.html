@@ -24,6 +24,9 @@ body.menu-open{background:#f3f3f3}
 .ytinner{position:absolute;left:0;right:0;top:-110px;bottom:-110px}
 .ytinner iframe{width:100%;height:100%;border:0;display:block}
 .ytload{position:absolute;left:0;right:0;bottom:0;display:none;justify-content:center;padding:14px;color:#fff;font:bold 30px Georgia,serif;background:rgba(0,0,0,.55);z-index:2}
+.lvideo{position:absolute;background:#000;object-fit:contain;display:block}
+.lwait{position:absolute;display:none;align-items:center;justify-content:center;color:#fff;font:bold 30px Georgia,serif;background:rgba(0,0,0,.55);z-index:3;pointer-events:none}
+.lmsg{position:absolute;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:bold 30px Georgia,serif;background:rgba(0,0,0,.75);z-index:3;pointer-events:none}
 .ytmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:bold 28px Georgia,serif;background:#222}
 #black{position:absolute;inset:0;background:#000;z-index:50;display:none}
 .miss{position:absolute;left:24px;top:24px;z-index:4;background:#b00;color:#fff;font:bold 26px Georgia,serif;padding:10px 16px;border-radius:8px}
@@ -259,8 +262,26 @@ const usableAudio = inst => inst.audio.filter(f => audioOK[f] !== false);
 INSTRUMENTS.forEach(i => i.audio.forEach(probeAudio));
 DEMO_AUDIO.forEach(probeAudio);
 
+/* ---------- videos stored on GitHub (zin-zin-zin-bingo/videos/<instrument>-<1|2>.mp4) ----------
+   If a file is there it's used; if not, the YouTube copy is used. */
+const localVideoOK = {};   // file -> true/false/undefined(pending)
+function localFileFor(ytId) {
+  for (const i of INSTRUMENTS) { const k = i.videos.indexOf(ytId); if (k >= 0) return `${i.id}-${k + 1}.mp4`; }
+  return null;
+}
+function probeVideo(file) {
+  if (file in localVideoOK) return;
+  localVideoOK[file] = undefined;
+  const v = document.createElement('video'); v.preload = 'metadata'; v.muted = true;
+  v.addEventListener('loadedmetadata', () => { localVideoOK[file] = true; v.removeAttribute('src'); v.load(); });
+  v.addEventListener('error', () => { localVideoOK[file] = false; });
+  v.src = BASE + 'videos/' + file;
+}
+const useLocal = ytId => { const f = localFileFor(ytId); return f && localVideoOK[f] !== false ? f : null; };
+INSTRUMENTS.forEach(i => i.videos.forEach(id => probeVideo(localFileFor(id))));
+
 /* ---------- YouTube: a pool of players so upcoming videos are cued (player ready) before we get there ---------- */
-const YT_SLOTS = 4;
+const YT_SLOTS = 2;   // the current video + the next one
 const VIDEO_TIMEOUT = 15000;  // ms to wait for a video to start before falling back (slow school Wi-Fi can take a while)
 let ytApiReady = false, ytApiFailed = false, ytClock = 0;
 const slots = [];
@@ -271,14 +292,24 @@ for (let i = 0; i < YT_SLOTS; i++) {
   slots.push({host, msg, load, pid: pd.id, player: null, ready: false, id: null, cued: false, failed: null, wantPlay: false, used: 0, poll: null, watchdog: null});
 }
 function slotLoad(s) {
-  s.cued = false; s.failed = null; s.msg.style.display = 'none';
+  s.cued = false; s.failed = null; s.played = false; s.priming = false; s.msg.style.display = 'none';
   if (s.ready) s.player.cueVideoById({videoId: s.id, startSeconds: 0});
 }
 function slotState(s, st) {
-  if (st === YT.PlayerState.CUED) { s.cued = true; if (s.wantPlay) { s.player.unMute(); s.player.playVideo(); } }
+  if (st === YT.PlayerState.CUED) {
+    s.cued = true;
+    if (s.wantPlay) { s.player.setVolume(100); s.player.unMute(); s.player.playVideo(); }
+    else if (s.priming) { s.player.setVolume(0); s.player.playVideo(); }
+  }
   if (st === YT.PlayerState.PLAYING) {
-    if (!s.wantPlay) { s.player.pauseVideo(); return; }
-    s.played = true; clearTimeout(s.watchdog); clearInterval(s.poll); s.load.style.display = 'none'; s.msg.style.display = 'none';
+    s.played = true;
+    if (!s.wantPlay) {   // a silent head start: hold it at the beginning, already downloading
+      s.player.pauseVideo();
+      if (s.priming) { s.priming = false; s.player.seekTo(0, true); }
+      return;
+    }
+    if (yt.afterStart && s === yt.current) { const f = yt.afterStart; yt.afterStart = null; setTimeout(f, 2500); }
+    clearTimeout(s.watchdog); clearInterval(s.poll); s.load.style.display = 'none'; s.msg.style.display = 'none';
     s.poll = setInterval(() => {  // stop just before the end so YouTube's end screen never shows
       try { const d = s.player.getDuration(), t = s.player.getCurrentTime(); if (d && t >= d - 0.35) { s.player.pauseVideo(); clearInterval(s.poll); } } catch (e) {}
     }, 150);
@@ -316,7 +347,12 @@ const yt = {
     slotLoad(s);
     return s;
   },
-  current: null, onFail: null,
+  current: null, onFail: null, afterStart: null,
+  prime(s) {   // start downloading silently as soon as the slide appears (the key press that got us here allows it)
+    if (!s || s.failed != null || s.played || s.wantPlay) return;
+    s.priming = true;
+    if (s.ready && s.cued) { s.player.setVolume(0); s.player.playVideo(); }
+  },
   attach(id, rect, onFail) {
     const s = yt.get(id); yt.current = s; yt.onFail = onFail || null; s.used = ++ytClock;
     slots.forEach(x => { if (x !== s) yt.hideSlot(x); });
@@ -331,7 +367,8 @@ const yt = {
     clearTimeout(s.watchdog); s.load.style.display = 'none';
     if (s.failed != null) { yt.fail(s.failed); return; }
     if (ytApiFailed) { yt.fail('noapi'); return; }
-    if (s.ready && s.cued) { s.player.unMute(); s.player.playVideo(); }   // otherwise CUED / onReady starts it
+    s.priming = false;
+    if (s.ready && s.cued) { s.player.setVolume(100); s.player.unMute(); if (s.played) s.player.seekTo(0, true); s.player.playVideo(); }   // otherwise CUED / onReady starts it
     const asked = performance.now(); let nudged = false;
     const check = () => {
       if (!s.wantPlay || s !== yt.current) return;
@@ -358,7 +395,7 @@ const yt = {
   pause() { const s = yt.current; if (!s) return; s.wantPlay = false; clearTimeout(s.watchdog); if (s.ready) s.player.pauseVideo(); },
   release() {   // leaving the slide: rewind and keep it cued
     const s = yt.current; if (!s) return; yt.current = null; yt.onFail = null;
-    s.wantPlay = false; clearInterval(s.poll); clearTimeout(s.watchdog); yt.hideSlot(s);
+    s.wantPlay = false; s.priming = false; clearInterval(s.poll); clearTimeout(s.watchdog); yt.hideSlot(s);
     s.load.style.display = 'none';
     if (s.ready && s.failed == null && s.played) { try { s.player.pauseVideo(); s.player.seekTo(0, true); } catch (e) {} }   // (seeking an unplayed video would start it)
   },
@@ -427,7 +464,7 @@ const playFromStart = a => { try { a.currentTime = 0; } catch (e) {} const p = a
 function videoHooks(V, getId, onReveal, onFail) {
   return {
     replace: {[V.spid]: null},
-    onEnter() { yt.attach(getId(), V.rect, onFail); },
+    onEnter(back) { const s = yt.attach(getId(), V.rect, onFail); if (!back) yt.prime(s); },
     onFx(s, k, mode, dur) { if (s !== V.spid || k !== 'in') return; onReveal && onReveal(); yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); },
     onLeave() { yt.release(); },
     onReplay() { yt.replay(); },
@@ -435,8 +472,33 @@ function videoHooks(V, getId, onReveal, onFail) {
   };
 }
 
+/* a video stored on GitHub, played by the browser's own player */
+function localVideoHooks(V, file, onReveal, onError) {
+  const v = document.createElement('video');
+  v.className = 'lvideo'; v.preload = 'metadata'; v.playsInline = true; v.src = BASE + 'videos/' + file; box(v, V.rect);
+  const wait = el('div', 'lwait', 'Loading video…'); box(wait, [V.rect[0], V.rect[1] + V.rect[3] - 64, V.rect[2], 64]);
+  const msg = el('div', 'lmsg'); box(msg, V.rect);
+  const note = txt => { msg.textContent = txt || ''; msg.style.display = txt ? 'flex' : 'none'; };
+  const start = () => { note(null); const pr = v.play(); if (pr) pr.catch(e => { if (e.name === 'NotAllowedError') note('The browser didn’t let this video start. Press R to start it.'); }); };
+  let revealed = false;
+  v.addEventListener('waiting', () => { if (revealed) wait.style.display = 'flex'; });
+  v.addEventListener('playing', () => { wait.style.display = 'none'; note(null); });
+  v.addEventListener('error', () => { localVideoOK[file] = false; onError && onError(); });
+  return {
+    video: v, extras: [wait, msg],
+    hooks: {
+      replace: {[V.spid]: v},
+      onEnter(back) { v.preload = 'auto'; revealed = false; if (!back) { try { v.currentTime = 0; } catch (e) {} } },
+      onFx(sp, k, mode) { if (sp !== V.spid || k !== 'in') return; revealed = true; onReveal && onReveal(); if (mode !== 'restore') start(); else revealed = true; },
+      onLeave() { v.pause(); wait.style.display = 'none'; note(null); try { v.currentTime = 0; } catch (e) {} },
+      onReplay() { if (!revealed) return; try { v.currentTime = 0; } catch (e) {} start(); },
+      onPause() { v.pause(); }
+    }
+  };
+}
+
 /* ---------- demo screens ---------- */
-function demoScreen(n) {
+function demoScreen(n, opt = {}) {
   let o = {speed: DEMO_SPEED};
   if (n === 11 || n === 12) {
     o.hots = [[X['speaker' + n], () => playFromStart(getDemoAudio())]];
@@ -444,7 +506,21 @@ function demoScreen(n) {
     o.onPause = () => getDemoAudio().pause();
     if (n === 11) o.onEnter = back => { if (!back) playFromStart(getDemoAudio()); };
   }
-  if (n === 17) {
+  if (n === 16) o.onEnter = back => {   // head start for the demo video
+    if (back) return;
+    const s17 = seq[DEMO_SLIDES.indexOf(17)];
+    if (s17 && s17.localVideo) s17.localVideo.preload = 'auto'; else yt.prime(yt.get(DEMO_VIDEO));
+  };
+  const demoLocal = n === 17 && !opt.forceYT && useLocal(DEMO_VIDEO);
+  let lv = null;
+  if (demoLocal) {
+    lv = localVideoHooks(X.video17, demoLocal, null, () => {   // GitHub copy failed: use YouTube instead
+      const k = DEMO_SLIDES.indexOf(17), ns = demoScreen(17, {forceYT: true});
+      if (seq[k] === s17self) seq[k] = ns;
+      if (active === s17self) show(ns, {trans: null});
+    });
+    o = Object.assign(o, lv.hooks);
+  } else if (n === 17) {
     let vid = DEMO_VIDEO;
     const fallback = reason => {
       if (reason === 'blocked') { yt.message('The browser didn’t let this video start. Press R to start it.'); return; }
@@ -455,7 +531,9 @@ function demoScreen(n) {
     o = Object.assign(o, videoHooks(X.video17, () => vid, null, fallback));
   }
   const s = layeredSlide(n, o); s.demoAudio = (n === 11 || n === 12);
-  if (n === 17) s.videoId = DEMO_VIDEO;
+  var s17self = s;
+  if (lv) { lv.extras.forEach(x => s.el.appendChild(x)); s.localVideo = lv.video; }
+  else if (n === 17) s.videoId = DEMO_VIDEO;
   return s;
 }
 
@@ -627,7 +705,7 @@ const SPEAKER_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http
 const callLayer = (src, r, spid) => ({src, x: r[0], y: r[1], w: r[2], h: r[3], spid: spid || null});
 function callSlideDef(kind, n) {
   if (kind === 'video') return {transition: null, layers: [callLayer(BASE + 'call/video-label.webp', CALL.video.label), callLayer('', CALL.video.rect, 'vid')],
-    timeline: [{auto: false, fx: [{spid: 'vid', kind: 'in', start: 0, dur: 1000}]}]};
+    timeline: [{auto: false, fx: [{spid: 'vid', kind: 'in', start: 0, dur: 300}]}]};
   if (kind === 'number') {
     const D = digitLayer(n), k = CALL.number.digitHeight / D.h, w = D.w * k;
     return {transition: null, layers: [callLayer(BASE + 'call/group-of.webp', CALL.number.label),
@@ -698,8 +776,21 @@ function callScreen(call, number, opt = {}) {
       }
       yt.message(`Neither ${call.item.inst.name} video would play (${why.join('; ')}) and there's no audio clip yet. Press R to try again or next to move on.`);
     };
-    s = layeredSlide(callSlideDef('video'), Object.assign(videoHooks(V, () => call.clip, () => call.revealed = true, fallback), {hots: [stop]}));
-    s.videoId = call.clip;
+    const lf = !opt.forceYT && useLocal(call.clip);
+    if (lf) {
+      const lv = localVideoHooks(V, lf, () => call.revealed = true, () => {   // GitHub copy failed: use the YouTube copy of the same video
+        const ci = calls.indexOf(call), wasShown = call.revealed && active === s;
+        const ns = callScreen(call, number, {noBall: true, forceYT: true});
+        if (ci >= 0 && callScreens[ci] === s) callScreens[ci] = ns;
+        if (active === s) { show(ns, {trans: null}); if (wasShown) ns.next(); }
+      });
+      s = layeredSlide(callSlideDef('video'), Object.assign(lv.hooks, {hots: [stop]}));
+      lv.extras.forEach(x => s.el.appendChild(x));
+      s.localVideo = lv.video;
+    } else {
+      s = layeredSlide(callSlideDef('video'), Object.assign(videoHooks(V, () => call.clip, () => call.revealed = true, fallback), {hots: [stop]}));
+      s.videoId = call.clip;
+    }
   } else if (call.kind === 'number') {
     s = layeredSlide(callSlideDef('number', call.num.n), {hots: [stop], onFx(sp, k) { if (k === 'in') call.revealed = true; }});
   } else {
@@ -952,7 +1043,9 @@ function show(s, {back = false, trans} = {}) {
   const t = back ? null : (trans !== undefined ? trans : s.transition);
   active = s;
   if (!s.demoAudio && demoAudio) demoAudio.pause();
-  setTimeout(preloadAhead, 60);
+  yt.afterStart = null;
+  if (s.videoId && mode === 'play') yt.afterStart = preloadAhead;   // wait until this video is playing before setting up the next one
+  else setTimeout(preloadAhead, 60);
   if (!old || !t) { if (old) old.el.remove(); s.enter(back, 0); return; }
   const done = () => { if (active !== old) old.el.remove(); old.el.style.transform = ''; old.el.style.transition = 'none'; };
   if (t.type === 'push') {
@@ -975,6 +1068,7 @@ function preloadAhead() {
     if (s.videoId && !ids.includes(s.videoId) && !(yt.current && yt.current.id === s.videoId)) ids.push(s.videoId);
   }
   yt.preload(ids);
+  for (let i = pos + 1; i <= pos + 2; i++) { const s = screenAt(i); if (s && s.localVideo) s.localVideo.preload = 'auto'; }
 }
 
 function resetCalls() { calls = []; usage = {}; for (const k in callScreens) delete callScreens[k]; buildPool(); }
@@ -1096,6 +1190,16 @@ function vcTest(id) {
     vcPlayer.mute(); vcPlayer.loadVideoById({videoId: id, startSeconds: 0});
   });
 }
+function localTest(file) {
+  return new Promise(res => {
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
+    let done = false; const fin = r => { if (done) return; done = true; clearTimeout(to); v.pause(); v.removeAttribute('src'); v.load(); res(r); };
+    const to = setTimeout(() => fin('timeout'), 15000);
+    v.addEventListener('playing', () => fin('ok'));
+    v.addEventListener('error', () => fin(v.error && v.error.code === 4 && localVideoOK[file] !== true ? 'missing' : 'bad'));
+    v.src = BASE + 'videos/' + file; const pr = v.play(); if (pr) pr.catch(() => {});
+  });
+}
 async function checkVideos() {
   if (vcRunning) return;
   const out = $('#vcheckOut');
@@ -1104,19 +1208,25 @@ async function checkVideos() {
   $('#vcheckPlayerWrap').style.display = 'block';
   await vcPlayerReady();
   const list = [];
-  INSTRUMENTS.forEach(i => i.videos.forEach((v, k) => list.push({label: `${i.name} video ${k + 1}`, id: v})));
-  if (!list.some(x => x.id === DEMO_VIDEO)) list.push({label: 'Demo video', id: DEMO_VIDEO});
-  const bad = [];
+  INSTRUMENTS.forEach(i => i.videos.forEach((v, k) => list.push({label: `${i.name} video ${k + 1}`, id: v, file: `${i.id}-${k + 1}.mp4`})));
+  const bad = []; let gh = 0;
   for (let k = 0; k < list.length; k++) {
-    out.textContent = `Checking ${k + 1} of ${list.length}: ${list[k].label}…`;
-    const r = await vcTest(list[k].id);
-    if (r !== 'ok') bad.push(Object.assign({r}, list[k]));
+    const it = list[k];
+    out.textContent = `Checking ${k + 1} of ${list.length}: ${it.label}…`;
+    if (localVideoOK[it.file] !== false) {   // GitHub copy first
+      const r = await localTest(it.file);
+      if (r === 'ok') { gh++; continue; }
+      if (r !== 'missing') bad.push(Object.assign({r: 'github', fileErr: true}, it));
+    }
+    const r = await vcTest(it.id);
+    if (r !== 'ok') bad.push(Object.assign({r}, it));
   }
   try { vcPlayer.stopVideo(); } catch (e) {}
   $('#vcheckPlayerWrap').style.display = 'none';
   out.innerHTML = bad.length
-    ? `<b>${list.length - bad.length} of ${list.length} played.</b> These didn’t:<br>` + bad.map(b => `<span class="bad">✗ ${b.label}</span> - ${YT_ERRORS[b.r] || 'YouTube error ' + b.r} (<a href="https://www.youtube.com/watch?v=${b.id}" target="_blank" rel="noopener">open on YouTube</a>)`).join('<br>')
+    ? `<b>${list.length - bad.length} of ${list.length} played.</b> These didn’t:<br>` + bad.map(b => b.fileErr ? `<span class="bad">✗ ${b.label}</span> - the GitHub file ${b.file} wouldn’t play (it will use YouTube instead)` : `<span class="bad">✗ ${b.label}</span> - ${YT_ERRORS[b.r] || 'YouTube error ' + b.r} (<a href="https://www.youtube.com/watch?v=${b.id}" target="_blank" rel="noopener">open on YouTube</a>)`).join('<br>')
     : `<b>All ${list.length} videos played.</b>`;
+  out.innerHTML += `<br>${gh} from GitHub, ${list.length - gh} from YouTube.`;
   vcRunning = false; $('#vcheckBtn').disabled = false;
 }
 function linkFor() {
