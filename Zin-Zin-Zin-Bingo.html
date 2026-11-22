@@ -461,12 +461,16 @@ function getDemoAudio() {
 const playFromStart = a => { try { a.currentTime = 0; } catch (e) {} const p = a.play(); if (p) p.catch(() => {}); };
 
 /* video slide wiring shared by demo slide 17 and the game's video calls */
-function videoHooks(V, getId, onReveal, onFail) {
+function videoHooks(V, getId, onReveal, onFail, primeDelay = 0) {
+  let primeT = null;
   return {
     replace: {[V.spid]: null},
-    onEnter(back) { const s = yt.attach(getId(), V.rect, onFail); if (!back) yt.prime(s); },
+    onEnter(back) {
+      const s = yt.attach(getId(), V.rect, onFail); clearTimeout(primeT);
+      if (!back) primeT = setTimeout(() => { if (yt.current === s) yt.prime(s); }, primeDelay);   // wait for the ball so they don't compete
+    },
     onFx(s, k, mode, dur) { if (s !== V.spid || k !== 'in') return; onReveal && onReveal(); yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); },
-    onLeave() { yt.release(); },
+    onLeave() { clearTimeout(primeT); yt.release(); },
     onReplay() { yt.replay(); },
     onPause() { yt.pause(); }
   };
@@ -488,7 +492,7 @@ function localVideoHooks(V, file, onReveal, onError) {
     video: v, extras: [wait, msg],
     hooks: {
       replace: {[V.spid]: v},
-      onEnter(back) { v.preload = 'auto'; revealed = false; if (!back) { try { v.currentTime = 0; } catch (e) {} } },
+      onEnter(back) { revealed = false; if (v.preload !== 'auto') setTimeout(() => { v.preload = 'auto'; }, back ? 0 : BALL_TIMING.total * 1000); if (!back) { try { v.currentTime = 0; } catch (e) {} } },
       onFx(sp, k, mode) { if (sp !== V.spid || k !== 'in') return; revealed = true; onReveal && onReveal(); if (mode !== 'restore') start(); else revealed = true; },
       onLeave() { v.pause(); wait.style.display = 'none'; note(null); try { v.currentTime = 0; } catch (e) {} },
       onReplay() { if (!revealed) return; try { v.currentTime = 0; } catch (e) {} start(); },
@@ -579,7 +583,7 @@ const ballFX = (() => {
   const R = 170, REST_Y = -40, START_Y = 1050, EXIT_X = 1400;
   const cv = el('canvas', 'ball3d'); cv.width = 1920; cv.height = 1080;
   stage.insertBefore(cv, $('#overlay'));
-  let THREE = null, renderer, scene, camera, group, labelMat, labelCtx, labelTex, raf = 0, ready = false, run = 0, frames = 0;
+  let THREE = null, renderer, scene, camera, group, labelMat, labelCtx, labelTex, raf = 0, ready = false, run = 0, frames = 0, slowRuns = 0;
   async function init() {
     try {
       THREE = await import('./' + BASE + 'lib/three.module.min.js');
@@ -650,7 +654,7 @@ const ballFX = (() => {
     group.scale.set(1 + p.sq * 0.5, 1 - p.sq, 1 + p.sq * 0.5);
     renderer.render(scene, camera); frames++;
     if (t < BALL_TIMING.total) raf = requestAnimationFrame(frame);
-    else { if (frames / BALL_TIMING.total < 15) { ready = false; console.warn('3D ball too slow here, switching to the flat ball'); } stop(); }
+    else { if (frames / BALL_TIMING.total < 15) { if (++slowRuns >= 2) { ready = false; console.warn('3D ball too slow here, switching to the flat ball'); } } else slowRuns = 0; stop(); }
   }
   function stop() { run++; cancelAnimationFrame(raf); cv.style.display = 'none'; if (renderer) renderer.clear(); }
   return {
@@ -666,32 +670,42 @@ const ballFX = (() => {
 })();
 ballFX.init();
 
+/* flat fallback ball (used if 3D isn't available or is too slow): one element at stage level, above the video box */
+const flatBall = (() => {
+  const b = el('div', 'ball'); b.innerHTML = '<div class="ballface"><span></span></div>';
+  box(b, [960 - 170, 500 - 170, 340, 340]); b.style.display = 'none'; b.style.zIndex = 8;
+  stage.insertBefore(b, $('#overlay'));
+  let anim = null;
+  const stop = () => { if (anim) anim.cancel(); anim = null; b.style.display = 'none'; };
+  return {
+    play(n) {
+      stop(); if (!b.animate) return;
+      const sp = b.querySelector('span'); sp.textContent = n; sp.style.fontSize = n > 99 ? '92px' : '';
+      b.style.display = 'block';
+      const T = BALL_TIMING, f = x => x / T.total;
+      const kf = [{transform: 'translate(0,-900px) rotate(-200deg)', offset: 0, easing: 'cubic-bezier(.5,0,1,1)'},
+                  {transform: 'translate(0,0) rotate(0deg)', offset: f(T.land), easing: 'ease-out'}];
+      T.bounces.forEach(bn => { kf.push({transform: `translate(0,${-bn.v * bn.v * 900}px)`, offset: f(bn.start + bn.dur / 2), easing: 'ease-in'}); kf.push({transform: 'translate(0,0)', offset: f(bn.start + bn.dur), easing: 'ease-out'}); });
+      kf.push({transform: 'translate(0,0) rotate(0deg)', offset: f(T.roll), easing: 'ease-in'});
+      kf.push({transform: 'translate(1400px,0) rotate(470deg)', offset: 1});
+      anim = b.animate(kf, {duration: T.total * 1000});
+      anim.onfinish = stop;
+    },
+    stop
+  };
+})();
 function addBall(s, number, still) {
-  // flat fallback ball (only used if 3D isn't available on this computer)
-  const b = el('div', 'ball'); b.innerHTML = `<div class="ballface"><span>${number}</span></div>`;
-  if (number > 99) b.querySelector('span').style.fontSize = '92px';
-  box(b, [960 - 170, 500 - 170, 340, 340]); b.style.display = 'none'; s.el.appendChild(b);
-  let anim = null, chimeT = null;
-  const T = BALL_TIMING, enter = s.enter, leave = s.leave;
+  let chimeT = null;
+  const enter = s.enter, leave = s.leave;
   s.enter = (back, tdur) => {
-    if (anim) anim.cancel(); clearTimeout(chimeT); b.style.display = 'none'; ballFX.stop();
+    clearTimeout(chimeT); ballFX.stop(); flatBall.stop();
     if (!back && !still) {
-      chimeT = setTimeout(playSignal, T.land * 1000);
-      if (!ballFX.play(number) && b.animate) {
-        b.style.display = 'block';
-        const f = x => x / T.total;
-        const kf = [{transform: 'translate(0,-900px) rotate(-200deg)', offset: 0, easing: 'cubic-bezier(.5,0,1,1)'},
-                    {transform: 'translate(0,0) rotate(0deg)', offset: f(T.land), easing: 'ease-out'}];
-        T.bounces.forEach(bn => { kf.push({transform: `translate(0,${-bn.v * bn.v * 900}px)`, offset: f(bn.start + bn.dur / 2), easing: 'ease-in'}); kf.push({transform: 'translate(0,0)', offset: f(bn.start + bn.dur), easing: 'ease-out'}); });
-        kf.push({transform: 'translate(0,0) rotate(0deg)', offset: f(T.roll), easing: 'ease-in'});
-        kf.push({transform: 'translate(1400px,0) rotate(470deg)', offset: 1});
-        anim = b.animate(kf, {duration: T.total * 1000});
-        anim.onfinish = () => { b.style.display = 'none'; };
-      }
+      chimeT = setTimeout(playSignal, BALL_TIMING.land * 1000);
+      if (!ballFX.play(number)) flatBall.play(number);
     }
     enter(back, tdur);
   };
-  s.leave = () => { if (anim) anim.cancel(); b.style.display = 'none'; clearTimeout(chimeT); ballFX.stop(); leave(); };
+  s.leave = () => { clearTimeout(chimeT); ballFX.stop(); flatBall.stop(); leave(); };
 }
 
 /* ---------- call slides: question on top, rules bar along the bottom ---------- */
@@ -788,7 +802,7 @@ function callScreen(call, number, opt = {}) {
       lv.extras.forEach(x => s.el.appendChild(x));
       s.localVideo = lv.video;
     } else {
-      s = layeredSlide(callSlideDef('video'), Object.assign(videoHooks(V, () => call.clip, () => call.revealed = true, fallback), {hots: [stop]}));
+      s = layeredSlide(callSlideDef('video'), Object.assign(videoHooks(V, () => call.clip, () => call.revealed = true, fallback, opt.noBall ? 0 : BALL_TIMING.total * 1000), {hots: [stop]}));
       s.videoId = call.clip;
     }
   } else if (call.kind === 'number') {
