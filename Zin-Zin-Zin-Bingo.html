@@ -8,7 +8,7 @@
 <link rel="icon" id="favicon" type="image/svg+xml" href="">
 <style>
 @font-face{font-family:"Medrano";src:url("zin-zin-zin-bingo/fonts/medrano.woff2") format("woff2");font-display:block}
-:root{--paper:#f6f3ec;--ink:#1f2a44;--accent:#a4262c;--muted:#7a7f8c;--line:#d9d3c6;--font:"Medrano","Trebuchet MS",sans-serif}
+:root{--ui:Arial,"Helvetica Neue",Helvetica,sans-serif;--paper:#f6f3ec;--ink:#1f2a44;--accent:#a4262c;--muted:#7a7f8c;--line:#d9d3c6;--font:"Medrano","Trebuchet MS",sans-serif}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#000;font-family:var(--font)}
 body.menu-open{background:var(--paper)}
@@ -24,13 +24,13 @@ body.menu-open{background:var(--paper)}
 .ythost{position:absolute;z-index:5;opacity:0;pointer-events:none;background:#000;overflow:hidden;border-radius:6px;box-shadow:0 1px 0 var(--line),0 24px 50px -20px rgba(31,42,68,.45);left:0;top:0;width:740px;height:555px}
 .ytinner{position:absolute;left:0;right:0;top:-110px;bottom:-110px}
 .ytinner iframe{width:100%;height:100%;border:0;display:block}
-.ytload{position:absolute;left:0;right:0;bottom:0;display:none;justify-content:center;padding:14px;color:#fff;font:30px var(--font);background:rgba(0,0,0,.55);z-index:2}
+.ytload{position:absolute;left:0;right:0;bottom:0;display:none;justify-content:center;padding:14px;color:#fff;font:28px var(--ui);background:rgba(0,0,0,.55);z-index:2}
 .lvideo{position:absolute;background:#000;object-fit:contain;display:block;border-radius:6px;box-shadow:0 1px 0 var(--line),0 24px 50px -20px rgba(31,42,68,.45)}
-.lwait{position:absolute;display:none;align-items:center;justify-content:center;color:#fff;font:30px var(--font);background:rgba(0,0,0,.55);z-index:3;pointer-events:none}
-.lmsg{position:absolute;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:30px var(--font);background:rgba(0,0,0,.75);z-index:3;pointer-events:none}
-.ytmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:28px var(--font);background:#222}
+.lwait{position:absolute;display:none;align-items:center;justify-content:center;color:#fff;font:28px var(--ui);background:rgba(0,0,0,.55);z-index:3;pointer-events:none}
+.lmsg{position:absolute;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:28px var(--ui);background:rgba(0,0,0,.75);z-index:3;pointer-events:none}
+.ytmsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#fff;font:26px var(--ui);background:#222}
 #black{position:absolute;inset:0;background:#000;z-index:50;display:none}
-.miss{position:absolute;left:24px;top:24px;z-index:4;background:#b00;color:#fff;font:26px var(--font);padding:10px 16px;border-radius:8px}
+.miss{position:absolute;left:24px;top:24px;z-index:4;background:#b00;color:#fff;font:24px var(--ui);padding:10px 16px;border-radius:8px}
 
 /* ---------- Option C: house style ---------- */
 #overlay{position:absolute;inset:0;z-index:10;display:none}
@@ -40,11 +40,11 @@ body.menu-open{background:var(--paper)}
 .c .ttl span{font-size:40px;color:var(--muted)}
 .c .crule{position:absolute;left:120px;right:120px;top:200px;height:2px;background:var(--ink)}
 .c .crule i{position:absolute;left:0;top:-3px;width:120px;height:8px;background:var(--accent)}
-.c .cfoot{position:absolute;left:120px;right:120px;bottom:46px;display:flex;justify-content:space-between;align-items:center;font-size:30px;color:#9a9486;z-index:4}
+.c .cfoot{position:absolute;left:120px;right:120px;bottom:46px;display:flex;justify-content:space-between;align-items:center;font:26px var(--ui);color:#9a9486;z-index:4}
 .c .cfoot .lnk{cursor:pointer;padding:8px 0 8px 30px}
-.c .side{position:absolute;left:1350px;top:250px;width:470px;height:664px;display:flex;flex-direction:column;justify-content:space-between}
-.c .item{display:flex;gap:24px;align-items:center;font-size:40px;line-height:1.12;padding:26px 0;border-top:2px solid var(--line);white-space:nowrap}
-.c .item:first-child{border-top:none;padding-top:0}
+.c .side{position:absolute;left:1350px;top:250px;width:470px;height:664px;display:flex;flex-direction:column}
+.c .item{flex:1;display:flex;gap:24px;align-items:center;font-size:40px;line-height:1.12;border-top:2px solid var(--line);white-space:nowrap}
+.c .item:first-child{border-top:none}
 .c .item .ic{width:104px;height:104px;flex:none}
 .ic svg{width:100%;height:100%;display:block}
 .c .acc{color:var(--accent)}
@@ -56,6 +56,8 @@ body.menu-open{background:var(--paper)}
 .c .spk.playing .w1{animation:wave 1.1s ease-in-out infinite}
 .c .spk.playing .w2{animation:wave 1.1s ease-in-out .25s infinite}
 @keyframes wave{0%,100%{opacity:.2}50%{opacity:1}}
+.c .ttl,.c .side,.c .cfoot,.c .groupof{transition:opacity .45s ease}
+.c.textoff .ttl,.c.textoff .side,.c.textoff .cfoot,.c.textoff .groupof{opacity:0;transition:none}
 .rchip{transform:scale(0);transform-box:fill-box;transform-origin:center;transition:transform .25s ease-out}
 .rchip.on{transform:scale(1)}
 .rline{transition:opacity .3s}
@@ -64,11 +66,11 @@ body.menu-open{background:var(--paper)}
 .recap .cell{position:relative;opacity:0;transition:opacity .45s ease}
 .recap .cell.on{opacity:1}
 .recap .empty{position:absolute;left:120px;top:300px;font-size:56px;color:var(--muted)}
-.chipno{position:absolute;left:-12px;top:-12px;width:27%;height:27%;min-width:34px;min-height:34px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-family:var(--font);z-index:2;box-shadow:0 0 0 3px var(--paper)}
-.sbtn{position:absolute;font:44px/1 var(--font);padding:20px 34px 16px;border-radius:12px;border:3px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;z-index:6;display:flex;align-items:center;gap:18px}
+.chipno{position:absolute;left:-12px;top:-12px;width:27%;height:27%;min-width:34px;min-height:34px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-family:var(--ui);font-weight:bold;z-index:2;box-shadow:0 0 0 3px var(--paper)}
+.sbtn{position:absolute;font:36px/1 var(--ui);padding:20px 32px;border-radius:12px;border:3px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;z-index:6;display:flex;align-items:center;gap:18px}
 .sbtn.solid{background:var(--ink);color:var(--paper)}
-.sbtn .k{font-size:28px;opacity:.6;border:2px solid currentColor;border-radius:8px;padding:4px 10px 2px}
-.sbtn.undo{border:none;font-size:34px;color:var(--muted);padding:12px 0}
+.sbtn .k{font-size:24px;opacity:.6;border:2px solid currentColor;border-radius:7px;padding:3px 9px}
+.sbtn.undo{border:none;font-size:30px;color:var(--muted);padding:12px 0}
 .pulse{animation:pulse .5s ease-in-out 2}
 @keyframes pulse{50%{transform:scale(1.05)}}
 /* numbered bingo ball (flat fallback) */
@@ -102,40 +104,41 @@ body.menu-open{background:var(--paper)}
 /* hover controls */
 #ctrls{position:fixed;left:12px;top:12px;z-index:100;display:flex;gap:8px;opacity:0;transition:opacity .3s;pointer-events:none}
 #ctrls.show{opacity:1;pointer-events:auto}
-#ctrls button{font:17px var(--font);padding:7px 12px;border-radius:8px;border:1px solid #888;background:rgba(255,255,255,.92);cursor:pointer}
+#ctrls button{font:15px var(--ui);padding:7px 12px;border-radius:8px;border:1px solid #888;background:rgba(255,255,255,.92);cursor:pointer}
 
 /* ---------- menu ---------- */
-#menu{position:fixed;inset:0;overflow:auto;background:var(--paper);z-index:200;font-family:var(--font);color:var(--ink)}
+#menu{position:fixed;inset:0;overflow:auto;background:var(--paper);z-index:200;font-family:var(--ui);color:var(--ink)}
+#menu .mtitle,#menu h3{font-family:var(--font)}   /* Medrano for the important text only */
 #menu .wrap{max-width:1120px;margin:0 auto;padding:40px 24px 70px}
 #menu .mtitle{font-size:64px;line-height:1}
-#menu .msub{font-size:22px;color:var(--muted);margin-top:8px}
+#menu .msub{font-size:17px;color:var(--muted);margin-top:8px}
 #menu .mrule{position:relative;height:2px;background:var(--ink);margin:22px 0 10px}
 #menu .mrule i{position:absolute;left:0;top:-3px;width:80px;height:8px;background:var(--accent)}
 #menu section{padding:22px 0;border-bottom:1px solid var(--line)}
 #menu h3{margin:0;font-weight:normal;font-size:30px}
 #menu .head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-#menu .head .links button{background:none;border:none;color:var(--accent);font:18px var(--font);cursor:pointer;padding:4px 6px}
+#menu .head .links button{background:none;border:none;color:var(--accent);font:16px var(--ui);cursor:pointer;padding:4px 6px}
 #menu .tiles{display:flex;flex-wrap:wrap;gap:14px;--s:104px}
 #menu .pick{position:relative;cursor:pointer;border-radius:6px;transition:opacity .15s,filter .15s;outline-offset:4px}
 #menu .pick.off{opacity:.3;filter:grayscale(.8)}
 #menu .pick::after{content:"✓";position:absolute;right:-8px;top:-8px;width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--paper);font:16px/28px system-ui,sans-serif;text-align:center;box-shadow:0 0 0 3px var(--paper)}
 #menu .pick.off::after{display:none}
-#menu .pick .tag{position:absolute;left:4px;right:4px;bottom:4px;background:var(--accent);color:#fff;font-size:13px;text-align:center;border-radius:4px;padding:3px 2px 1px}
+#menu .pick .tag{position:absolute;left:4px;right:4px;bottom:4px;background:var(--accent);color:#fff;font-size:11px;text-align:center;border-radius:4px;padding:2px}
 #menu .fmts{display:flex;gap:12px;flex-wrap:wrap}
-#menu .fmt{display:flex;align-items:center;gap:12px;padding:12px 22px 9px 16px;border:2px solid var(--ink);border-radius:999px;cursor:pointer;font-size:24px;background:var(--ink);color:var(--paper)}
+#menu .fmt{display:flex;align-items:center;gap:12px;padding:11px 22px 11px 16px;border:2px solid var(--ink);border-radius:999px;cursor:pointer;font-size:19px;background:var(--ink);color:var(--paper)}
 #menu .fmt.off{background:transparent;color:var(--muted);border-color:var(--line)}
 #menu .fmt svg{width:30px;height:30px}
 #menu .row{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
-#menu .opt{display:flex;align-items:center;gap:8px;font-size:20px;cursor:pointer}
+#menu .opt{display:flex;align-items:center;gap:8px;font-size:17px;cursor:pointer}
 #menu .opt input{width:20px;height:20px;accent-color:var(--ink)}
-#menu .start{font:34px var(--font);padding:16px 54px 12px;border-radius:12px;border:none;background:var(--ink);color:var(--paper);cursor:pointer}
+#menu .start{font:bold 24px var(--ui);padding:16px 54px;border-radius:12px;border:none;background:var(--ink);color:var(--paper);cursor:pointer}
 #menu .start:disabled{opacity:.35;cursor:not-allowed}
-#menu .btn{font:19px var(--font);padding:12px 20px 9px;border-radius:10px;border:2px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
-#menu .summary{font-size:19px;color:var(--muted);margin-top:12px}
+#menu .btn{font:16px var(--ui);padding:12px 20px;border-radius:10px;border:2px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+#menu .summary{font-size:16px;color:var(--muted);margin-top:12px}
 #menu .linkbox{width:100%;margin-top:10px;font:14px monospace;padding:8px;display:none}
-#menu .keys{font-size:18px;color:var(--muted);line-height:1.8;border-bottom:none}
-#menu kbd{background:#fff;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 7px 0;font:15px var(--font);color:var(--ink)}
-#menu .vcheck{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;font-size:18px}
+#menu .keys{font-size:15px;color:var(--muted);line-height:1.8;border-bottom:none}
+#menu kbd{background:#fff;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font:13px var(--ui);color:var(--ink)}
+#menu .vcheck{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;font-size:15px}
 #vcheckPlayerWrap{width:240px;height:135px;background:#000;border-radius:6px;overflow:hidden;display:none;flex:none}
 #vcheckPlayerWrap iframe{width:100%;height:100%;border:0}
 #vcheckOut{flex:1;min-width:240px;line-height:1.6}
@@ -600,7 +603,8 @@ const BALL_TIMING = (() => {   // seconds; shared by the 3D ball and the fallbac
   return T;
 })();
 const ballFX = (() => {
-  const R = 170, REST_Y = -40, START_Y = 1050, EXIT_X = 1400;
+  const R = 170, REST_Y = -40, START_Y = 1050;
+  let dir = {x: 1, z: 0, exit: 1400}, axis = null;
   const cv = el('canvas', 'ball3d'); cv.width = 1920; cv.height = 1080;
   stage.insertBefore(cv, $('#overlay'));
   let THREE = null, renderer, scene, camera, group, labelMat, labelCtx, labelTex, raf = 0, ready = false, run = 0, frames = 0, slowRuns = 0;
@@ -662,15 +666,16 @@ const ballFX = (() => {
     }
     // squash right after each impact
     [T.land].concat(T.bounces.map(b => b.start + b.dur)).forEach((ti, i) => { const tau = t - ti; if (tau >= 0 && tau < 0.09) sq = Math.max(sq, 0.13 * Math.pow(0.42, i) * Math.sin(Math.PI * tau / 0.09)); });
-    if (t >= T.roll) { const tau = Math.min(t - T.roll, T.rollDur), acc = 2 * EXIT_X / (T.rollDur * T.rollDur); x = 0.5 * acc * tau * tau; rz = -x / R; }
-    return {x, y, rx, rz, sq};
+    let z = 0, roll = 0;
+    if (t >= T.roll) { const tau = Math.min(t - T.roll, T.rollDur), acc = 2 * dir.exit / (T.rollDur * T.rollDur), d = 0.5 * acc * tau * tau; x = dir.x * d; z = dir.z * d; roll = d / R; }
+    return {x, y, z, rx, rz, sq, roll};
   }
   function frame(now) {
     const me = run, t = (now - frame.start) / 1000;
     if (me !== run) return;
     const p = pose(t);
-    group.position.set(p.x, p.y - R * p.sq, 0);
-    group.rotation.set(p.rx, 0, p.rz);
+    group.position.set(p.x, p.y - R * p.sq, p.z);
+    if (p.roll > 0) group.quaternion.setFromAxisAngle(axis, p.roll); else group.rotation.set(p.rx, 0, p.rz);
     group.scale.set(1 + p.sq * 0.5, 1 - p.sq, 1 + p.sq * 0.5);
     renderer.render(scene, camera); frames++;
     if (t < BALL_TIMING.total) raf = requestAnimationFrame(frame);
@@ -682,6 +687,15 @@ const ballFX = (() => {
     play(n) {
       if (!ready) return false;
       stop(); drawLabel(n); cv.style.display = 'block';
+      // pick a random way to roll off: anywhere to the left or right, slightly toward or away from the class
+      const deg = Math.random() < 0.5 ? -55 + Math.random() * 95 : 140 + Math.random() * 95, th = deg * Math.PI / 180;
+      dir = {x: Math.cos(th), z: Math.sin(th), exit: 6000};
+      axis = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
+      const v = new THREE.Vector3();
+      for (let d = 200; d <= 6000; d += 50) {   // roll until the whole ball is off screen
+        v.set(dir.x * d - Math.sign(dir.x) * R * 1.3, REST_Y, dir.z * d).project(camera);
+        if (Math.abs(v.x) > 1.02) { dir.exit = d; break; }
+      }
       const me = run; frames = 0; requestAnimationFrame(now => { if (me !== run) return; frame.start = now; frame(now); });
       return true;
     },
@@ -707,7 +721,8 @@ const flatBall = (() => {
                   {transform: 'translate(0,0) rotate(0deg)', offset: f(T.land), easing: 'ease-out'}];
       T.bounces.forEach(bn => { kf.push({transform: `translate(0,${-bn.v * bn.v * 900}px)`, offset: f(bn.start + bn.dur / 2), easing: 'ease-in'}); kf.push({transform: 'translate(0,0)', offset: f(bn.start + bn.dur), easing: 'ease-out'}); });
       kf.push({transform: 'translate(0,0) rotate(0deg)', offset: f(T.roll), easing: 'ease-in'});
-      kf.push({transform: 'translate(1400px,0) rotate(470deg)', offset: 1});
+      const sgn = Math.random() < 0.5 ? -1 : 1, dy = Math.round(-120 + Math.random() * 260), sc = (1 + dy / 900).toFixed(2);   // random side, slightly toward or away
+      kf.push({transform: `translate(${sgn * 1400}px,${dy}px) rotate(${sgn * 470}deg) scale(${sc})`, offset: 1});
       anim = b.animate(kf, {duration: T.total * 1000});
       anim.onfinish = stop;
     },
@@ -715,17 +730,20 @@ const flatBall = (() => {
   };
 })();
 function addBall(s, number, still) {
-  let chimeT = null;
+  let chimeT = null, textT = null;
   const enter = s.enter, leave = s.leave;
+  const textOn = () => { clearTimeout(textT); s.el.classList.remove('textoff'); };
   s.enter = (back, tdur) => {
-    clearTimeout(chimeT); ballFX.stop(); flatBall.stop();
+    clearTimeout(chimeT); ballFX.stop(); flatBall.stop(); textOn();
     if (!back && !still) {
+      s.el.classList.add('textoff');                                  // text waits for the ball to roll away
+      textT = setTimeout(textOn, BALL_TIMING.total * 1000 - 150);
       chimeT = setTimeout(playSignal, BALL_TIMING.land * 1000);
       if (!ballFX.play(number)) flatBall.play(number);
     }
     enter(back, tdur);
   };
-  s.leave = () => { clearTimeout(chimeT); ballFX.stop(); flatBall.stop(); leave(); };
+  s.leave = () => { clearTimeout(chimeT); textOn(); ballFX.stop(); flatBall.stop(); leave(); };
 }
 
 /* ---------- call slides (house style): title + rule, question on the left, rules on the right ---------- */
@@ -738,7 +756,7 @@ const CALL_TITLES = {video: ['Watch', 'and name the instrument'], audio: ['Liste
 const INK = '#1f2a44', ACCENT = '#a4262c';
 const LINE_ICONS = {
   trophy: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 14h36v20a18 18 0 0 1-36 0z"/><path d="M32 20H20a10 10 0 0 0 13 16M68 20h12a10 10 0 0 1-13 16"/><path d="M50 52v14M38 84h24M42 66h16l3 18H39z"/></svg>`,
-  clear: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="16" width="50" height="66" rx="6"/><path d="M24 34h30M24 48h30M24 62h30"/><path d="M70 46a16 16 0 1 1 6 22" stroke="${ACCENT}"/><path d="M68 36v11h11" stroke="${ACCENT}"/></svg>`,
+  clear: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="16" width="46" height="66" rx="6"/><path d="M17 34h28M17 48h28M17 62h28"/><path d="M83.0 39.9A14 14 0 1 1 69.0 39.9" stroke="${ACCENT}"/><path d="M62.0 39.3L69.0 39.9L66.0 46.2" stroke="${ACCENT}"/></svg>`,
   speaker: `<svg viewBox="0 0 100 100" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 40h14l18-15v50L32 60H18z" stroke="${INK}" stroke-width="4"/><path class="w1" d="M62 38a16 16 0 0 1 0 24" stroke="${ACCENT}" stroke-width="5"/><path class="w2" d="M71 29a29 29 0 0 1 0 42" stroke="${ACCENT}" stroke-width="5"/></svg>`,
   hand: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 58c0-8 3-12 8-12h6V26a5 5 0 0 1 10 0v18M46 40v-6a5 5 0 0 1 10 0v10M56 42a5 5 0 0 1 10 0v6M66 46a5 5 0 0 1 10 0v12c0 16-10 26-26 26h-6c-12 0-22-10-22-22"/><g fill="${ACCENT}" stroke="none"><circle cx="48" cy="66" r="6"/><circle cx="60" cy="68" r="6"/><circle cx="54" cy="58" r="6"/></g></svg>`,
   collect: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="18" width="34" height="44" rx="4"/><rect x="16" y="12" width="34" height="44" rx="4" fill="#f6f3ec"/><path d="M22 24h22M22 32h22M22 40h22"/><path d="M48 66h44a22 16 0 0 1-44 0z"/><g fill="${ACCENT}" stroke="none"><circle cx="62" cy="62" r="5"/><circle cx="74" cy="61" r="5"/><circle cx="68" cy="56" r="5"/></g></svg>`
