@@ -327,23 +327,40 @@ const usableAudio = inst => inst.audio.filter(f => audioOK[f] !== false);
 INSTRUMENTS.forEach(i => i.audio.forEach(probeAudio));
 DEMO_AUDIO.forEach(probeAudio);
 
-/* ---------- videos stored on GitHub (zin-zin-zin-bingo/videos/<instrument>-<1|2>.mp4) ----------
-   If a file is there it's used; if not, the YouTube copy is used. */
-const localVideoOK = {};   // file -> true/false/undefined(pending)
-function localFileFor(ytId) {
-  for (const i of INSTRUMENTS) { const k = i.videos.indexOf(ytId); if (k >= 0) return `${i.id}-${k + 1}.mp4`; }
+/* ---------- videos stored on GitHub (zin-zin-zin-bingo/videos/) ----------
+   Files can keep their YouTube download names ("Zin Zin Zin Bingo – Instrument 13.mp4").
+   The number is the video's place in the list (harp 1-2, piano 3-4 … cello 25-26).
+   <instrument>-<1|2>.mp4 also works. If no file is found, the YouTube copy is used. */
+const localVideoOK = {};     // file -> true/false
+const localVideoName = {};   // ytId -> file name found, null = none, undefined = still looking
+const vidURL = file => BASE + 'videos/' + encodeURIComponent(file);
+function videoNumber(ytId) {
+  let n = 0;
+  for (const i of INSTRUMENTS) for (const v of i.videos) { n++; if (v === ytId) return n; }
   return null;
 }
-function probeVideo(file) {
-  if (file in localVideoOK) return;
-  localVideoOK[file] = undefined;
-  const v = document.createElement('video'); v.preload = 'metadata'; v.muted = true;
-  v.addEventListener('loadedmetadata', () => { localVideoOK[file] = true; v.removeAttribute('src'); v.load(); });
-  v.addEventListener('error', () => { localVideoOK[file] = false; });
-  v.src = BASE + 'videos/' + file;
+function videoCandidates(ytId) {
+  const n = videoNumber(ytId); if (!n) return [];
+  const out = [`Zin Zin Zin Bingo – Instrument ${n}.mp4`, `Zin Zin Zin Bingo - Instrument ${n}.mp4`, `Zin Zin Zin Bingo — Instrument ${n}.mp4`];
+  for (const i of INSTRUMENTS) { const k = i.videos.indexOf(ytId); if (k >= 0) out.push(`${i.id}-${k + 1}.mp4`); }
+  return out;
 }
-const useLocal = ytId => { const f = localFileFor(ytId); return f && localVideoOK[f] !== false ? f : null; };
-INSTRUMENTS.forEach(i => i.videos.forEach(id => probeVideo(localFileFor(id))));
+function probeVideoFor(ytId) {
+  if (ytId in localVideoName) return;
+  localVideoName[ytId] = undefined;
+  const names = videoCandidates(ytId);
+  const tryNext = k => {
+    if (k >= names.length) { localVideoName[ytId] = null; return; }
+    const file = names[k];
+    const v = document.createElement('video'); v.preload = 'metadata'; v.muted = true;
+    v.addEventListener('loadedmetadata', () => { localVideoOK[file] = true; localVideoName[ytId] = file; v.removeAttribute('src'); v.load(); });
+    v.addEventListener('error', () => tryNext(k + 1));
+    v.src = vidURL(file);
+  };
+  tryNext(0);
+}
+const useLocal = ytId => { const f = localVideoName[ytId]; return f && localVideoOK[f] !== false ? f : null; };
+INSTRUMENTS.forEach(i => i.videos.forEach(probeVideoFor));
 
 /* ---------- YouTube: a pool of players so upcoming videos are cued (player ready) before we get there ---------- */
 const YT_SLOTS = 2;   // the current video + the next one
@@ -546,7 +563,7 @@ function videoHooks(V, getId, onReveal, onFail, primeDelay = 0) {
 /* a video stored on GitHub, played by the browser's own player */
 function localVideoHooks(V, file, onReveal, onError) {
   const v = document.createElement('video');
-  v.className = 'lvideo'; v.preload = 'metadata'; v.playsInline = true; v.src = BASE + 'videos/' + file; box(v, V.rect);
+  v.className = 'lvideo'; v.preload = 'metadata'; v.playsInline = true; v.src = vidURL(file); box(v, V.rect);
   const wait = el('div', 'lwait', 'Loading video…'); box(wait, [V.rect[0], V.rect[1] + V.rect[3] - 64, V.rect[2], 64]);
   const msg = el('div', 'lmsg'); box(msg, V.rect);
   const note = txt => { msg.textContent = txt || ''; msg.style.display = txt ? 'flex' : 'none'; };
@@ -663,7 +680,7 @@ const ballFX = (() => {
       scene = new THREE.Scene();
       const pmrem = new THREE.PMREMGenerator(renderer);
       scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
-      camera = new THREE.PerspectiveCamera(20, 1920 / 1080, 50, 12000);
+      camera = new THREE.PerspectiveCamera(20, 1920 / 1080, 20, 90000);
       camera.position.set(0, 320, 3060); camera.lookAt(0, 0, 0);
       const sun = new THREE.DirectionalLight(0xffffff, 2.4);
       sun.position.set(-700, 1500, 1100); sun.castShadow = true;
@@ -721,11 +738,12 @@ const ballFX = (() => {
     group.position.set(p.x, p.y - R * p.sq, p.z);
     if (p.roll > 0) group.quaternion.setFromAxisAngle(axis, p.roll); else group.rotation.set(p.rx, 0, p.rz);
     group.scale.set(1 + p.sq * 0.5, 1 - p.sq, 1 + p.sq * 0.5);
+    if (dir.fade && t > BALL_TIMING.roll) { const q = (t - BALL_TIMING.roll) / BALL_TIMING.rollDur; cv.style.opacity = q < .55 ? 1 : Math.max(0, 1 - (q - .55) / .45); }
     renderer.render(scene, camera); frames++;
     if (t < BALL_TIMING.total) raf = requestAnimationFrame(frame);
     else { if (frames / BALL_TIMING.total < 15) { if (++slowRuns >= 2) { ready = false; console.warn('3D ball too slow here, switching to the flat ball'); } } else slowRuns = 0; stop(); }
   }
-  function stop() { run++; cancelAnimationFrame(raf); cv.style.display = 'none'; if (renderer) renderer.clear(); }
+  function stop() { run++; cancelAnimationFrame(raf); cv.style.display = 'none'; cv.style.opacity = 1; if (renderer) renderer.clear(); }
   return {
     init, get ready() { return ready; },
     play(n, color) {
@@ -733,14 +751,23 @@ const ballFX = (() => {
       stop(); drawLabel(n); cv.style.display = 'block';
       body.material.color.set(color || '#a4262c');
       // pick a random way to roll off: anywhere to the left or right, slightly toward or away from the class
-      const deg = Math.random() < 0.5 ? -55 + Math.random() * 95 : 140 + Math.random() * 95, th = deg * Math.PI / 180;
-      dir = {x: Math.cos(th), z: Math.sin(th), exit: 6000};
+      // roll off in any direction (0-360 degrees). Toward the class it grows until it "hits the screen" and vanishes;
+      // away from the class it shrinks into the distance and fades; sideways it rolls off the edge. Always the same time.
+      const th = Math.random() * Math.PI * 2;
+      dir = {x: Math.cos(th), z: Math.sin(th), exit: 0, fade: false};
       axis = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
-      const v = new THREE.Vector3();
-      for (let d = 200; d <= 6000; d += 50) {   // roll until the whole ball is off screen
-        v.set(dir.x * d - Math.sign(dir.x) * R * 1.3, REST_Y, dir.z * d).project(camera);
-        if (Math.abs(v.x) > 1.02) { dir.exit = d; break; }
+      const cpos = new THREE.Vector3(), top = new THREE.Vector3();
+      for (let d = 50; d <= 60000; d += (d < 4000 ? 25 : 250)) {
+        cpos.set(dir.x * d, REST_Y, dir.z * d);
+        if (cpos.z > camera.position.z - R * 1.5) { dir.exit = d; break; }               // reached the screen
+        const ce = cpos.clone().project(camera); top.set(cpos.x, cpos.y + R, cpos.z).project(camera);
+        const ry = Math.abs(top.y - ce.y), rx = ry * 1080 / 1920;
+        if (ry > 1.1) { dir.exit = d; break; }                                         // fills the screen
+        if (Math.abs(ce.x) - rx > 1 || ce.y + ry < -1) { dir.exit = d; break; }         // fully off an edge
+        if (ry < 0.03) { dir.exit = d; dir.fade = true; break; }                        // tiny in the distance
       }
+      if (!dir.exit) { dir.exit = 60000; dir.fade = true; }
+      cv.style.opacity = 1;
       const me = run; frames = 0; requestAnimationFrame(now => { if (me !== run) return; frame.start = now; frame(now); });
       return true;
     },
@@ -772,8 +799,11 @@ const flatBall = (() => {
                   {transform: 'translate(0,0) rotate(0deg)', offset: f(T.land), easing: 'ease-out'}];
       T.bounces.forEach(bn => { kf.push({transform: `translate(0,${-bn.v * bn.v * 900}px)`, offset: f(bn.start + bn.dur / 2), easing: 'ease-in'}); kf.push({transform: 'translate(0,0)', offset: f(bn.start + bn.dur), easing: 'ease-out'}); });
       kf.push({transform: 'translate(0,0) rotate(0deg)', offset: f(T.roll), easing: 'ease-in'});
-      const sgn = Math.random() < 0.5 ? -1 : 1, dy = Math.round(-120 + Math.random() * 260), sc = (1 + dy / 900).toFixed(2);   // random side, slightly toward or away
-      kf.push({transform: `translate(${sgn * 1400}px,${dy}px) rotate(${sgn * 470}deg) scale(${sc})`, offset: 1});
+      const th = Math.random() * Math.PI * 2, lat = Math.cos(th), depth = Math.sin(th);   // any direction: + depth = toward the class
+      const tx = Math.round(lat * (depth < -.3 ? 520 : 1500)), ty = Math.round(depth * (depth > 0 ? 520 : 170));
+      const sc = (depth > 0 ? 1 + depth * 3.2 : 1 + depth * .88).toFixed(2), op = depth < -.3 ? 0 : 1, rot = Math.round((lat >= 0 ? 1 : -1) * 470);
+      kf.forEach(k => k.opacity = 1);
+      kf.push({transform: `translate(${tx}px,${ty}px) rotate(${rot}deg) scale(${sc})`, opacity: op, offset: 1});
       anim = b.animate(kf, {duration: T.total * 1000});
       anim.onfinish = stop;
     },
@@ -807,12 +837,12 @@ const CALL_TITLES = {video: ['Watch', 'and name the instrument'], audio: ['Liste
 const INK = '#1f2a44', ACCENT = '#a4262c';
 const LINE_ICONS = {
   trophy: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 14h36v20a18 18 0 0 1-36 0z"/><path d="M32 20H20a10 10 0 0 0 13 16M68 20h12a10 10 0 0 1-13 16"/><path d="M50 52v14M38 84h24M42 66h16l3 18H39z"/></svg>`,
-  clear: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="16" width="46" height="66" rx="6"/><path d="M17 34h28M17 48h28M17 62h28"/><path d="M83.0 39.9A14 14 0 1 1 69.0 39.9" stroke="${ACCENT}"/><path d="M62.0 39.3L69.0 39.9L66.0 46.2" stroke="${ACCENT}"/></svg>`,
+  clear: `<svg viewBox="0 0 100 100"><g transform="rotate(38 42.0 36.0)"><rect x="22" y="10" width="40" height="52" rx="4" fill="#f6f3ec" fill="none" stroke="#1f2a44" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><line x1="35.0" y1="20" x2="35.0" y2="56" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/><line x1="28" y1="29.0" x2="56" y2="29.0" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/><line x1="42.0" y1="20" x2="42.0" y2="56" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/><line x1="28" y1="38.0" x2="56" y2="38.0" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/><line x1="49.0" y1="20" x2="49.0" y2="56" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/><line x1="28" y1="47.0" x2="56" y2="47.0" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/><rect x="28" y="20" width="28" height="36" fill="none" stroke="#1f2a44" stroke-width="1.5" opacity=".45"/></g><path d="M58 66v10M68 62v14M48 70v8" stroke="#a4262c" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 5"/><circle cx="48" cy="86" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/><circle cx="60" cy="90" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/><circle cx="71" cy="84" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/></svg>`,
   speaker: `<svg viewBox="0 0 100 100" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 40h14l18-15v50L32 60H18z" stroke="${INK}" stroke-width="4"/><path class="w1" d="M62 38a16 16 0 0 1 0 24" stroke="currentColor" stroke-width="5"/><path class="w2" d="M71 29a29 29 0 0 1 0 42" stroke="currentColor" stroke-width="5"/></svg>`,
   tv: `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="22" width="80" height="58" rx="8"/><path d="M44 40v22l18-11z" fill="currentColor"/></svg>`,
   people: `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><circle cx="28" cy="36" r="9"/><circle cx="72" cy="36" r="9"/><circle cx="50" cy="30" r="9"/><path d="M14 72c0-10 6-17 14-17s14 7 14 17M58 72c0-10 6-17 14-17s14 7 14 17M36 66c0-10 6-17 14-17s14 7 14 17"/></svg>`,
-  hand: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 58c0-8 3-12 8-12h6V26a5 5 0 0 1 10 0v18M46 40v-6a5 5 0 0 1 10 0v10M56 42a5 5 0 0 1 10 0v6M66 46a5 5 0 0 1 10 0v12c0 16-10 26-26 26h-6c-12 0-22-10-22-22"/><g fill="${ACCENT}" stroke="none"><circle cx="48" cy="66" r="6"/><circle cx="60" cy="68" r="6"/><circle cx="54" cy="58" r="6"/></g></svg>`,
-  collect: `<svg viewBox="0 0 100 100" fill="none" stroke="${INK}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="18" width="34" height="44" rx="4"/><rect x="16" y="12" width="34" height="44" rx="4" fill="#f6f3ec"/><path d="M22 24h22M22 32h22M22 40h22"/><path d="M48 66h44a22 16 0 0 1-44 0z"/><g fill="${ACCENT}" stroke="none"><circle cx="62" cy="62" r="5"/><circle cx="74" cy="61" r="5"/><circle cx="68" cy="56" r="5"/></g></svg>`
+  hand: `<svg viewBox="0 0 100 100"><path d="M30 54V30a5 5 0 0 1 10 0v20M40 46V22a5 5 0 0 1 10 0v24M50 46V24a5 5 0 0 1 10 0v24M60 48V32a5 5 0 0 1 10 0v28c0 16-10 28-24 28h-4c-10 0-16-6-22-14l-10-14a5 5 0 0 1 8-6l8 8" fill="none" stroke="#1f2a44" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="42" cy="66" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/><circle cx="54" cy="64" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/><circle cx="48" cy="58" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/><circle cx="56" cy="74" r="6.5" fill="#ffd400" stroke="#e3b400" stroke-width="2.5"/></svg>`,
+  collect: `<svg viewBox="0 0 100 100"><g transform="translate(68 94) scale(0.84) translate(-68 -94)"><path d="M81 64L88 26" fill="none" stroke="${INK}" stroke-width="4.761904761904762" stroke-linecap="round" stroke-linejoin="round"/><circle cx="88" cy="21" r="5.5" fill="#f6f3ec" fill="none" stroke="${INK}" stroke-width="4.761904761904762" stroke-linecap="round" stroke-linejoin="round"/><path d="M51 94V72a17 17 0 0 1 34 0V94" fill="#f6f3ec" fill="none" stroke="${INK}" stroke-width="4.761904761904762" stroke-linecap="round" stroke-linejoin="round"/><circle cx="68" cy="40" r="9.5" fill="#f6f3ec" fill="none" stroke="${INK}" stroke-width="4.761904761904762" stroke-linecap="round" stroke-linejoin="round"/></g><g transform="translate(36 94) scale(1.0) translate(-36 -94)"><path d="M49 64L56 26" fill="none" stroke="${INK}" stroke-width="4.0" stroke-linecap="round" stroke-linejoin="round"/><circle cx="56" cy="21" r="5.5" fill="#f6f3ec" fill="none" stroke="${INK}" stroke-width="4.0" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 94V72a17 17 0 0 1 34 0V94" fill="#f6f3ec" fill="none" stroke="${INK}" stroke-width="4.0" stroke-linecap="round" stroke-linejoin="round"/><circle cx="36" cy="40" r="9.5" fill="#f6f3ec" fill="none" stroke="${INK}" stroke-width="4.0" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`
 };
 function chrome(root, kind, title, sub, foot = true) {
   root.classList.add('c');
@@ -833,11 +863,22 @@ function callSlideDef(kind) {
 }
 
 /* rules column: animated winning-lines grid + two line icons */
-const RULE_PATTERNS = [
-  {cells: [[0, 1], [1, 1], [2, 1], [3, 1]]},
-  {cells: [[1, 0], [1, 1], [1, 2], [1, 3]]},
-  {cells: [[0, 0], [1, 1], [2, 2], [3, 3]]}
+/* Always cycles sideways -> up-and-down -> diagonal, but each time picks a different row / column / diagonal,
+   going through every version (in a shuffled order) before any repeats. */
+const RULE_VARIANTS = [
+  [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(c => [c, r])),            // the 4 rows
+  [0, 1, 2, 3].map(c => [0, 1, 2, 3].map(r => [c, r])),            // the 4 columns
+  [[[0, 0], [1, 1], [2, 2], [3, 3]], [[3, 0], [2, 1], [1, 2], [0, 3]]]   // the 2 diagonals
 ];
+const ruleBags = [[], [], []], ruleLast = [null, null, null];
+function nextRuleVariant(type) {
+  if (!ruleBags[type].length) {
+    ruleBags[type] = shuffle(RULE_VARIANTS[type].slice());
+    if (ruleBags[type][0] === ruleLast[type]) ruleBags[type].push(ruleBags[type].shift());   // never the same one twice in a row
+  }
+  return (ruleLast[type] = ruleBags[type].shift());
+}
+let rulePattern = nextRuleVariant(0);
 const cellXY = (c, r) => [17 + c * 22, 17 + r * 22];
 function sideRules() {
   const side = el('div', 'side rules');
@@ -853,8 +894,8 @@ function sideRules() {
 let ruleStep = 0;
 function rulesTick(bar) {
   // 10 steps per pattern: 0 = move (hidden), 1-4 = dots appear, 5-8 = line shows, 9 = everything fades
-  const phase = Math.floor(ruleStep / 10), step = ruleStep % 10, P = RULE_PATTERNS[phase];
-  const pts = P.cells.map(([c, r]) => cellXY(c, r)), chips = bar.querySelectorAll('.rchip'), ln = bar.querySelector('.rline');
+  const step = ruleStep % 10;
+  const pts = rulePattern.map(([c, r]) => cellXY(c, r)), chips = bar.querySelectorAll('.rchip'), ln = bar.querySelector('.rline');
   if (step === 0) {
     chips.forEach((ch, i) => { ch.setAttribute('cx', pts[i][0]); ch.setAttribute('cy', pts[i][1]); });
     const [a, b] = [pts[0], pts[3]], ex = (b[0] - a[0]) * 0.14, ey = (b[1] - a[1]) * 0.14;
@@ -863,7 +904,11 @@ function rulesTick(bar) {
   chips.forEach((ch, i) => ch.classList.toggle('on', step >= 1 && step <= 8 && step > i));
   ln.setAttribute('opacity', step >= 5 && step <= 8 ? 0.9 : 0);
 }
-setInterval(() => { ruleStep = (ruleStep + 1) % 30; document.querySelectorAll('#stage .rules').forEach(b => rulesTick(b)); }, 250);
+setInterval(() => {
+  ruleStep = (ruleStep + 1) % 30;
+  if (ruleStep % 10 === 0) rulePattern = nextRuleVariant(ruleStep / 10);   // 0 sideways, 1 up-and-down, 2 diagonal
+  document.querySelectorAll('#stage .rules').forEach(b => rulesTick(b));
+}, 250);
 
 function callScreen(call, number, opt = {}) {
   const V = {spid: 'vid', rect: CALL.video.rect};
@@ -1037,9 +1082,9 @@ function centerScreen(hero, sub, heroSize = 300, top = 200) {
   return root;
 }
 function winnerScreen() {
-  const root = centerScreen('Bingo!', 'We have a winner.', 300, 150);
+  const root = centerScreen('Bingo!', 'We have a winner!', 300, 150);
   const cv = el('canvas', 'confetti'); cv.width = 1920; cv.height = 1080; root.insertBefore(cv, root.firstChild);
-  const row = el('div'); Object.assign(row.style, {position: 'absolute', left: 0, right: 0, top: '760px', display: 'flex', justifyContent: 'center', gap: '28px'});
+  const row = el('div'); Object.assign(row.style, {position: 'absolute', left: 0, right: 0, bottom: '40px', display: 'flex', justifyContent: 'center', gap: '28px', zIndex: 6});
   row.appendChild(stageButton('Play a new round <span class="k">1</span>', 'solid', null, newRoundPrompt));
   row.appendChild(stageButton('Collect the cards and chips <span class="k">2</span>', '', null, collect));
   root.appendChild(row);
@@ -1064,7 +1109,7 @@ function tradeScreen() {
 }
 function cleanScreen() {
   const root = el('div', 'slide');
-  chrome(root, 'post', 'Clean up', 'Thank you for playing.');
+  chrome(root, 'post', 'Clean up!', '');
   const box_ = el('div', 'clean', `<div><div class="ic">${LINE_ICONS.hand}</div><div>Put your chips<br>in your hand.</div></div>
     <div class="two"><div class="ic">${LINE_ICONS.collect}</div><div>Two volunteers collect<br>the cards and chips.</div></div>`);
   root.appendChild(box_);
@@ -1262,7 +1307,7 @@ function buildTutorial() {
   };
   const def6 = {title: 'Watch', sub: 'practice: name the instrument', color: TYPE_COLORS.video, colorTitle: true, steps: 2, build(root) {
     tAdd(root, LINE_ICONS.tv, 'tvph', VR, 0, 1);
-    if (local6) { v6 = document.createElement('video'); v6.className = 'lvideo tstep'; v6.dataset.s = 1; v6.preload = 'metadata'; v6.playsInline = true; v6.src = BASE + 'videos/' + local6; box(v6, VR); root.appendChild(v6);
+    if (local6) { v6 = document.createElement('video'); v6.className = 'lvideo tstep'; v6.dataset.s = 1; v6.preload = 'metadata'; v6.playsInline = true; v6.src = vidURL(local6); box(v6, VR); root.appendChild(v6);
       v6.addEventListener('error', () => { localVideoOK[local6] = false; }); }
     tText(root, 'It’s a trumpet!', [120, 700, 600, 60], 2, null, null, 'tcenter tsay');
     const a = tutCard(1, [800, 250, 440, 569]), b = tutCard(2, [1320, 250, 440, 569]);
@@ -1564,8 +1609,8 @@ function localTest(file) {
     let done = false; const fin = r => { if (done) return; done = true; clearTimeout(to); v.pause(); v.removeAttribute('src'); v.load(); res(r); };
     const to = setTimeout(() => fin('timeout'), 15000);
     v.addEventListener('playing', () => fin('ok'));
-    v.addEventListener('error', () => fin(v.error && v.error.code === 4 && localVideoOK[file] !== true ? 'missing' : 'bad'));
-    v.src = BASE + 'videos/' + file; const pr = v.play(); if (pr) pr.catch(() => {});
+    v.addEventListener('error', () => fin('bad'));
+    v.src = vidURL(file); const pr = v.play(); if (pr) pr.catch(() => {});
   });
 }
 async function checkVideos() {
@@ -1576,12 +1621,12 @@ async function checkVideos() {
   $('#vcheckPlayerWrap').style.display = 'block';
   await vcPlayerReady();
   const list = [];
-  INSTRUMENTS.forEach(i => i.videos.forEach((v, k) => list.push({label: `${i.name} video ${k + 1}`, id: v, file: `${i.id}-${k + 1}.mp4`})));
+  INSTRUMENTS.forEach(i => i.videos.forEach((v, k) => list.push({label: `${i.name} video ${k + 1}`, id: v, file: localVideoName[v]})));
   const bad = []; let gh = 0;
   for (let k = 0; k < list.length; k++) {
     const it = list[k];
     out.textContent = `Checking ${k + 1} of ${list.length}: ${it.label}…`;
-    if (localVideoOK[it.file] !== false) {   // GitHub copy first
+    if (it.file && localVideoOK[it.file] !== false) {   // GitHub copy first
       const r = await localTest(it.file);
       if (r === 'ok') { gh++; continue; }
       if (r !== 'missing') bad.push(Object.assign({r: 'github', fileErr: true}, it));
@@ -1592,9 +1637,11 @@ async function checkVideos() {
   try { vcPlayer.stopVideo(); } catch (e) {}
   $('#vcheckPlayerWrap').style.display = 'none';
   out.innerHTML = bad.length
-    ? `<b>${list.length - bad.length} of ${list.length} played.</b> These didn’t:<br>` + bad.map(b => b.fileErr ? `<span class="bad">✗ ${b.label}</span> - the GitHub file ${b.file} wouldn’t play (it will use YouTube instead)` : `<span class="bad">✗ ${b.label}</span> - ${YT_ERRORS[b.r] || 'YouTube error ' + b.r} (<a href="https://www.youtube.com/watch?v=${b.id}" target="_blank" rel="noopener">open on YouTube</a>)`).join('<br>')
+    ? `<b>${list.length - bad.length} of ${list.length} played.</b> These didn’t:<br>` + bad.map(b => b.fileErr ? `<span class="bad">✗ ${b.label}</span> - the GitHub file "${b.file}" wouldn’t play (it will use YouTube instead)` : `<span class="bad">✗ ${b.label}</span> - ${YT_ERRORS[b.r] || 'YouTube error ' + b.r} (<a href="https://www.youtube.com/watch?v=${b.id}" target="_blank" rel="noopener">open on YouTube</a>)`).join('<br>')
     : `<b>All ${list.length} videos played.</b>`;
   out.innerHTML += `<br>${gh} from GitHub, ${list.length - gh} from YouTube.`;
+  const missing = list.filter(it => !it.file).map(it => videoNumber(it.id));
+  if (missing.length && missing.length < list.length) out.innerHTML += `<br>No GitHub file found for Instrument ${missing.join(', ')}.`;
   vcRunning = false; $('#vcheckBtn').disabled = false;
 }
 function linkFor() {
