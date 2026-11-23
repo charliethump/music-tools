@@ -867,7 +867,7 @@ function renderBop(c, version, availW, availH) {
   box.className = 'bopStage';
   box.style.cssText = `width:${W}px;height:${H}px;--bh:${H}px`;
   const editing = UI.tool !== 'none' && UI.viewVersion == null;
-  const st = renderStage(c, version, {width: chartW, editing, selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)});
+  const st = renderStage(c, version, {width: chartW, editing, showAllTemplate: editing && ['spots', 'zones', 'swap'].includes(UI.tool), selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)});
   box.appendChild(st);
   const song = currentSong(c);
   const step = UI.bopStep;
@@ -1096,16 +1096,34 @@ function nbSet(c) {
 }
 
 /* ---------------- shuffle ---------------- */
+const PAIR = t => t === 'apart' || t === 'far';
 function rulesFor(c) {
   const act = new Set(activeStudents(c).map(s => s.id));
-  const must = {}, never = {}, apart = [];
+  const must = {}, never = {}, apart = [], far = [];
   for (const r of c.rules) {
     if (!act.has(r.s)) continue;
     if (r.type === 'must') must[r.s] = r.zone;
     else if (r.type === 'never') (never[r.s] = never[r.s] || []).push(r.zone);
     else if (r.type === 'apart' && act.has(r.t)) apart.push([r.s, r.t]);
+    else if (r.type === 'far' && act.has(r.t)) far.push([r.s, r.t]);
   }
-  return {must, never, apart};
+  return {must, never, apart, far};
+}
+/* Distance in rug squares (a diagonal step counts as one square, like "next to").
+   Strict separation means at least about two thirds of the longest distance
+   in this class's spots: the farthest third of the room from each other. */
+function spotDistances(c, spots) {
+  const L = layoutOf(c), G = layoutGrid(L), [AW, AH] = L.aspect;
+  if (G && spots.every(s => G[s.id])) return spots.map(a => spots.map(b => Math.max(Math.abs(G[a.id].b - G[b.id].b), Math.abs(G[a.id].r - G[b.id].r))));
+  const P = spots.map(s => [s.x / 100 * AW, s.y / 100 * AH]);
+  const D = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1])));
+  const near = D.map((row, i) => Math.min(...row.filter((_, j) => j !== i))).sort((a, b) => a - b);
+  const unit = near[Math.floor(near.length / 2)] || 1;
+  return D.map(row => row.map(d => Math.round(d / unit)));
+}
+function farThreshold(D) {
+  let max = 0; for (const row of D) for (const d of row) if (d > max) max = d;
+  return Math.max(2, Math.round(max * 0.7));
 }
 function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -1169,27 +1187,52 @@ function planShuffle(c) {
   }
   const idx = {}; spots.forEach((s, i) => idx[s.id] = i);
   const {adj} = adjacency(c, spots);
+  const D = spotDistances(c, spots), T = farThreshold(D);
+  const farOf = {}; for (const [a, b] of R.far) { (farOf[a] = farOf[a] || []).push(b); (farOf[b] = farOf[b] || []).push(a); }
   const apartOk = (assign) => {
     const where = {}; for (const k in assign) where[assign[k]] = k;
     for (const [a, b] of R.apart) { const sa = where[a], sb = where[b]; if (sa && sb && adj[idx[sa]][idx[sb]]) return false; }
+    for (const [a, b] of R.far) { const sa = where[a], sb = where[b]; if (sa && sb && adj[idx[sa]][idx[sb]]) return false; }   // far apart is never next to
     return true;
   };
+  const farScore = (assign) => {   // the closest any strictly separated pair ends up
+    const where = {}; for (const k in assign) where[assign[k]] = k;
+    let worst = Infinity;
+    for (const [a, b] of R.far) { const sa = where[a], sb = where[b]; if (sa && sb) worst = Math.min(worst, D[idx[sa]][idx[sb]]); }
+    return worst;
+  };
+  let best = null;
   for (let pass = 0; pass < 2; pass++) {
     for (let attempt = 0; attempt < 5000; attempt++) {
-      const order = shuffleArr(movers.slice()).sort((a, b) => eligible[a].length - eligible[b].length);
+      // students with strict separation go early, right after anyone with few allowed spots
+      const order = shuffleArr(movers.slice()).sort((a, b) => (eligible[a].length - eligible[b].length) || ((farOf[b] ? 1 : 0) - (farOf[a] ? 1 : 0)));
       const taken = new Set(Object.keys(fixed));
       const assign = Object.assign({}, fixed);
+      const where = {}; for (const k in fixed) where[fixed[k]] = k;
       let ok = true;
       for (const id of order) {
         let opts = eligible[id].filter(s => !taken.has(s));
         if (pass === 0 && spotOf[id]) opts = opts.filter(s => s !== spotOf[id]);
         if (!opts.length) { ok = false; break; }
+        const placed = (farOf[id] || []).map(p => where[p]).filter(Boolean);
+        if (placed.length) {
+          const farOpts = opts.filter(s => placed.every(ps => D[idx[s]][idx[ps]] >= T));
+          if (farOpts.length) opts = farOpts;
+          else { const m = Math.max(...opts.map(s => Math.min(...placed.map(ps => D[idx[s]][idx[ps]])))); opts = opts.filter(s => Math.min(...placed.map(ps => D[idx[s]][idx[ps]])) === m); }
+        }
         const pickS = opts[Math.floor(Math.random() * opts.length)];
-        assign[pickS] = id; taken.add(pickS);
+        assign[pickS] = id; taken.add(pickS); where[id] = pickS;
       }
       if (!ok || !apartOk(assign)) continue;
-      return {assign, relaxed: pass === 1, rot};
+      const score = R.far.length ? farScore(assign) : Infinity;
+      if (score >= T) return {assign, relaxed: pass === 1, rot};
+      if (!best || score > best.score) best = {assign, relaxed: pass === 1, rot, score};
     }
+  }
+  if (best) {   // every other rule is met; strict separation only as far as the room allowed
+    const names = displayNames(c);
+    best.farNote = `Strict separation: the rules left no way to put every pair at least ${T} squares apart this time. The closest pair is ${best.score} squares apart. (${R.far.map(([a, b]) => names[a] + ' / ' + names[b]).join('; ')})`;
+    return best;
   }
   return {error: 'Could not find an arrangement that meets every rule. Try loosening a keep-apart pair, unlocking a spot, adding spots to a required zone or lowering the neighbor factor in Edit, Settings.'};
 }
@@ -1214,6 +1257,7 @@ function doShuffle() {
     c.rotation.lastRound = took;
   }
   if (res.relaxed) notes.push('All rules were met, but a few students kept their previous spot because the rules left no other option.');
+  if (res.farNote) notes.push(res.farNote);
   c.versions.push(v);
   UI.viewVersion = null;
   save(); renderClass();
@@ -1439,10 +1483,10 @@ function renderStageArea() {
     const L = layoutOf(c);
     const ar = L.aspect[0] / L.aspect[1];
     const w = Math.min(W, H * ar);
-    wrap.appendChild(renderStage(c, v, {width: w, editing, showAllTemplate: UI.tool === 'spots' || UI.tool === 'zones', selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)}));
+    wrap.appendChild(renderStage(c, v, {width: w, editing, showAllTemplate: ['spots', 'zones', 'swap'].includes(UI.tool), selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)}));
   }
   const hints = {
-    swap: UI.pick ? 'Now click another name to swap, or an empty spot to move there' : 'Click a name, then another name or an empty spot',
+    swap: UI.pick ? 'Now click another name to swap, or any empty square or chair to move there (Esc to cancel)' : 'Click a name to pick it up',
     spots: 'Click any square or chair to turn that spot on or off for this class',
     zones: 'Click spots to select them, then use the Spots tab to add a zone or lock',
     neighbors: 'Click a spot to see which spots count as next to it'
@@ -1475,22 +1519,44 @@ function ensureVersion(c) {
   if (!latest(c)) c.versions.push({n: 1, date: todayISO(), assign: {}, by: 'manual'});
   return latest(c);
 }
+/* Move students: click a name, then another name to swap them, or any empty
+   square or chair to move there. An empty square that isn't one of this
+   class's spots yet becomes one, and the rug square the student left is
+   turned off, so the number of spots still matches the class. */
+function addSpot(c, spotId) {
+  const g = spotGeo(c, spotId); if (!g) return;
+  const sp = activeSpots(c);
+  const peers = g.chair ? sp.filter(s => s.chair) : sp.filter(s => !s.chair && s.row === g.row);
+  let zones = peers.length ? peers[0].zones.filter(z => peers.every(p => (p.zones || []).includes(z))) : [];
+  if (g.chair && !zones.includes('chairs') && !peers.length) zones = ['chairs'];
+  const order = layoutOf(c).spots.map(s => s.id);
+  c.spots.push({id: spotId, zones: zones.slice(), lock: false});
+  c.spots.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+}
+function dropIfEmpty(c, v, spotId) {
+  const cs = c.spots.find(s => s.id === spotId);
+  if (!cs || v.assign[spotId] || cs.lock || (spotGeo(c, spotId) || {}).chair) return;
+  c.spots = c.spots.filter(s => s.id !== spotId);
+}
 function swapClick(c, spotId) {
-  if (!c.spots.find(s => s.id === spotId)) return;
   const v = ensureVersion(c);
+  const isSpot = id => c.spots.some(s => s.id === id);
   if (!UI.pick) {
-    if (!v.assign[spotId]) return;
+    if (!isSpot(spotId) || !v.assign[spotId]) return;
     UI.pick = {spot: spotId, student: v.assign[spotId]};
   } else if (!UI.pick.spot) {
     // placing an unseated student
+    if (!isSpot(spotId)) addSpot(c, spotId);
     const other = v.assign[spotId];
     v.assign[spotId] = UI.pick.student;
     UI.pick = other ? {spot: null, student: other} : null;
     v.edited = true; save();
   } else {
     if (spotId !== UI.pick.spot) {
-      const a = v.assign[UI.pick.spot], b = v.assign[spotId];
-      if (b) v.assign[UI.pick.spot] = b; else delete v.assign[UI.pick.spot];
+      if (!isSpot(spotId)) addSpot(c, spotId);
+      const from = UI.pick.spot;
+      const a = v.assign[from], b = v.assign[spotId];
+      if (b) v.assign[from] = b; else { delete v.assign[from]; dropIfEmpty(c, v, from); }
       v.assign[spotId] = a;
       v.edited = true; save();
     }
@@ -1544,6 +1610,14 @@ function renderDrawer() {
   if (UI.drawer === 'history') fillHistoryThumbs(c);
 }
 
+function farNow(c, r) {
+  const v = latest(c); if (!v) return '';
+  const sp = activeSpots(c), where = {}; for (const k in v.assign) where[v.assign[k]] = k;
+  const i = sp.findIndex(s => s.id === where[r.s]), j = sp.findIndex(s => s.id === where[r.t]);
+  if (i < 0 || j < 0) return '';
+  const D = spotDistances(c, sp), T = farThreshold(D), d = D[i][j];
+  return ` <span class="small" style="color:${d >= T ? 'var(--ok)' : 'var(--warn)'}">(now ${d} square${d === 1 ? '' : 's'} apart; this class aims for ${T}+)</span>`;
+}
 function ruleCount(c, id) { return c.rules.filter(r => r.s === id || r.t === id).length; }
 const rosterSort = (a, b) => (a.last || a.first || '').localeCompare(b.last || b.first || '') || (a.first || '').localeCompare(b.first || '');
 function aspenNameOf(s) { return s.linked && (s.aspenName || s.last) ? (s.aspenName || `${s.last}, ${s.given || s.first}`) : ''; }
@@ -1624,31 +1698,32 @@ function drRules(c) {
   const t = UI.ruleType || 'must';
   const first = activeStudents(c).sort((a, b) => names[a.id].localeCompare(names[b.id]))[0];
   const sSel = UI.ruleStudent && studentById(c, UI.ruleStudent) ? UI.ruleStudent : (first && first.id);
-  const target = t === 'apart' ? studentOptions(c, null, sSel) : zones.map(z => `<option>${esc(z)}</option>`).join('');
+  const target = PAIR(t) ? studentOptions(c, null, sSel) : zones.map(z => `<option>${esc(z)}</option>`).join('');
   const rules = c.rules.map(r => {
     const a = names[r.s] || '(removed student)';
-    const txt = r.type === 'must' ? `${a} must sit in ${r.zone}` : r.type === 'never' ? `${a} must never sit in ${r.zone}` : `${a} not next to ${names[r.t] || '(removed)'}`;
-    const inactive = !(studentById(c, r.s) || {}).active || (r.type === 'apart' && !(studentById(c, r.t) || {}).active);
-    return `<div class="rule"><span style="${inactive ? 'opacity:.5' : ''}">${esc(txt)}${inactive ? ' <span class="small muted">(not active)</span>' : ''}</span><button class="btn sm danger" data-act="ruleDel" data-id="${r.id}">Remove</button></div>`;
+    const txt = r.type === 'must' ? `${a} must sit in ${r.zone}` : r.type === 'never' ? `${a} must never sit in ${r.zone}` : r.type === 'far' ? `${a} and ${names[r.t] || '(removed)'}: strict separation` : `${a} not next to ${names[r.t] || '(removed)'}`;
+    const inactive = !(studentById(c, r.s) || {}).active || (PAIR(r.type) && !(studentById(c, r.t) || {}).active);
+    return `<div class="rule"><span style="${inactive ? 'opacity:.5' : ''}">${esc(txt)}${r.type === 'far' && !inactive ? farNow(c, r) : ''}${inactive ? ' <span class="small muted">(not active)</span>' : ''}</span><button class="btn sm danger" data-act="ruleDel" data-id="${r.id}">Remove</button></div>`;
   }).join('') || '<p class="note">No rules for this class.</p>';
   const probs = ruleProblems(c);
   const pend = pendingFor(c);
   const pendHTML = pend.length ? `<div class="dsec pend"><h3 style="color:#6b4407">From earlier years: waiting for your OK (${pend.length})</h3>
-    ${pend.map(p => { const miss = p.b.type !== 'apart' && !zones.includes(p.b.zone);
+    ${pend.map(p => { const miss = !PAIR(p.b.type) && !zones.includes(p.b.zone);
       return `<div class="rule"><span>${esc(bankText(p, names))}<div class="small muted">from ${esc(p.b.fromYear)}${miss ? ` - this class has no "${esc(p.b.zone)}" zone yet` : ''}</div></span><button class="btn sm primary" data-act="bankOk" data-id="${p.b.id}" ${miss ? 'disabled' : ''}>Approve</button><button class="btn sm" data-act="bankNo" data-id="${p.b.id}">Dismiss</button></div>`; }).join('')}
     <p class="note">Approved rules start working right away. Dismissed ones are forgotten. Anything you leave here waits, and comes back next year if you still haven't decided.</p>
-    ${pend.filter(p => p.b.type === 'apart' || zones.includes(p.b.zone)).length > 1 ? '<button class="btn sm" data-act="bankOkAll">Approve all</button>' : ''}</div>` : '';
+    ${pend.filter(p => PAIR(p.b.type) || zones.includes(p.b.zone)).length > 1 ? '<button class="btn sm" data-act="bankOkAll">Approve all</button>' : ''}</div>` : '';
   return pendHTML + `<div class="dsec"><h3>Add a rule</h3>
     <div class="field"><label>Student</label><select class="inp" id="ruleS" data-act="ruleStudent">${studentOptions(c, sSel)}</select></div>
     <div class="field"><label>Rule</label><select class="inp" id="ruleT" data-act="ruleType">
       <option value="must" ${t === 'must' ? 'selected' : ''}>must sit in...</option>
       <option value="never" ${t === 'never' ? 'selected' : ''}>must never sit in...</option>
-      <option value="apart" ${t === 'apart' ? 'selected' : ''}>must not sit next to...</option></select></div>
-    <div class="field"><label>${t === 'apart' ? 'Student' : 'Zone'}</label><select class="inp" id="ruleX">${target || '<option value="">No zones yet. Make one in the Spots tab.</option>'}</select></div>
+      <option value="apart" ${t === 'apart' ? 'selected' : ''}>must not sit next to...</option>
+      <option value="far" ${t === 'far' ? 'selected' : ''}>strict separation: as far apart as possible from...</option></select></div>
+    <div class="field"><label>${PAIR(t) ? 'Student' : 'Zone'}</label><select class="inp" id="ruleX">${target || '<option value="">No zones yet. Make one in the Spots tab.</option>'}</select></div>
     <button class="btn primary" data-act="ruleAdd">Add rule</button></div>
     <div class="dsec"><h3>Rules for this class</h3>${rules}</div>
     ${probs.length ? `<div class="dsec">${probs.map(p => `<div class="msg bad">${esc(p)}</div>`).join('')}</div>` : (c.rules.length ? '<div class="msg ok">Every rule can be met on this layout.</div>' : '')}
-    <p class="note">Rules belong to the student, not their name, so nickname changes and duplicate names never break them. Rules for students linked to Aspen are remembered into next year. For real distance between two students, zones work better than keep-apart.</p>`;
+    <p class="note">Rules belong to the student, not their name, so nickname changes and duplicate names never break them. Rules for students linked to Aspen are remembered into next year. Strict separation keeps a pair in the farthest third of the room from each other (counted in rug squares) and never next to each other; chair rotation still comes first.</p>`;
 }
 
 function drRotation(c) {
@@ -2257,7 +2332,7 @@ function slidesApply() {
 }
 
 /* ---------------- rules from earlier years ---------------- */
-function sameRule(a, b) { return a.type === b.type && (a.type === 'apart' ? ((a.s === b.s && a.t === b.t) || (a.s === b.t && a.t === b.s)) : (a.s === b.s && a.zone === b.zone)); }
+function sameRule(a, b) { return a.type === b.type && (PAIR(a.type) ? ((a.s === b.s && a.t === b.t) || (a.s === b.t && a.t === b.s)) : (a.s === b.s && a.zone === b.zone)); }
 function pendingFor(c) {
   if (!DATA || !DATA.ruleBank || !DATA.ruleBank.length) return [];
   const byPid = {}; for (const s of c.students) if (s.active && s.pid) byPid[s.pid] = s;
@@ -2265,7 +2340,7 @@ function pendingFor(c) {
   for (const b of DATA.ruleBank) {
     if (b.appliedIn === DATA.year) continue;
     const s = byPid[b.pid], t = b.tpid ? byPid[b.tpid] : null;
-    if (!s || (b.type === 'apart' && !t)) continue;
+    if (!s || (PAIR(b.type) && !t)) continue;
     const as = {type: b.type, s: s.id, t: t && t.id, zone: b.zone};
     if (c.rules.some(r => sameRule(r, as))) continue;
     out.push({b, s, t});
@@ -2274,12 +2349,12 @@ function pendingFor(c) {
 }
 function bankText(p, names) {
   const a = names[p.s.id];
-  return p.b.type === 'must' ? `${a} must sit in ${p.b.zone}` : p.b.type === 'never' ? `${a} must never sit in ${p.b.zone}` : `${a} not next to ${names[p.t.id]}`;
+  return p.b.type === 'must' ? `${a} must sit in ${p.b.zone}` : p.b.type === 'never' ? `${a} must never sit in ${p.b.zone}` : p.b.type === 'far' ? `${a} and ${names[p.t.id]}: strict separation` : `${a} not next to ${names[p.t.id]}`;
 }
 function approveBank(c, id) {
   const p = pendingFor(c).find(x => x.b.id === id); if (!p) return;
   const r = {id: uid('r'), type: p.b.type, s: p.s.id};
-  if (p.b.type === 'apart') r.t = p.t.id; else r.zone = p.b.zone;
+  if (PAIR(p.b.type)) r.t = p.t.id; else r.zone = p.b.zone;
   if (r.type === 'must') c.rules = c.rules.filter(x => !(x.type === 'must' && x.s === r.s));
   c.rules.push(r); p.b.appliedIn = DATA.year;
 }
@@ -2295,7 +2370,7 @@ function rolloverSummary() {
     for (const r of c.rules) {
       const a = studentById(c, r.s), b = r.t ? studentById(c, r.t) : null;
       if (c.grade === '5') continue;
-      if (!a || !a.pid || (r.type === 'apart' && (!b || !b.pid))) lost.push(`${c.title}: ${n[r.s] || '?'}${r.type === 'apart' ? ' / ' + (n[r.t] || '?') : ''}`);
+      if (!a || !a.pid || (PAIR(r.type) && (!b || !b.pid))) lost.push(`${c.title}: ${n[r.s] || '?'}${PAIR(r.type) ? ' / ' + (n[r.t] || '?') : ''}`);
       else carry.push(r);
     }
   }
@@ -2332,9 +2407,9 @@ function doRollover() {
     if (c.grade === '5') continue;
     for (const r of c.rules) {
       const a = studentById(c, r.s), b = r.t ? studentById(c, r.t) : null;
-      if (!a || !a.pid || (r.type === 'apart' && (!b || !b.pid))) continue;
+      if (!a || !a.pid || (PAIR(r.type) && (!b || !b.pid))) continue;
       const e = {type: r.type, pid: a.pid, tpid: b ? b.pid : null, zone: r.zone || null};
-      const dup = bank.find(x => x.type === e.type && (e.type === 'apart' ? ((x.pid === e.pid && x.tpid === e.tpid) || (x.pid === e.tpid && x.tpid === e.pid)) : (x.pid === e.pid && x.zone === e.zone)));
+      const dup = bank.find(x => x.type === e.type && (PAIR(e.type) ? ((x.pid === e.pid && x.tpid === e.tpid) || (x.pid === e.tpid && x.tpid === e.pid)) : (x.pid === e.pid && x.zone === e.zone)));
       if (dup) { dup.appliedIn = null; dup.fromYear = old; } else bank.push(Object.assign({id: uid('b'), fromYear: old, appliedIn: null}, e));
     }
   }
@@ -2543,7 +2618,7 @@ document.addEventListener('click', async (e) => {
     case 'ruleAdd': {
       const s = $('#ruleS').value, t = $('#ruleT').value, x = $('#ruleX').value;
       if (!s || !x) { alert('Pick a student and a target.'); return; }
-      if (t === 'apart') { if (c.rules.some(r => r.type === 'apart' && ((r.s === s && r.t === x) || (r.s === x && r.t === s)))) { alert('That pair is already listed.'); return; } c.rules.push({id: uid('r'), type: 'apart', s, t: x}); }
+      if (PAIR(t)) { if (c.rules.some(r => r.type === t && ((r.s === s && r.t === x) || (r.s === x && r.t === s)))) { alert('That pair is already listed.'); return; } c.rules.push({id: uid('r'), type: t, s, t: x}); }
       else {
         if (t === 'must') { c.rules = c.rules.filter(r => !(r.type === 'must' && r.s === s) && !(r.type === 'never' && r.s === s && r.zone === x)); }
         else { if (c.rules.some(r => r.type === 'must' && r.s === s && r.zone === x)) { alert('That student is already required to sit there.'); return; } if (c.rules.some(r => r.type === 'never' && r.s === s && r.zone === x)) return; }
@@ -2627,7 +2702,7 @@ document.addEventListener('click', async (e) => {
       break;
     }
     case 'bankOk': approveBank(c, a.dataset.id); save(); renderDrawer(); renderClass(); break;
-    case 'bankOkAll': { const zs = classZones(c); for (const p of pendingFor(c)) if (p.b.type === 'apart' || zs.includes(p.b.zone)) approveBank(c, p.b.id); save(); renderDrawer(); renderClass(); break; }
+    case 'bankOkAll': { const zs = classZones(c); for (const p of pendingFor(c)) if (PAIR(p.b.type) || zs.includes(p.b.zone)) approveBank(c, p.b.id); save(); renderDrawer(); renderClass(); break; }
     case 'bankNo': if (confirm('Forget this rule? It will not come back in later years.')) { DATA.ruleBank = DATA.ruleBank.filter(b => b.id !== a.dataset.id); save(); renderDrawer(); renderClass(); } break;
     case 'newYear': UI.ny = {backup: false, year: nextYearLabel(DATA.year), keep: new Set(DATA.classes.map(x => x.id)), keepSchedule: false}; newYearDialog(); break;
     case 'nyBackup': download(`seating-data-${DATA.year}-backup.json`); UI.ny.backup = true; newYearDialog(); break;
@@ -2674,7 +2749,7 @@ document.addEventListener('change', (e) => {
       save(); weekDialog(); break;
     }
     case 'ruleType': UI.ruleType = a.value; UI.ruleStudent = $('#ruleS').value; renderDrawer(); break;
-    case 'ruleStudent': UI.ruleStudent = a.value; if ((UI.ruleType || 'must') === 'apart') renderDrawer(); break;
+    case 'ruleStudent': UI.ruleStudent = a.value; if (PAIR(UI.ruleType || 'must')) renderDrawer(); break;
     case 'rotZone': c.rotation = a.value ? {zone: a.value, served: currentlyIn(c, a.value), lastRound: []} : null; save(); renderDrawer(); break;
     case 'rotServed': { const s = new Set(c.rotation.served || []); a.checked ? s.add(a.dataset.id) : s.delete(a.dataset.id); c.rotation.served = [...s]; save(); renderDrawer(); break; }
     case 'histStudent': UI.histStudent = a.value || null; renderDrawer(); break;

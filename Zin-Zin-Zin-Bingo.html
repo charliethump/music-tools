@@ -49,7 +49,7 @@ body.menu-open{background:var(--paper)}
 .ic svg{width:100%;height:100%;display:block}
 .c .acc{color:var(--accent)}
 .c .groupof{position:absolute;left:120px;top:330px;font-size:120px;line-height:1;color:var(--ink);white-space:nowrap}
-.c .numeral{position:absolute;display:flex;align-items:center;justify-content:center;font-size:560px;line-height:1;color:var(--qc,var(--accent))}
+.c .numeral{position:absolute;display:flex;align-items:center;justify-content:center;font-size:560px;line-height:1;color:var(--qc,var(--accent));text-shadow:0 6px 10px rgba(31,42,68,.22), 0 2px 3px rgba(31,42,68,.18)}
 .c .spk{position:absolute;border-radius:50%;border:3px solid var(--line);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .c .spk svg{width:62%;height:62%}
 .c .spk{color:var(--qc,var(--accent))}
@@ -118,6 +118,7 @@ body.menu-open{background:var(--paper)}
   background:radial-gradient(circle at 34% 30%,#d9666b 0,#a4262c 38%,#7a161b 75%,#4e0c10 100%);box-shadow:0 8px 16px rgba(0,0,0,.3)}
 .ballface{position:absolute;left:19%;top:19%;width:62%;height:62%;border-radius:50%;background:#faf8f3;box-shadow:inset 0 -4px 6px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center}
 .ballface span{font:130px/1 var(--font);color:var(--ink)}
+.ballface span.ul{line-height:.8;padding-bottom:6px;border-bottom:8px solid currentColor;border-radius:2px}
 .ball3d{position:absolute;left:0;top:0;width:1920px;height:1080px;z-index:8;pointer-events:none;display:none}
 /* answer tiles (shared by recap and menu) */
 .tile{position:relative;width:var(--s);height:var(--s);border:calc(var(--s)*.018) solid var(--ink);background:#fff;overflow:hidden;border-radius:calc(var(--s)*.03)}
@@ -713,7 +714,13 @@ const ballFX = (() => {
     c.beginPath(); c.arc(256, 256, 238, 0, Math.PI * 2); c.fillStyle = '#faf8f3'; c.fill();
     c.fillStyle = '#1f2a44'; c.textAlign = 'center'; c.textBaseline = 'middle';
     const txt = String(n); c.font = `${txt.length === 1 ? 310 : txt.length === 2 ? 250 : 175}px Medrano, Arial, sans-serif`;
-    c.fillText(txt, 256, 268);
+    const ul = txt === '6' || txt === '9', ty = ul ? 250 : 268;
+    c.fillText(txt, 256, ty);
+    if (ul) {   // underline so 6 and 9 can't be confused when the ball spins
+      const m = c.measureText(txt), w = m.width * 0.92, bottom = ty + (m.actualBoundingBoxDescent || 110);
+      c.beginPath(); c.lineCap = 'round'; c.lineWidth = 20; c.strokeStyle = '#1f2a44';
+      c.moveTo(256 - w / 2, bottom + 26); c.lineTo(256 + w / 2, bottom + 26); c.stroke();
+    }
     labelTex.needsUpdate = true;
   }
   function pose(t) {   // position / rotation / squash at time t (s)
@@ -792,7 +799,7 @@ const flatBall = (() => {
       stop(); if (!b.animate) return;
       const c = color || '#a4262c';
       b.style.background = `radial-gradient(circle at 34% 30%, ${shade(c, .45)} 0, ${c} 38%, ${shade(c, -.28)} 75%, ${shade(c, -.55)} 100%)`;
-      const sp = b.querySelector('span'); sp.textContent = n; sp.style.fontSize = n > 99 ? '92px' : '';
+      const sp = b.querySelector('span'); sp.textContent = n; sp.style.fontSize = n > 99 ? '92px' : ''; sp.classList.toggle('ul', n == 6 || n == 9);
       b.style.display = 'block';
       const T = BALL_TIMING, f = x => x / T.total;
       const kf = [{transform: 'translate(0,-900px) rotate(-200deg)', offset: 0, easing: 'cubic-bezier(.5,0,1,1)'},
@@ -1286,7 +1293,7 @@ function buildTutorial() {
   // 5. Practice: Count
   add({title: 'Count', sub: 'practice: name the group', color: TYPE_COLORS.number, colorTitle: true, steps: 2, build(root) {
     tText(root, 'A group of…', [120, 280, 560, 110], 0, null, {fontSize: '96px', whiteSpace: 'nowrap'});
-    tText(root, '3', [170, 380, 400, 440], 1, null, {fontSize: '420px', color: TYPE_COLORS.number, textAlign: 'center', lineHeight: '1'});
+    tText(root, '3', [170, 380, 400, 440], 1, null, {fontSize: '420px', color: TYPE_COLORS.number, textAlign: 'center', lineHeight: '1', textShadow: '0 6px 10px rgba(31,42,68,.22), 0 2px 3px rgba(31,42,68,.18)'});
     tText(root, 'That’s a trio!', [150, 835, 460, 60], 2, null, null, 'tcenter tsay');
     const a = tutCard(1, [690, 240, 470, 608]), b = tutCard(2, [1260, 240, 470, 608]);
     root.appendChild(a.el); root.appendChild(b.el);
