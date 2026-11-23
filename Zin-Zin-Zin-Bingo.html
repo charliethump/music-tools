@@ -68,7 +68,7 @@ body.menu-open{background:var(--paper)}
 .tchip{position:absolute;width:15.5%;aspect-ratio:1;transform:translate(-50%,-50%) scale(1.6);border-radius:50%;background:#ffd400;box-shadow:inset 0 0 0 5px #e3b400,inset 0 -6px 10px rgba(160,110,0,.25),0 4px 8px rgba(0,0,0,.35)}
 .tchip.on{transform:translate(-50%,-50%) scale(1)}
 .tchip.ring.on{box-shadow:inset 0 0 0 5px #e3b400,0 0 0 6px var(--ring),0 4px 10px rgba(0,0,0,.35)}
-.tchip.sweep:not(.on){transform:translate(-50%,-50%) translate(90px,160px) rotate(35deg);transition-delay:0s!important}
+.tchip.sweep:not(.on){transform:translate(-50%,-50%) translate(240px,560px) rotate(70deg);transition:transform 1.9s cubic-bezier(.45,0,.8,.3),opacity 1.9s cubic-bezier(.6,0,1,.4)}
 .thl{position:absolute;border:6px solid;border-radius:6px}
 .tdim{position:absolute;background:rgba(246,243,236,.74)}
 .tline{position:absolute;inset:0;width:100%;height:100%}
@@ -1219,11 +1219,11 @@ function tutScreen(idx, total, def) {
 }
 
 function buildTutorial() {
-  const TOTAL = 9, out = [];
+  const TOTAL = 10, out = [];
   const add = def => out.push(def);
 
   // 1. Your bingo card
-  add({title: 'Your bingo card', sub: 'what’s on it', steps: 3, build(root) {
+  add({title: 'Your bingo card.', sub: 'What’s on it?', steps: 3, build(root) {
     const k = tutCard(1, [180, 245, 525, 680]); root.appendChild(k.el);
     const inst = ALL_CELLS.filter(([c, r]) => !has(CARD1.words, c, r) && !has([CARD1.free], c, r));
     k.dim(ALL_CELLS.filter(([c, r]) => !has(inst, c, r)), 1, 2); inst.forEach(([c, r]) => k.outline(c, r, TYPE_COLORS.video, 1, 2));
@@ -1234,9 +1234,9 @@ function buildTutorial() {
       e.dataset.f = s + 1; return e;
     };
     const col = el('div', 'tcol'); box(col, [820, 260, 980, 640]); root.appendChild(col);
-    col.appendChild(co(1, TYPE_COLORS.video, 'Instruments', 'pictures of the instruments from the book'));
-    col.appendChild(co(2, TYPE_COLORS.number, 'Group names', 'Solo, Duo, Trio… a group of how many players'));
-    const fs = co(3, '#d9a800', 'Free space', 'the conductor - put a chip here to start', true); fs.removeAttribute('data-f'); col.appendChild(fs);
+    col.appendChild(co(1, TYPE_COLORS.video, 'Instruments', 'Some are from “Zin Zin Zin”, but some are not!'));
+    col.appendChild(co(2, TYPE_COLORS.number, 'Numbers', 'Musical names for groups of instruments'));
+    const fs = co(3, '#d9a800', 'Free Space', 'The conductor! Put a chip here to start. Every orchestra has a conductor, and so does each Bingo card.', true); fs.removeAttribute('data-f'); col.appendChild(fs);
   }});
 
   // 2. Every card is different
@@ -1256,8 +1256,8 @@ function buildTutorial() {
   }});
 
   // 3. Three kinds of questions
-  add({title: 'Three kinds of questions', sub: 'each has its own color', steps: 4, build(root) {
-    const kinds = [['video', 'Watch', 'a short video', LINE_ICONS.tv], ['audio', 'Listen', 'sound only', LINE_ICONS.speaker], ['number', 'Count', 'a group of how many?', LINE_ICONS.people]];
+  add({title: 'Some questions have you…', sub: '', steps: 4, build(root) {
+    const kinds = [['audio', 'Listen', 'sound only', LINE_ICONS.speaker], ['video', 'Watch', 'a short video', LINE_ICONS.tv], ['number', 'Count', 'a group of how many?', LINE_ICONS.people]];
     kinds.forEach(([k, name, note, icon], i) => {
       const x = 180 + i * 540, c = TYPE_COLORS[k];
       const ball = tAdd(root, `<div class="ballface"><span class="tbicon" style="color:${c}">${icon}</span></div>`, 'ball tball', [x + 110, 270, 260, 260], i + 1);
@@ -1271,7 +1271,7 @@ function buildTutorial() {
   // 4. Practice: Listen
   let a4 = null;
   const spk4 = () => document.querySelector('.slide .spk.t4');
-  add({title: 'Listen', sub: 'practice: find it on your card', color: TYPE_COLORS.audio, colorTitle: true, steps: 1, demoAudio: true, build(root) {
+  add({title: 'Listen', sub: 'Do you have the instrument on your card?', color: TYPE_COLORS.audio, colorTitle: true, steps: 2, demoAudio: true, build(root) {
     const spk = el('div', 'spk t4', LINE_ICONS.speaker); box(spk, [150, 380, 400, 400]); root.appendChild(spk);
     spk.addEventListener('click', ev => { ev.stopPropagation(); playFromStart(getDemoAudio()); });
     tText(root, 'It’s a violin!', [150, 810, 400, 60], 1, null, null, 'tcenter tsay');
@@ -1281,7 +1281,7 @@ function buildTutorial() {
     a.chip(1, 2, 1, null, {ring: TYPE_COLORS.audio});
     tText(root, 'Your card', [690, 868, 470, 50], 0, null, null, 'tlab');
     tText(root, 'Your neighbor’s card', [1260, 868, 470, 50], 0, null, null, 'tlab');
-    tText(root, 'No violin on this card, so no chip.', [1260, 922, 470, 40], 1, null, null, 'tcenter tnote');
+    tText(root, 'No violin on this card, so no chip.', [1260, 922, 470, 40], 2, null, null, 'tcenter tnote');
   },
   onStep(k, how) {
     a4 = getDemoAudio();
@@ -1291,16 +1291,17 @@ function buildTutorial() {
   replay() { playFromStart(getDemoAudio()); }, pause() { getDemoAudio().pause(); }, leave() { getDemoAudio().pause(); }});
 
   // 5. Practice: Count
-  add({title: 'Count', sub: 'practice: name the group', color: TYPE_COLORS.number, colorTitle: true, steps: 2, build(root) {
+  add({title: 'Count', sub: 'Do you have the group number on your card?', color: TYPE_COLORS.number, colorTitle: true, steps: 3, build(root) {
     tText(root, 'A group of…', [120, 280, 560, 110], 0, null, {fontSize: '96px', whiteSpace: 'nowrap'});
     tText(root, '3', [170, 380, 400, 440], 1, null, {fontSize: '420px', color: TYPE_COLORS.number, textAlign: 'center', lineHeight: '1', textShadow: '0 6px 10px rgba(31,42,68,.22), 0 2px 3px rgba(31,42,68,.18)'});
     tText(root, 'That’s a trio!', [150, 835, 460, 60], 2, null, null, 'tcenter tsay');
     const a = tutCard(1, [690, 240, 470, 608]), b = tutCard(2, [1260, 240, 470, 608]);
     root.appendChild(a.el); root.appendChild(b.el);
     a.chip(...CARD1.free, 0); b.chip(...CARD2.free, 0);
-    a.chip(2, 3, 2, null, {ring: TYPE_COLORS.number}); b.chip(2, 1, 2, null, {ring: TYPE_COLORS.number, delay: .15});
+    a.chip(2, 3, 2, null, {ring: TYPE_COLORS.number}); b.chip(2, 1, 3, null, {ring: TYPE_COLORS.number});
     tText(root, 'Your card', [690, 868, 470, 50], 0, null, null, 'tlab');
     tText(root, 'Your neighbor’s card', [1260, 868, 470, 50], 0, null, null, 'tlab');
+    tText(root, 'Trio is on this card too!', [1260, 922, 470, 40], 3, null, null, 'tcenter tnote');
   }});
 
   // 6. Practice: Watch (the trumpet video)
@@ -1312,7 +1313,7 @@ function buildTutorial() {
     if (other && vid6 === DEMO_VIDEO) { vid6 = other; yt.swapTo(vid6, VR, fail6); }
     else yt.message(`This video won't play (${YT_ERRORS[reason] || 'YouTube error ' + reason}). Press R to try again or next to move on.`);
   };
-  const def6 = {title: 'Watch', sub: 'practice: name the instrument', color: TYPE_COLORS.video, colorTitle: true, steps: 2, build(root) {
+  const def6 = {title: 'Watch', sub: 'Do you have the instrument on your card?', color: TYPE_COLORS.video, colorTitle: true, steps: 3, build(root) {
     tAdd(root, LINE_ICONS.tv, 'tvph', VR, 0, 1);
     if (local6) { v6 = document.createElement('video'); v6.className = 'lvideo tstep'; v6.dataset.s = 1; v6.preload = 'metadata'; v6.playsInline = true; v6.src = vidURL(local6); box(v6, VR); root.appendChild(v6);
       v6.addEventListener('error', () => { localVideoOK[local6] = false; }); }
@@ -1320,10 +1321,11 @@ function buildTutorial() {
     const a = tutCard(1, [800, 250, 440, 569]), b = tutCard(2, [1320, 250, 440, 569]);
     root.appendChild(a.el); root.appendChild(b.el);
     a.chip(...CARD1.free, 0); b.chip(...CARD2.free, 0);
-    b.chip(3, 3, 2, null, {ring: TYPE_COLORS.video});
+    b.chip(3, 3, 3, null, {ring: TYPE_COLORS.video});
     tText(root, 'Your card', [800, 838, 440, 50], 0, null, null, 'tlab');
     tText(root, 'Your neighbor’s card', [1320, 838, 440, 50], 0, null, null, 'tlab');
     tText(root, 'No trumpet here, so no chip.', [800, 892, 440, 40], 2, null, null, 'tcenter tnote');
+    tText(root, 'Your neighbor has a trumpet!', [1320, 892, 440, 40], 3, null, null, 'tcenter tnote');
   },
   onStep(k, how) {
     if (v6 && localVideoOK[local6] !== false) {
@@ -1342,7 +1344,7 @@ function buildTutorial() {
   add(def6);
 
   // 7. Winning cards can be…
-  add({title: 'Winning cards can be…', sub: 'four chips in a row', steps: 3, build(root) {
+  add({title: 'Winning cards must be…', sub: 'four chips in a row', steps: 3, build(root) {
     const pats = [['Sideways', [[0, 1], [1, 1], [2, 1], [3, 1]]], ['Up-and-down', [[0, 0], [0, 1], [0, 2], [0, 3]]], ['Diagonal', [[0, 0], [1, 1], [2, 2], [3, 3]]]];
     pats.forEach(([name, cells], i) => {
       const left = 120 + i * 580, k = tutCard(1, [left + 50, 240, 440, 569]); root.appendChild(k.el);
@@ -1353,24 +1355,32 @@ function buildTutorial() {
     });
   }});
 
-  // 8. Calling Bingo
-  add({title: 'Calling Bingo', sub: 'when you have four in a row', steps: 4, build(root) {
-    const a = tutCard(1, [280, 240, 420, 543]), b = tutCard(2, [1220, 240, 420, 543]);
-    root.appendChild(a.el); root.appendChild(b.el);
-    a.chip(...CARD1.free, 0); [[0, 3], [1, 3], [2, 3], [3, 3]].forEach(([c, r], j) => a.chip(c, r, 0)); a.line([[0, 3], [1, 3], [2, 3], [3, 3]], ACCENT, 0);
-    tText(root, 'Bingo! All four were called.', [180, 805, 620, 50], 1, null, {fontSize: '40px'}, 'tcenter');
-    tAdd(root, `<span class="ic">${LINE_ICONS.trophy}</span>First correct <span class="acc">Bingo</span> wins.`, 'tsayrow', [180, 862, 620, 80], 1);
-    b.chip(...CARD2.free, 0, 4, {sweep: true}); [[0, 0], [1, 0], [2, 0], [3, 0]].forEach(([c, r], j) => b.chip(c, r, 2, 4, {sweep: true, delay: j * .08}));
-    b.outline(3, 0, ACCENT, 3, 4);
-    tText(root, 'Cello was never called!', [1120, 805, 620, 50], 3, null, {fontSize: '40px', color: ACCENT}, 'tcenter');
-    tAdd(root, `<span class="ic">${LINE_ICONS.clear}</span>Wrong answer? <span class="acc">Clear</span> your card.`, 'tsayrow', [1120, 862, 620, 80], 4);
+  // 8. Calling Bingo (a correct card)
+  const ROW = [[0, 3], [1, 3], [2, 3], [3, 3]];
+  add({title: 'Calling Bingo', sub: 'when you have four in a row', steps: 2, build(root) {
+    const a = tutCard(1, [750, 240, 420, 543]); root.appendChild(a.el);
+    a.chip(...CARD1.free, 0);
+    ROW.forEach(([c, r], j) => a.chip(c, r, 1, null, {delay: j * .18}));
+    a.line(ROW, ACCENT, 1, .85);
+    tText(root, 'Bingo! All four were called.', [560, 805, 800, 50], 2, null, {fontSize: '40px'}, 'tcenter');
+    tAdd(root, `First correct <span class="acc">Bingo</span> wins.`, 'tsayrow', [560, 862, 800, 80], 2, null, {justifyContent: 'center'});
   }});
 
-  // 9. Be a good friend
+  // 9. Calling Bingo (a wrong card)
+  add({title: 'Calling Bingo', sub: 'when you have four in a row', steps: 3, build(root) {
+    const b = tutCard(2, [750, 240, 420, 543]); root.appendChild(b.el);
+    b.chip(...CARD2.free, 0, 3, {sweep: true});
+    [[0, 0], [1, 0], [2, 0], [3, 0]].forEach(([c, r], j) => b.chip(c, r, 1, 3, {sweep: true, delay: j * .18}));
+    b.outline(3, 0, ACCENT, 2, 3);
+    tText(root, 'Cello was never called!', [560, 805, 800, 50], 2, null, {fontSize: '40px', color: ACCENT}, 'tcenter');
+    tAdd(root, `<span class="ic">${LINE_ICONS.clear}</span>Wrong answer? <span class="acc">Clear</span> your card.`, 'tsayrow', [560, 862, 800, 80], 3, null, {justifyContent: 'center'});
+  }});
+
+  // 10. Be a good friend
   add({title: 'Be a good friend', sub: 'when someone else wins', steps: 1, build(root) {
     const im = new Image(); im.src = BASE + 'tutorial/bitmoji.webp'; im.className = 'tstep tbit'; im.dataset.s = 0; box(im, [200, 270, 560, 560]); root.appendChild(im);
     tText(root, 'Remember, if you don’t win…', [820, 320, 980, 110], 0, null, {fontSize: '68px', whiteSpace: 'nowrap'});
-    tAdd(root, 'be a <span class="acc">good friend</span> and try to be happy for the person who does!', 'ttext', [820, 470, 980, 330], 1, null, {fontSize: '76px', lineHeight: '1.15'});
+    tAdd(root, 'Be a <span class="acc">good friend</span> and try to be happy for the person who does!', 'ttext', [820, 470, 980, 330], 1, null, {fontSize: '76px', lineHeight: '1.15'});
   }});
 
   return out.map((d, i) => tutScreen(i, TOTAL, d));
