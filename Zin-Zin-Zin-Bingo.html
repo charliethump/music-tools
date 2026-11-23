@@ -58,8 +58,8 @@ body.menu-open{background:var(--paper)}
 .c .spk.playing .w1{animation:wave 1.1s ease-in-out infinite}
 .c .spk.playing .w2{animation:wave 1.1s ease-in-out .25s infinite}
 @keyframes wave{0%,100%{opacity:.2}50%{opacity:1}}
-.c .ttl,.c .side,.c .cfoot,.c .groupof{transition:opacity .45s ease}
-.c.textoff .ttl,.c.textoff .side,.c.textoff .cfoot,.c.textoff .groupof{opacity:0;transition:none}
+.c .ttl,.c .side,.c .cfoot,.c .groupof,.c .spk{transition:opacity .45s ease}
+.c.textoff .ttl,.c.textoff .side,.c.textoff .cfoot,.c.textoff .groupof,.c.textoff .spk{opacity:0;transition:none}
 /* tutorial */
 .tstep{opacity:0;transition:opacity .4s ease,transform .4s ease}
 .tstep.on{opacity:1}
@@ -532,9 +532,11 @@ function videoHooks(V, getId, onReveal, onFail, primeDelay = 0) {
     replace: {[V.spid]: null},
     onEnter(back) {
       const s = yt.attach(getId(), V.rect, onFail); clearTimeout(primeT);
-      if (!back) primeT = setTimeout(() => { if (yt.current === s) yt.prime(s); }, primeDelay);   // wait for the ball so they don't compete
+      // keep the player fully hidden (not just see-through) while the ball drops: some computers draw video above everything else
+      if (!back && primeDelay) s.host.style.visibility = 'hidden';
+      if (!back) primeT = setTimeout(() => { if (yt.current === s) { if (!overlay) s.host.style.visibility = ''; yt.prime(s); } }, primeDelay);   // wait for the ball so they don't compete
     },
-    onFx(s, k, mode, dur) { if (s !== V.spid || k !== 'in') return; onReveal && onReveal(); yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); },
+    onFx(s, k, mode, dur) { if (s !== V.spid || k !== 'in') return; onReveal && onReveal(); if (yt.current && !overlay) yt.current.host.style.visibility = ''; yt.show(mode === 'anim' ? dur : 0); if (mode !== 'restore') yt.play(); },
     onLeave() { clearTimeout(primeT); yt.release(); },
     onReplay() { yt.replay(); },
     onPause() { yt.pause(); }
@@ -549,7 +551,7 @@ function localVideoHooks(V, file, onReveal, onError) {
   const msg = el('div', 'lmsg'); box(msg, V.rect);
   const note = txt => { msg.textContent = txt || ''; msg.style.display = txt ? 'flex' : 'none'; };
   const start = () => { note(null); const pr = v.play(); if (pr) pr.catch(e => { if (e.name === 'NotAllowedError') note('The browser didn’t let this video start. Press R to start it.'); }); };
-  let revealed = false;
+  let revealed = false, hideT = null;
   v.addEventListener('waiting', () => { if (revealed) wait.style.display = 'flex'; });
   v.addEventListener('playing', () => { wait.style.display = 'none'; note(null); });
   v.addEventListener('error', () => { localVideoOK[file] = false; onError && onError(); });
@@ -557,9 +559,9 @@ function localVideoHooks(V, file, onReveal, onError) {
     video: v, extras: [wait, msg],
     hooks: {
       replace: {[V.spid]: v},
-      onEnter(back) { revealed = false; if (v.preload !== 'auto') setTimeout(() => { v.preload = 'auto'; }, back ? 0 : BALL_TIMING.total * 1000); if (!back) { try { v.currentTime = 0; } catch (e) {} } },
-      onFx(sp, k, mode) { if (sp !== V.spid || k !== 'in') return; revealed = true; onReveal && onReveal(); if (mode !== 'restore') start(); else revealed = true; },
-      onLeave() { v.pause(); wait.style.display = 'none'; note(null); try { v.currentTime = 0; } catch (e) {} },
+      onEnter(back) { revealed = false; clearTimeout(hideT); if (v.preload !== 'auto') setTimeout(() => { v.preload = 'auto'; }, back ? 0 : BALL_TIMING.total * 1000); if (!back) { try { v.currentTime = 0; } catch (e) {} v.style.visibility = 'hidden'; hideT = setTimeout(() => { v.style.visibility = ''; }, BALL_TIMING.total * 1000); } else v.style.visibility = ''; },
+      onFx(sp, k, mode) { if (sp !== V.spid || k !== 'in') return; clearTimeout(hideT); v.style.visibility = ''; revealed = true; onReveal && onReveal(); if (mode !== 'restore') start(); else revealed = true; },
+      onLeave() { clearTimeout(hideT); v.pause(); wait.style.display = 'none'; note(null); try { v.currentTime = 0; } catch (e) {} },
       onReplay() { if (!revealed) return; try { v.currentTime = 0; } catch (e) {} start(); },
       onPause() { v.pause(); }
     }
