@@ -70,6 +70,7 @@ body.menu-open{background:var(--paper)}
 .tchip.ring.on{box-shadow:inset 0 0 0 5px #e3b400,0 0 0 6px var(--ring),0 4px 10px rgba(0,0,0,.35)}
 .tchip.sweep:not(.on){transform:translate(-50%,-50%) translate(240px,560px) rotate(70deg);transition:transform 1.9s cubic-bezier(.45,0,.8,.3),opacity 1.9s cubic-bezier(.6,0,1,.4)}
 .thl{position:absolute;border:6px solid;border-radius:6px}
+.thl.red{border-width:9px;box-shadow:0 0 0 3px rgba(255,255,255,.7)}
 .tdim{position:absolute;background:rgba(246,243,236,.74)}
 .tline{position:absolute;inset:0;width:100%;height:100%}
 .tcol{position:absolute;display:flex;flex-direction:column}
@@ -86,9 +87,9 @@ body.menu-open{background:var(--paper)}
 .tsay{font-size:52px}
 .tsayrow{position:absolute;display:flex;align-items:center;justify-content:center;gap:18px;font:44px var(--font);white-space:nowrap}
 .tsayrow .ic{width:70px;height:70px;display:block}
-.tball .ballface{display:flex;align-items:center;justify-content:center}
+.tball .ballface{display:flex;align-items:center;justify-content:center;line-height:0}
 .tbicon{width:62%;height:62%;display:block}
-.tbicon svg{width:100%;height:100%}
+.tbicon svg{width:100%;height:100%;display:block}
 .tbottom{position:absolute;display:flex;align-items:center;justify-content:center;gap:26px;font:60px var(--font);border-top:2px solid var(--line);padding-top:20px}
 .tchipicon{width:70px;height:70px;border-radius:50%;background:#ffd400;box-shadow:inset 0 0 0 5px #e3b400,0 3px 6px rgba(0,0,0,.3);display:inline-block}
 .tvph{position:absolute;border-radius:6px;background:#1f2a44;color:#f6f3ec;display:flex;align-items:center;justify-content:center}
@@ -633,6 +634,13 @@ const NUM_SPID = digitLayer(1).spid;
 /* ---------- new-question signal: numbered bingo ball + chime ---------- */
 let actx = null;
 function audioCtx() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
+function playPop() {   // chip landing on a card
+  const c = audioCtx(); if (!c) return;
+  const t0 = c.currentTime + 0.01, o = c.createOscillator(), g = c.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(900, t0); o.frequency.exponentialRampToValueAtTime(260, t0 + 0.09);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.5, t0 + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.13);
+  o.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0 + 0.15);
+}
 let signalAudio = null;
 function playSignal() {
   if (SIGNAL_SOUND === 'none') return;
@@ -1152,6 +1160,7 @@ function plainScreen(html) {
 const CARD_TILE = (c, r) => [(61 + c * 175) / 816 * 100, (187 + r * 176) / 1056 * 100, 169 / 816 * 100, 169 / 1056 * 100];
 const CARD1 = {free: [0, 2], words: [[2, 0], [3, 0], [2, 1], [2, 3]], diff: [[0, 0], [2, 0], [0, 1], [1, 2]]};
 const CARD2 = {free: [2, 3], diff: [[0, 0], [3, 0], [0, 2], [3, 3]]};
+const RED_BOX = '#e0201b';
 const ALL_CELLS = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) ALL_CELLS.push([c, r]);
 const has = (list, c, r) => list.some(([a, b]) => a === c && b === r);
 
@@ -1167,8 +1176,9 @@ function tutCard(which, rect) {
   };
   return {
     el: d,
-    chip: (c, r, s, h, o = {}) => at('tchip' + (o.ring ? ' ring' : '') + (o.sweep ? ' sweep' : ''), c, r, s, h, e => { if (o.delay) e.style.transitionDelay = o.delay + 's'; if (o.ring) e.style.setProperty('--ring', o.ring); }),
+    chip: (c, r, s, h, o = {}) => at('tchip' + (o.ring ? ' ring' : '') + (o.sweep ? ' sweep' : ''), c, r, s, h, e => { if (o.pop) e.dataset.pop = 1; if (o.delay) e.style.transitionDelay = o.delay + 's'; if (o.ring) e.style.setProperty('--ring', o.ring); }),
     outline: (c, r, color, s, h) => at('thl', c, r, s, h, e => e.style.borderColor = color),
+    redBox: (c, r, s, h) => at('thl red', c, r, s, h, e => e.style.borderColor = RED_BOX),
     dim: (cells, s, h) => cells.forEach(([c, r]) => at('tdim', c, r, s, h)),
     line: (cells, color, s, delay = 0) => {
       const [x0, y0, w, hh] = CARD_TILE(...cells[0]), [x1, y1] = CARD_TILE(...cells[cells.length - 1]);
@@ -1210,7 +1220,7 @@ function tutScreen(idx, total, def) {
   return {
     el: root, transition: {type: 'fade', dur: 400}, demoAudio: !!def.demoAudio, videoId: def.videoId, localVideo: def.localVideo,
     enter(back) { step = back ? N : 0; apply(true); def.onStep && def.onStep(step, back ? 'back' : 'enter'); },
-    next() { if (step < N) { step++; apply(false); def.onStep && def.onStep(step, 'next'); return true; } return false; },
+    next() { if (step < N) { step++; apply(false); if (root.querySelector(`.tchip[data-pop][data-s="${step}"]`)) setTimeout(playPop, 150); def.onStep && def.onStep(step, 'next'); return true; } return false; },
     prev() { if (step > 0) { step--; apply(true); def.onStep && def.onStep(step, 'back'); return true; } return false; },
     leave() { def.leave && def.leave(); },
     replay() { def.replay && def.replay(); },
@@ -1223,7 +1233,7 @@ function buildTutorial() {
   const add = def => out.push(def);
 
   // 1. Your bingo card
-  add({title: 'Your bingo card.', sub: 'What’s on it?', steps: 3, build(root) {
+  add({title: 'Your Bingo card!', sub: 'What’s on it?', steps: 3, build(root) {
     const k = tutCard(1, [180, 245, 525, 680]); root.appendChild(k.el);
     const inst = ALL_CELLS.filter(([c, r]) => !has(CARD1.words, c, r) && !has([CARD1.free], c, r));
     k.dim(ALL_CELLS.filter(([c, r]) => !has(inst, c, r)), 1, 2); inst.forEach(([c, r]) => k.outline(c, r, TYPE_COLORS.video, 1, 2));
@@ -1235,35 +1245,34 @@ function buildTutorial() {
     };
     const col = el('div', 'tcol'); box(col, [820, 260, 980, 640]); root.appendChild(col);
     col.appendChild(co(1, TYPE_COLORS.video, 'Instruments', 'Some are from “Zin Zin Zin”, but some are not!'));
-    col.appendChild(co(2, TYPE_COLORS.number, 'Numbers', 'Musical names for groups of instruments'));
+    col.appendChild(co(2, TYPE_COLORS.number, 'Numbers', 'Musical names for groups of instruments.'));
     const fs = co(3, '#d9a800', 'Free Space', 'The conductor! Put a chip here to start. Every orchestra has a conductor, and so does each Bingo card.', true); fs.removeAttribute('data-f'); col.appendChild(fs);
   }});
 
   // 2. Every card is different
-  add({title: 'Every card is different', sub: 'yours and your neighbor’s', steps: 2, build(root) {
-    const a = tutCard(1, [200, 245, 470, 608]), b = tutCard(2, [740, 245, 470, 608]);
+  add({title: 'Every card is different!', sub: '', steps: 2, build(root) {
+    const a = tutCard(1, [180, 245, 525, 680]), b = tutCard(2, [745, 245, 525, 680]);
     root.appendChild(a.el); root.appendChild(b.el);
-    tText(root, 'Your card', [200, 868, 470, 50], 0, null, null, 'tlab');
-    tText(root, 'Your neighbor’s card', [740, 868, 470, 50], 0, null, null, 'tlab');
+    tText(root, 'Your card', [180, 935, 525, 50], 0, null, null, 'tlab');
+    tText(root, 'Your neighbor’s card', [745, 935, 525, 50], 0, null, null, 'tlab');
     [[a, CARD1], [b, CARD2]].forEach(([k, C]) => {
       const same = ALL_CELLS.filter(([c, r]) => !has(C.diff, c, r));
       same.forEach(([c, r]) => k.outline(c, r, INK, 1, 2)); k.dim(C.diff, 1, 2);
       C.diff.forEach(([c, r]) => k.outline(c, r, ACCENT, 2)); k.dim(same, 2);
     });
-    const col = el('div', 'tcol'); box(col, [1290, 300, 540, 520]); root.appendChild(col); col.style.fontSize = '0';
-    const c1 = tAdd(col, `<div class="sw" style="border-color:${INK}"></div><div>Some squares<br>are the same…</div>`, 'tco', null, 1); c1.dataset.f = 2;
-    tAdd(col, `<div class="sw" style="border-color:${ACCENT}"></div><div>…and some<br>are different.</div>`, 'tco', null, 2);
+    const col = el('div', 'tcol'); box(col, [1320, 330, 520, 520]); root.appendChild(col); col.style.fontSize = '0';
+    const c1 = tAdd(col, `<div class="sw" style="border-color:${INK}"></div><div>Some squares<br>are the same…</div>`, 'tco', null, 1, null, {fontSize: '46px'}); c1.dataset.f = 2;
+    tAdd(col, `<div class="sw" style="border-color:${ACCENT}"></div><div>…and some<br>are different.</div>`, 'tco', null, 2, null, {fontSize: '46px'});
   }});
 
   // 3. Three kinds of questions
   add({title: 'Some questions have you…', sub: '', steps: 4, build(root) {
-    const kinds = [['audio', 'Listen', 'sound only', LINE_ICONS.speaker], ['video', 'Watch', 'a short video', LINE_ICONS.tv], ['number', 'Count', 'a group of how many?', LINE_ICONS.people]];
-    kinds.forEach(([k, name, note, icon], i) => {
+    const kinds = [['audio', 'Listening', LINE_ICONS.speaker], ['video', 'Watching', LINE_ICONS.tv], ['number', 'Counting', LINE_ICONS.people]];
+    kinds.forEach(([k, name, icon], i) => {
       const x = 180 + i * 540, c = TYPE_COLORS[k];
       const ball = tAdd(root, `<div class="ballface"><span class="tbicon" style="color:${c}">${icon}</span></div>`, 'ball tball', [x + 110, 270, 260, 260], i + 1);
       ball.style.background = `radial-gradient(circle at 34% 30%, ${shade(c, .45)} 0, ${c} 38%, ${shade(c, -.28)} 75%, ${shade(c, -.55)} 100%)`;
       tText(root, name, [x, 565, 480, 110], i + 1, null, {color: c, fontSize: '96px'}, 'tcenter');
-      tText(root, note, [x, 680, 480, 50], i + 1, null, null, 'tcenter tnote');
     });
     tAdd(root, `<span class="tchipicon"></span>Find it on your card. Cover it with a chip.`, 'tbottom', [120, 790, 1680, 90], 4);
   }});
@@ -1271,17 +1280,17 @@ function buildTutorial() {
   // 4. Practice: Listen
   let a4 = null;
   const spk4 = () => document.querySelector('.slide .spk.t4');
-  add({title: 'Listen', sub: 'Do you have the instrument on your card?', color: TYPE_COLORS.audio, colorTitle: true, steps: 2, demoAudio: true, build(root) {
+  add({title: 'Listen', sub: 'Do you have the instrument on your card?', color: TYPE_COLORS.audio, colorTitle: true, steps: 3, demoAudio: true, build(root) {
     const spk = el('div', 'spk t4', LINE_ICONS.speaker); box(spk, [150, 380, 400, 400]); root.appendChild(spk);
     spk.addEventListener('click', ev => { ev.stopPropagation(); playFromStart(getDemoAudio()); });
     tText(root, 'It’s a violin!', [150, 810, 400, 60], 1, null, null, 'tcenter tsay');
     const a = tutCard(1, [690, 240, 470, 608]), b = tutCard(2, [1260, 240, 470, 608]);
     root.appendChild(a.el); root.appendChild(b.el);
     a.chip(...CARD1.free, 0); b.chip(...CARD2.free, 0);
-    a.chip(1, 2, 1, null, {ring: TYPE_COLORS.audio});
+    a.redBox(1, 2, 1, 2); a.chip(1, 2, 2, null, {pop: true});
     tText(root, 'Your card', [690, 868, 470, 50], 0, null, null, 'tlab');
     tText(root, 'Your neighbor’s card', [1260, 868, 470, 50], 0, null, null, 'tlab');
-    tText(root, 'No violin on this card, so no chip.', [1260, 922, 470, 40], 2, null, null, 'tcenter tnote');
+    tText(root, 'No violin on this card, so no chip.', [1260, 922, 470, 40], 3, null, null, 'tcenter tnote');
   },
   onStep(k, how) {
     a4 = getDemoAudio();
@@ -1291,21 +1300,23 @@ function buildTutorial() {
   replay() { playFromStart(getDemoAudio()); }, pause() { getDemoAudio().pause(); }, leave() { getDemoAudio().pause(); }});
 
   // 5. Practice: Count
-  add({title: 'Count', sub: 'Do you have the group number on your card?', color: TYPE_COLORS.number, colorTitle: true, steps: 3, build(root) {
+  add({title: 'Count', sub: 'Do you have the group number on your card?', color: TYPE_COLORS.number, colorTitle: true, steps: 5, build(root) {
     tText(root, 'A group of…', [120, 280, 560, 110], 0, null, {fontSize: '96px', whiteSpace: 'nowrap'});
     tText(root, '3', [170, 380, 400, 440], 1, null, {fontSize: '420px', color: TYPE_COLORS.number, textAlign: 'center', lineHeight: '1', textShadow: '0 6px 10px rgba(31,42,68,.22), 0 2px 3px rgba(31,42,68,.18)'});
     tText(root, 'That’s a trio!', [150, 835, 460, 60], 2, null, null, 'tcenter tsay');
     const a = tutCard(1, [690, 240, 470, 608]), b = tutCard(2, [1260, 240, 470, 608]);
     root.appendChild(a.el); root.appendChild(b.el);
     a.chip(...CARD1.free, 0); b.chip(...CARD2.free, 0);
-    a.chip(2, 3, 2, null, {ring: TYPE_COLORS.number}); b.chip(2, 1, 3, null, {ring: TYPE_COLORS.number});
+    a.chip(1, 2, 0);   // violin, from Listen
+    a.redBox(2, 3, 2, 3); a.chip(2, 3, 3, null, {pop: true});
+    b.redBox(2, 1, 4, 5); b.chip(2, 1, 5, null, {pop: true});
     tText(root, 'Your card', [690, 868, 470, 50], 0, null, null, 'tlab');
     tText(root, 'Your neighbor’s card', [1260, 868, 470, 50], 0, null, null, 'tlab');
-    tText(root, 'Trio is on this card too!', [1260, 922, 470, 40], 3, null, null, 'tcenter tnote');
+    tText(root, 'Trio is on this card too!', [1260, 922, 470, 40], 4, null, null, 'tcenter tnote');
   }});
 
   // 6. Practice: Watch (the trumpet video)
-  const VR = [120, 330, 600, 338];
+  const VR = [100, 350, 540, 304];
   const local6 = useLocal(DEMO_VIDEO);
   let v6 = null, vid6 = DEMO_VIDEO;
   const fail6 = reason => {
@@ -1313,19 +1324,20 @@ function buildTutorial() {
     if (other && vid6 === DEMO_VIDEO) { vid6 = other; yt.swapTo(vid6, VR, fail6); }
     else yt.message(`This video won't play (${YT_ERRORS[reason] || 'YouTube error ' + reason}). Press R to try again or next to move on.`);
   };
-  const def6 = {title: 'Watch', sub: 'Do you have the instrument on your card?', color: TYPE_COLORS.video, colorTitle: true, steps: 3, build(root) {
+  const def6 = {title: 'Watch', sub: 'Do you have the instrument on your card?', color: TYPE_COLORS.video, colorTitle: true, steps: 4, build(root) {
     tAdd(root, LINE_ICONS.tv, 'tvph', VR, 0, 1);
     if (local6) { v6 = document.createElement('video'); v6.className = 'lvideo tstep'; v6.dataset.s = 1; v6.preload = 'metadata'; v6.playsInline = true; v6.src = vidURL(local6); box(v6, VR); root.appendChild(v6);
       v6.addEventListener('error', () => { localVideoOK[local6] = false; }); }
-    tText(root, 'It’s a trumpet!', [120, 700, 600, 60], 2, null, null, 'tcenter tsay');
-    const a = tutCard(1, [800, 250, 440, 569]), b = tutCard(2, [1320, 250, 440, 569]);
+    tText(root, 'It’s a trumpet!', [100, 690, 540, 60], 2, null, null, 'tcenter tsay');
+    const a = tutCard(1, [690, 240, 470, 608]), b = tutCard(2, [1260, 240, 470, 608]);
     root.appendChild(a.el); root.appendChild(b.el);
     a.chip(...CARD1.free, 0); b.chip(...CARD2.free, 0);
-    b.chip(3, 3, 3, null, {ring: TYPE_COLORS.video});
-    tText(root, 'Your card', [800, 838, 440, 50], 0, null, null, 'tlab');
-    tText(root, 'Your neighbor’s card', [1320, 838, 440, 50], 0, null, null, 'tlab');
-    tText(root, 'No trumpet here, so no chip.', [800, 892, 440, 40], 2, null, null, 'tcenter tnote');
-    tText(root, 'Your neighbor has a trumpet!', [1320, 892, 440, 40], 3, null, null, 'tcenter tnote');
+    a.chip(1, 2, 0); a.chip(2, 3, 0); b.chip(2, 1, 0);   // violin and trio, from Listen and Count
+    b.redBox(3, 3, 3, 4); b.chip(3, 3, 4, null, {pop: true});
+    tText(root, 'Your card', [690, 868, 470, 50], 0, null, null, 'tlab');
+    tText(root, 'Your neighbor’s card', [1260, 868, 470, 50], 0, null, null, 'tlab');
+    tText(root, 'No trumpet here, so no chip.', [690, 922, 470, 40], 2, null, null, 'tcenter tnote');
+    tText(root, 'Your neighbor has a trumpet!', [1260, 922, 470, 40], 3, null, null, 'tcenter tnote');
   },
   onStep(k, how) {
     if (v6 && localVideoOK[local6] !== false) {
