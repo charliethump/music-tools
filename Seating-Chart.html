@@ -1618,6 +1618,18 @@ function farNow(c, r) {
   const D = spotDistances(c, sp), T = farThreshold(D), d = D[i][j];
   return ` <span class="small" style="color:${d >= T ? 'var(--ok)' : 'var(--warn)'}">(now ${d} square${d === 1 ? '' : 's'} apart; this class aims for ${T}+)</span>`;
 }
+function lockedHTML(c, names) {
+  const v = latest(c);
+  const locked = activeSpots(c).filter(s => s.lock);
+  const rows = locked.map(s => {
+    const sid = v && v.assign[s.id];
+    const txt = sid ? `<b>${esc(names[sid])}</b> is locked to ${esc(s.label)}` : `${esc(s.label)} is locked and stays empty`;
+    return `<div class="rule"><span>${txt}</span><button class="btn sm" data-act="editLock" data-id="${esc(s.id)}">Edit</button></div>`;
+  }).join('');
+  return `<div class="dsec"><h3>Locked spots</h3>${rows || '<p class="note">No locked spots. A locked spot keeps whoever is in it through every shuffle.</p>'}
+    <p class="note">Edit opens the Spots tab with that spot selected, ready to unlock or change. To lock someone, put them in place with Move students, then lock their spot in the Spots tab.</p>
+    <button class="btn sm" data-act="editLock" data-id="">Lock a spot...</button></div>`;
+}
 function ruleCount(c, id) { return c.rules.filter(r => r.s === id || r.t === id).length; }
 const rosterSort = (a, b) => (a.last || a.first || '').localeCompare(b.last || b.first || '') || (a.first || '').localeCompare(b.first || '');
 function aspenNameOf(s) { return s.linked && (s.aspenName || s.last) ? (s.aspenName || `${s.last}, ${s.given || s.first}`) : ''; }
@@ -1722,6 +1734,7 @@ function drRules(c) {
     <div class="field"><label>${PAIR(t) ? 'Student' : 'Zone'}</label><select class="inp" id="ruleX">${target || '<option value="">No zones yet. Make one in the Spots tab.</option>'}</select></div>
     <button class="btn primary" data-act="ruleAdd">Add rule</button></div>
     <div class="dsec"><h3>Rules for this class</h3>${rules}</div>
+    ${lockedHTML(c, names)}
     ${probs.length ? `<div class="dsec">${probs.map(p => `<div class="msg bad">${esc(p)}</div>`).join('')}</div>` : (c.rules.length ? '<div class="msg ok">Every rule can be met on this layout.</div>' : '')}
     <p class="note">Rules belong to the student, not their name, so nickname changes and duplicate names never break them. Rules for students linked to Aspen are remembered into next year. Strict separation keeps a pair in the farthest third of the room from each other (counted in rug squares) and never next to each other; chair rotation still comes first.</p>`;
 }
@@ -2655,6 +2668,11 @@ document.addEventListener('click', async (e) => {
       save(); closeModal(); openClass(nc.id, {manual: true}); openDrawer('settings'); break;
     }
     case 'printRoster': printRoster(c); break;
+    case 'editLock': {
+      UI.drawer = 'spots'; UI.tool = 'zones'; UI.nbSpot = null;
+      UI.sel = new Set(a.dataset.id ? [a.dataset.id] : []);
+      $('#drawer').classList.remove('hidden'); renderClass(); renderDrawer(); break;
+    }
     case 'impUndo': impUndo(); break;
     case 'impChoose': $('#csvInput').value = ''; $('#csvInput').click(); break;
     case 'slidesImport': closeModal(); slidesImportDialog(); break;
