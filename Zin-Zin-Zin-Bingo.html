@@ -1154,7 +1154,7 @@ function plainScreen(html) {
 }
 
 /* =====================================================================
-   TUTORIAL - nine screens built from the game's own pieces.
+   TUTORIAL - eight screens built from the game's own pieces.
    Every screen reveals its parts one click at a time; back steps undo them.
    ===================================================================== */
 const CARD_TILE = (c, r) => [(61 + c * 175) / 816 * 100, (187 + r * 176) / 1056 * 100, 169 / 816 * 100, 169 / 1056 * 100];
@@ -1201,6 +1201,7 @@ function tutScreen(idx, total, def) {
   if (def.color) root.style.setProperty('--qc', def.color);
   chrome(root, 'tut', def.title, def.sub, false);
   if (def.colorTitle) root.querySelector('.ttl b').style.color = def.color;
+  if (def.titleSize) root.querySelector('.ttl b').style.fontSize = def.titleSize;
   const foot = el('div', 'cfoot');
   foot.innerHTML = `<span class="tdots">Tutorial ${Array.from({length: total}, (_, i) => `<i class="${i === idx ? 'on' : ''}"></i>`).join('')}</span>`;
   const sk = el('span', 'lnk', 'Skip tutorial (S) ›'); sk.addEventListener('click', ev => { ev.stopPropagation(); skipDemo(); }); foot.appendChild(sk);
@@ -1229,7 +1230,7 @@ function tutScreen(idx, total, def) {
 }
 
 function buildTutorial() {
-  const TOTAL = 10, out = [];
+  const TOTAL = 8, out = [];
   const add = def => out.push(def);
 
   // 1. Your bingo card
@@ -1347,7 +1348,7 @@ function buildTutorial() {
       return;
     }
     if (how === 'enter' || (how === 'back' && !yt.current)) { yt.attach(vid6, VR, fail6); if (how === 'enter') setTimeout(() => yt.prime(yt.current), 600); }
-    if (k >= 1) { yt.show(how === 'next' ? 300 : 0); if (how === 'next') yt.play(); } else { yt.pause(); yt.hideSlot(yt.current); }
+    if (k >= 1) { yt.show(how === 'next' && k === 1 ? 300 : 0); if (how === 'next' && k === 1) yt.play(); } else { yt.pause(); yt.hideSlot(yt.current); }
   },
   replay() { if (v6 && localVideoOK[local6] !== false) { try { v6.currentTime = 0; } catch (e) {} v6.play().catch(() => {}); } else yt.replay(); },
   pause() { if (v6) v6.pause(); yt.pause(); },
@@ -1355,40 +1356,22 @@ function buildTutorial() {
   if (local6) def6.localVideo = null; else def6.videoId = DEMO_VIDEO;
   add(def6);
 
-  // 7. Winning cards can be…
-  add({title: 'Winning cards must be…', sub: 'four chips in a row', steps: 3, build(root) {
+  // 7. Winning cards, then what happens with a wrong Bingo
+  add({title: 'Winning cards must have four chips in a row!', sub: '', titleSize: '78px', steps: 5, build(root) {
     const pats = [['Sideways', [[0, 1], [1, 1], [2, 1], [3, 1]]], ['Up-and-down', [[0, 0], [0, 1], [0, 2], [0, 3]]], ['Diagonal', [[0, 0], [1, 1], [2, 2], [3, 3]]]];
     pats.forEach(([name, cells], i) => {
       const left = 120 + i * 580, k = tutCard(1, [left + 50, 240, 440, 569]); root.appendChild(k.el);
+      k.el.classList.add('tstep'); k.el.dataset.s = 0; k.el.dataset.h = 4;
       k.chip(...CARD1.free, 0);
       cells.forEach(([c, r], j) => { if (!(c === CARD1.free[0] && r === CARD1.free[1])) k.chip(c, r, i + 1, null, {delay: j * .18}); });
       k.line(cells, ACCENT, i + 1, .85);
-      tText(root, name, [left, 838, 540, 80], i + 1, null, {fontSize: '54px'}, 'tcenter');
+      tText(root, name, [left, 838, 540, 80], i + 1, 4, {fontSize: '54px'}, 'tcenter');
     });
+    tText(root, 'If you call a Bingo but have a wrong answer…', [120, 390, 1680, 110], 4, null, {fontSize: '76px', whiteSpace: 'nowrap', transitionDelay: '.35s'}, 'tcenter');
+    tAdd(root, 'you <span class="acc">clear</span> your card!', 'ttext tcenter', [120, 560, 1680, 130], 5, null, {fontSize: '110px', whiteSpace: 'nowrap'});
   }});
 
-  // 8. Calling Bingo (a correct card)
-  const ROW = [[0, 3], [1, 3], [2, 3], [3, 3]];
-  add({title: 'Calling Bingo', sub: 'when you have four in a row', steps: 2, build(root) {
-    const a = tutCard(1, [750, 240, 420, 543]); root.appendChild(a.el);
-    a.chip(...CARD1.free, 0);
-    ROW.forEach(([c, r], j) => a.chip(c, r, 1, null, {delay: j * .18}));
-    a.line(ROW, ACCENT, 1, .85);
-    tText(root, 'Bingo! All four were called.', [560, 805, 800, 50], 2, null, {fontSize: '40px'}, 'tcenter');
-    tAdd(root, `First correct <span class="acc">Bingo</span> wins.`, 'tsayrow', [560, 862, 800, 80], 2, null, {justifyContent: 'center'});
-  }});
-
-  // 9. Calling Bingo (a wrong card)
-  add({title: 'Calling Bingo', sub: 'when you have four in a row', steps: 3, build(root) {
-    const b = tutCard(2, [750, 240, 420, 543]); root.appendChild(b.el);
-    b.chip(...CARD2.free, 0, 3, {sweep: true});
-    [[0, 0], [1, 0], [2, 0], [3, 0]].forEach(([c, r], j) => b.chip(c, r, 1, 3, {sweep: true, delay: j * .18}));
-    b.outline(3, 0, ACCENT, 2, 3);
-    tText(root, 'Cello was never called!', [560, 805, 800, 50], 2, null, {fontSize: '40px', color: ACCENT}, 'tcenter');
-    tAdd(root, `<span class="ic">${LINE_ICONS.clear}</span>Wrong answer? <span class="acc">Clear</span> your card.`, 'tsayrow', [560, 862, 800, 80], 3, null, {justifyContent: 'center'});
-  }});
-
-  // 10. Be a good friend
+  // 8. Be a good friend
   add({title: 'Be a good friend', sub: 'when someone else wins', steps: 1, build(root) {
     const im = new Image(); im.src = BASE + 'tutorial/bitmoji.webp'; im.className = 'tstep tbit'; im.dataset.s = 0; box(im, [200, 270, 560, 560]); root.appendChild(im);
     tText(root, 'Remember, if you don’t win…', [820, 320, 980, 110], 0, null, {fontSize: '68px', whiteSpace: 'nowrap'});
