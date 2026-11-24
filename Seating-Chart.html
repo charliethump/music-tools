@@ -867,7 +867,7 @@ function renderBop(c, version, availW, availH) {
   box.className = 'bopStage';
   box.style.cssText = `width:${W}px;height:${H}px;--bh:${H}px`;
   const editing = UI.tool !== 'none' && UI.viewVersion == null;
-  const st = renderStage(c, version, {width: chartW, editing, showAllTemplate: editing && ['spots', 'zones', 'swap'].includes(UI.tool), selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)});
+  const st = renderStage(c, version, {width: chartW, editing, showAllTemplate: editing && ['spots', 'zones', 'swap'].includes(UI.tool), selected: UI.tool === 'neighbors' && UI.nbSpot ? new Set([UI.nbSpot]) : UI.sel, pick: UI.pick, neighbors: nbSet(c)});
   box.appendChild(st);
   const song = currentSong(c);
   const step = UI.bopStep;
@@ -1021,48 +1021,45 @@ async function fillSongFromLink(auto) {
 function bopActive(c) { if (!c || !c.bop || !c.bop.enabled) return false; const v = UI.bopView[c.id]; return v ? v === 'bop' : c.bop.defaultView === 'bop'; }
 
 /* ---------------- adjacency (for keep-apart rules) ---------------- */
-/* "Next to" is counted in rug squares, not screen distance (the rug is drawn in
-   perspective, so screen distance is misleading). Every rug square knows its
-   color band and row. Each chair is placed on that grid just off the edge of the
-   rug square it sits beside, and chairs next to each other in the row also count
-   as neighbors. */
-const GRIDCACHE = {};
-function layoutGrid(L) {
-  if (GRIDCACHE[L.id]) return GRIDCACHE[L.id];
-  const rug = L.spots.filter(s => !s.chair && s.band != null && s.row != null);
-  if (!rug.length) return (GRIDCACHE[L.id] = null);
-  const [AW, AH] = L.aspect;
-  const px = s => [s.x / 100 * AW, s.y / 100 * AH];
-  const at = {}; for (const s of rug) at[s.band + ',' + s.row] = s;
-  const pos = {};
-  for (const s of rug) pos[s.id] = {b: s.band, r: s.row};
-  // every grid position just off the rug's edge, with where it would appear in the picture
-  const cand = {};
-  for (const s of rug) for (const [db, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const k = (s.band + db) + ',' + (s.row + dr);
-    if (at[k]) continue;
-    const back = at[(s.band - db) + ',' + (s.row - dr)]; if (!back) continue;
-    const [x, y] = px(s), [bx, by] = px(back);
-    const e = cand[k] = cand[k] || {b: s.band + db, r: s.row + dr, x: 0, y: 0, n: 0};
-    e.x += 2 * x - bx; e.y += 2 * y - by; e.n++;
+/* "Next to" is measured as real floor distance, in rug squares. The rug is drawn
+   in perspective, so every spot's place in the picture is converted back to its
+   place on the rug (a perspective fit through the rug squares). Rug squares land
+   exactly on whole-number positions; chairs land wherever they really stand.
+   Touching = up to about one and a half squares (covers diagonals). "One empty
+   square between" = two squares straight across, with nobody in the middle. */
+const FLOORCACHE = {};
+function fitPerspective(src, dst) {   // least-squares 8-parameter fit, picture -> rug
+  const N = 8, A = Array.from({length: N}, () => new Array(N + 1).fill(0));
+  const add = (row, rhs) => { for (let i = 0; i < N; i++) { for (let j = 0; j < N; j++) A[i][j] += row[i] * row[j]; A[i][N] += row[i] * rhs; } };
+  src.forEach(([x, y], k) => { const [u, v] = dst[k]; add([x, y, 1, 0, 0, 0, -u * x, -u * y], u); add([0, 0, 0, x, y, 1, -v * x, -v * y], v); });
+  for (let c = 0; c < N; c++) {
+    let piv = c; for (let r = c + 1; r < N; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+    [A[c], A[piv]] = [A[piv], A[c]];
+    for (let r = 0; r < N; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let k = c; k <= N; k++) A[r][k] -= f * A[c][k]; }
   }
-  const cands = Object.values(cand).map(e => ({b: e.b, r: e.r, x: e.x / e.n, y: e.y / e.n}));
-  const chairs = L.spots.filter(s => s.chair).sort((a, b) => (parseInt(a.id.replace(/\D/g, '')) || 0) - (parseInt(b.id.replace(/\D/g, '')) || 0));
-  if (chairs.length && cands.length >= chairs.length) {
-    // give each chair its own edge position, closest overall
-    const cost = chairs.map(ch => { const [cx, cy] = px(ch); return cands.map(e => Math.hypot(e.x - cx, e.y - cy)); });
-    const m = hungarian(cost) || [];
-    chairs.forEach((ch, k) => { const e = cands[m[k]] || cands[0]; pos[ch.id] = {b: e.b, r: e.r, chair: k}; });
-  }
-  return (GRIDCACHE[L.id] = pos);
+  const h = A.map((row, i) => row[N] / row[i]);
+  return (x, y) => { const w = h[6] * x + h[7] * y + 1; return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w]; };
 }
+function layoutFloor(L) {
+  if (L.id in FLOORCACHE) return FLOORCACHE[L.id];
+  const rug = L.spots.filter(s => !s.chair && s.band != null && s.row != null);
+  if (rug.length < 4) return (FLOORCACHE[L.id] = null);
+  const map = fitPerspective(rug.map(s => [s.x / 100, s.y / 100]), rug.map(s => [s.band, s.row]));
+  const pos = {};
+  for (const s of rug) pos[s.id] = {x: s.band, y: s.row};
+  L.spots.filter(s => s.chair).sort((a, b) => (parseInt(a.id.replace(/\D/g, '')) || 0) - (parseInt(b.id.replace(/\D/g, '')) || 0))
+    .forEach((s, k) => { const [x, y] = map(s.x / 100, s.y / 100); pos[s.id] = {x, y, chair: k}; });
+  return (FLOORCACHE[L.id] = pos);
+}
+const layoutGrid = layoutFloor;   // older name used elsewhere
 const NEIGHBOR_MODES = {gap: 'Touching, or with one empty square between', touch: 'Touching squares only (including diagonals)', sides: 'Side by side and front/back only (no diagonals)', two: 'Within two squares, even with someone between'};
 const neighborModeOf = c => NEIGHBOR_MODES[c.neighborMode] ? c.neighborMode : (NEIGHBOR_MODES[DATA.settings.neighborMode] ? DATA.settings.neighborMode : 'gap');
+const TOUCH = 1.6, GAP = 2.1, TWO = 2.95, SIDE = 1.15;
 function adjacency(c, spots) {
   const L = layoutOf(c);
-  const G = layoutGrid(L);
+  const F = layoutFloor(L);
   const n = spots.length;
-  if (!G) {   // a layout without a rug grid: fall back to screen distance
+  if (!F || !spots.every(s => F[s.id])) {   // a layout without a rug grid: fall back to screen distance
     const P = spots.map(s => [s.x / 100 * L.aspect[0], s.y / 100 * L.aspect[1]]);
     if (n < 2) return {adj: P.map(() => P.map(() => false))};
     const D = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1])));
@@ -1071,18 +1068,16 @@ function adjacency(c, spots) {
     return {adj: D.map((row, i) => row.map((d, j) => i !== j && d <= cut))};
   }
   const mode = neighborModeOf(c);
-  const reach = mode === 'two' ? 2 : 1;
-  const g = spots.map(s => G[s.id] || null);
-  const used = new Set(g.filter(Boolean).map(p => p.b + ',' + p.r));
-  const adj = g.map((a, i) => g.map((b, j) => {
-    if (i === j || !a || !b) return false;
+  const p = spots.map(s => F[s.id]);
+  const occupiedNear = (x, y, i, j) => p.some((q, k) => k !== i && k !== j && Math.hypot(q.x - x, q.y - y) < 0.6);
+  const adj = p.map((a, i) => p.map((b, j) => {
+    if (i === j) return false;
     if (a.chair != null && b.chair != null && Math.abs(a.chair - b.chair) === 1) return true;
-    const db = Math.abs(a.b - b.b), dr = Math.abs(a.r - b.r);
-    if (mode === 'sides') return db + dr <= reach;
-    if (Math.max(db, dr) <= reach) return true;
-    // one empty square between them in a straight line (across, front/back or diagonal)
-    if (mode === 'gap' && (db === 0 || db === 2) && (dr === 0 || dr === 2)) return !used.has(((a.b + b.b) / 2) + ',' + ((a.r + b.r) / 2));
-    return false;
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (mode === 'sides') return d <= SIDE;
+    if (mode === 'two') return d <= TWO;
+    if (d <= TOUCH) return true;
+    return mode === 'gap' && d <= GAP && !occupiedNear((a.x + b.x) / 2, (a.y + b.y) / 2, i, j);
   }));
   return {adj};
 }
@@ -1113,18 +1108,19 @@ function rulesFor(c) {
    Strict separation means at least about two thirds of the longest distance
    in this class's spots: the farthest third of the room from each other. */
 function spotDistances(c, spots) {
-  const L = layoutOf(c), G = layoutGrid(L), [AW, AH] = L.aspect;
-  if (G && spots.every(s => G[s.id])) return spots.map(a => spots.map(b => Math.max(Math.abs(G[a.id].b - G[b.id].b), Math.abs(G[a.id].r - G[b.id].r))));
+  const L = layoutOf(c), F = layoutFloor(L), [AW, AH] = L.aspect;
+  if (F && spots.every(s => F[s.id])) return spots.map(a => spots.map(b => Math.hypot(F[a.id].x - F[b.id].x, F[a.id].y - F[b.id].y)));
   const P = spots.map(s => [s.x / 100 * AW, s.y / 100 * AH]);
   const D = P.map(a => P.map(b => Math.hypot(a[0] - b[0], a[1] - b[1])));
   const near = D.map((row, i) => Math.min(...row.filter((_, j) => j !== i))).sort((a, b) => a - b);
   const unit = near[Math.floor(near.length / 2)] || 1;
-  return D.map(row => row.map(d => Math.round(d / unit)));
+  return D.map(row => row.map(d => d / unit));
 }
 function farThreshold(D) {
   let max = 0; for (const row of D) for (const d of row) if (d > max) max = d;
   return Math.max(2, Math.round(max * 0.7));
 }
+const sq = d => Math.round(d);
 function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 function planShuffle(c) {
@@ -1231,7 +1227,7 @@ function planShuffle(c) {
   }
   if (best) {   // every other rule is met; strict separation only as far as the room allowed
     const names = displayNames(c);
-    best.farNote = `Strict separation: the rules left no way to put every pair at least ${T} squares apart this time. The closest pair is ${best.score} squares apart. (${R.far.map(([a, b]) => names[a] + ' / ' + names[b]).join('; ')})`;
+    best.farNote = `Strict separation: the rules left no way to put every pair at least ${T} squares apart this time. The closest pair is about ${Math.round(best.score)} squares apart. (${R.far.map(([a, b]) => names[a] + ' / ' + names[b]).join('; ')})`;
     return best;
   }
   return {error: 'Could not find an arrangement that meets every rule. Try loosening a keep-apart pair, unlocking a spot, adding spots to a required zone or lowering the neighbor factor in Edit, Settings.'};
@@ -1483,7 +1479,7 @@ function renderStageArea() {
     const L = layoutOf(c);
     const ar = L.aspect[0] / L.aspect[1];
     const w = Math.min(W, H * ar);
-    wrap.appendChild(renderStage(c, v, {width: w, editing, showAllTemplate: ['spots', 'zones', 'swap'].includes(UI.tool), selected: UI.sel, pick: UI.pick, neighbors: nbSet(c)}));
+    wrap.appendChild(renderStage(c, v, {width: w, editing, showAllTemplate: ['spots', 'zones', 'swap'].includes(UI.tool), selected: UI.tool === 'neighbors' && UI.nbSpot ? new Set([UI.nbSpot]) : UI.sel, pick: UI.pick, neighbors: nbSet(c)}));
   }
   const hints = {
     swap: UI.pick ? 'Now click another name to swap, or any empty square or chair to move there (Esc to cancel)' : 'Click a name to pick it up',
@@ -1616,7 +1612,7 @@ function farNow(c, r) {
   const i = sp.findIndex(s => s.id === where[r.s]), j = sp.findIndex(s => s.id === where[r.t]);
   if (i < 0 || j < 0) return '';
   const D = spotDistances(c, sp), T = farThreshold(D), d = D[i][j];
-  return ` <span class="small" style="color:${d >= T ? 'var(--ok)' : 'var(--warn)'}">(now ${d} square${d === 1 ? '' : 's'} apart; this class aims for ${T}+)</span>`;
+  return ` <span class="small" style="color:${d >= T ? 'var(--ok)' : 'var(--warn)'}">(now about ${sq(d)} square${sq(d) === 1 ? '' : 's'} apart; this class aims for ${T}+)</span>`;
 }
 function lockedHTML(c, names) {
   const v = latest(c);
@@ -1685,7 +1681,7 @@ function drSpots(c) {
       <div class="field"><label>Zone name</label><input class="inp" id="zoneName" list="zoneList" placeholder="e.g. chairs, front, back"><datalist id="zoneList">${Object.keys(zones).map(z => `<option value="${esc(z)}">`).join('')}<option value="front"><option value="back"><option value="chairs"></datalist></div>
       <div class="row"><button class="btn" data-act="zoneAdd" ${selN ? '' : 'disabled'}>Add zone</button><button class="btn" data-act="zoneRemove" ${selN ? '' : 'disabled'}>Remove zone</button><button class="btn" data-act="lockSel" ${selN ? '' : 'disabled'}>Lock</button><button class="btn" data-act="unlockSel" ${selN ? '' : 'disabled'}>Unlock</button><button class="btn sm" data-act="clearSel" ${selN ? '' : 'disabled'}>Clear selection</button></div>
       <p class="note">A locked spot keeps whoever is in it through every shuffle. Unlocking leaves zones alone.</p></div>` : ''}
-    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot. Next to means: ${esc(NEIGHBOR_MODES[neighborModeOf(c)]).toLowerCase()} (change in Settings).</p></div>` : ''}
+    ${UI.tool === 'neighbors' ? `<div class="dsec"><h3>Neighbors</h3><p class="note">${UI.nbSpot ? `${esc(spotGeo(c, UI.nbSpot).label)} (yellow) has ${nbSet(c) ? nbSet(c).size : 0} neighbors (blue).` : 'Click a spot on the chart.'} Average ${avg} neighbors per spot. Next to means: ${esc(NEIGHBOR_MODES[neighborModeOf(c)]).toLowerCase()} (change in Settings).</p></div>` : ''}
     <div class="dsec"><h3>Zones</h3>${Object.keys(zones).length ? `<div class="chips">${Object.entries(zones).map(([z, n]) => `<span class="zchip">${esc(z)}: ${n}</span>`).join('')}</div>` : '<p class="note">No zones yet.</p>'}
     <p class="note">${locked} locked spot${locked === 1 ? '' : 's'}.</p></div>`;
 }
