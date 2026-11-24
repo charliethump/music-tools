@@ -1025,8 +1025,10 @@ function bopActive(c) { if (!c || !c.bop || !c.bop.enabled) return false; const 
    in perspective, so every spot's place in the picture is converted back to its
    place on the rug (a perspective fit through the rug squares). Rug squares land
    exactly on whole-number positions; chairs land wherever they really stand.
-   Touching = up to about one and a half squares (covers diagonals). "One empty
-   square between" = two squares straight across, with nobody in the middle. */
+   Chairs count as one more row behind the rug edge they sit along, one per
+   stripe. Touching = sides, front/back and diagonals. "One empty square
+   between" = in each of the 8 directions, the closest student counts if they
+   are at most one empty square away. */
 const FLOORCACHE = {};
 function fitPerspective(src, dst) {   // least-squares 8-parameter fit, picture -> rug
   const N = 8, A = Array.from({length: N}, () => new Array(N + 1).fill(0));
@@ -1047,14 +1049,34 @@ function layoutFloor(L) {
   const map = fitPerspective(rug.map(s => [s.x / 100, s.y / 100]), rug.map(s => [s.band, s.row]));
   const pos = {};
   for (const s of rug) pos[s.id] = {x: s.band, y: s.row};
-  L.spots.filter(s => s.chair).sort((a, b) => (parseInt(a.id.replace(/\D/g, '')) || 0) - (parseInt(b.id.replace(/\D/g, '')) || 0))
-    .forEach((s, k) => { const [x, y] = map(s.x / 100, s.y / 100); pos[s.id] = {x, y, chair: k}; });
+  const chairs = L.spots.filter(s => s.chair).sort((a, b) => (parseInt(a.id.replace(/\D/g, '')) || 0) - (parseInt(b.id.replace(/\D/g, '')) || 0));
+  if (chairs.length) {
+    // Chairs are one more row behind the rug edge they sit along, one chair per
+    // stripe (or per row), in order along that edge.
+    const maxB = Math.max(...rug.map(s => s.band)), maxR = Math.max(...rug.map(s => s.row));
+    const pr = chairs.map(s => map(s.x / 100, s.y / 100));
+    const mx = pr.reduce((a, p) => a + p[0], 0) / pr.length, my = pr.reduce((a, p) => a + p[1], 0) / pr.length;
+    const side = [['r+', my - maxR], ['r-', -my], ['b+', mx - maxB], ['b-', -mx]].sort((a, b) => b[1] - a[1])[0][0];
+    const along = side[0] === 'r' ? pr.map(p => p[0]) : pr.map(p => p[1]);
+    const slots = side[0] === 'r' ? maxB + 1 : maxR + 1;
+    const order = chairs.map((_, k) => k).sort((a, b) => along[a] - along[b]);
+    const slotOf = {};
+    if (chairs.length === slots) order.forEach((k, i) => slotOf[k] = i);
+    else {
+      const cost = chairs.map((_, k) => Array.from({length: Math.max(slots, chairs.length)}, (_, j) => Math.abs(along[k] - j)));
+      const m = hungarian(cost) || []; chairs.forEach((_, k) => slotOf[k] = m[k] >= 0 ? m[k] : k);
+    }
+    chairs.forEach((s, k) => {
+      const j = slotOf[k];
+      pos[s.id] = side === 'r+' ? {x: j, y: maxR + 1, chair: k} : side === 'r-' ? {x: j, y: -1, chair: k} : side === 'b+' ? {x: maxB + 1, y: j, chair: k} : {x: -1, y: j, chair: k};
+    });
+  }
   return (FLOORCACHE[L.id] = pos);
 }
 const layoutGrid = layoutFloor;   // older name used elsewhere
-const NEIGHBOR_MODES = {gap: 'Touching, or with one empty square between', touch: 'Touching squares only (including diagonals)', sides: 'Side by side and front/back only (no diagonals)', two: 'Within two squares, even with someone between'};
+const NEIGHBOR_MODES = {gap: 'Touching, or the closest student in each direction across one empty square', touch: 'Touching squares only (including diagonals)', sides: 'Side by side and front/back only (no diagonals)', two: 'Within two squares, even with someone between'};
 const neighborModeOf = c => NEIGHBOR_MODES[c.neighborMode] ? c.neighborMode : (NEIGHBOR_MODES[DATA.settings.neighborMode] ? DATA.settings.neighborMode : 'gap');
-const TOUCH = 1.6, GAP = 2.1, TWO = 2.95, SIDE = 1.15;
+const TOUCH = 1.5, GAP = 2.3, TWO = 2.95, SIDE = 1.1;
 function adjacency(c, spots) {
   const L = layoutOf(c);
   const F = layoutFloor(L);
@@ -1069,16 +1091,27 @@ function adjacency(c, spots) {
   }
   const mode = neighborModeOf(c);
   const p = spots.map(s => F[s.id]);
-  const occupiedNear = (x, y, i, j) => p.some((q, k) => k !== i && k !== j && Math.hypot(q.x - x, q.y - y) < 0.6);
-  const adj = p.map((a, i) => p.map((b, j) => {
-    if (i === j) return false;
-    if (a.chair != null && b.chair != null && Math.abs(a.chair - b.chair) === 1) return true;
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (mode === 'sides') return d <= SIDE;
-    if (mode === 'two') return d <= TWO;
-    if (d <= TOUCH) return true;
-    return mode === 'gap' && d <= GAP && !occupiedNear((a.x + b.x) / 2, (a.y + b.y) / 2, i, j);
-  }));
+  const n2 = p.length;
+  const dist = p.map(a => p.map(b => Math.hypot(a.x - b.x, a.y - b.y)));
+  // which of the 8 directions (front, back, sides, diagonals) b is from a
+  const dir = (a, b) => ((Math.round(Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI / 4)) % 8) + 8) % 8;
+  const rel = Array.from({length: n2}, () => new Array(n2).fill(false));
+  for (let i = 0; i < n2; i++) {
+    if (mode === 'gap') {
+      const nearest = new Array(8).fill(Infinity);
+      for (let j = 0; j < n2; j++) if (j !== i) { const k = dir(p[i], p[j]); if (dist[i][j] < nearest[k]) nearest[k] = dist[i][j]; }
+      for (let j = 0; j < n2; j++) {
+        if (j === i) continue;
+        const d = dist[i][j];
+        rel[i][j] = d <= TOUCH || (d <= GAP && d <= nearest[dir(p[i], p[j])] + 0.01);
+      }
+    } else for (let j = 0; j < n2; j++) if (j !== i) {
+      const d = dist[i][j];
+      rel[i][j] = mode === 'sides' ? d <= SIDE : mode === 'two' ? d <= TWO : d <= TOUCH;
+    }
+  }
+  const adj = rel.map((row, i) => row.map((v, j) => i !== j && (v || rel[j][i] ||
+    (p[i].chair != null && p[j].chair != null && Math.abs(p[i].chair - p[j].chair) === 1))));
   return {adj};
 }
 function nbSet(c) {
